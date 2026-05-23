@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <AssemblyName>AmnesiacLoader</AssemblyName>
+    <RootNamespace>AmnesiacLoader</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+    <DebugType>none</DebugType>
+    <Nullable>disable</Nullable>
+    <Deterministic>false</Deterministic>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+</Project>
