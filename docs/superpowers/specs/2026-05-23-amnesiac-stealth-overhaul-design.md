@@ -355,8 +355,14 @@ function Send-Module {
 # Old
 $global:ServerURL = "https://raw.githubusercontent.com/Leo4j/Amnesiac/main/Tools"
 
-# New default
-$global:ServerURL = "http://$($global:IP):8080"   # File-Server.ps1 serves Tools\ here
+# New default — uses $global:IP if set (-IP param), otherwise auto-detects first
+# RFC-1918 address on the operator machine
+$operatorIP = if($global:IP){ $global:IP } else {
+    Get-NetIPAddress -AddressFamily IPv4 |
+        Where-Object { $_.IPAddress -match "^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)" } |
+        Select-Object -First 1 -ExpandProperty IPAddress
+}
+$global:ServerURL = "http://${operatorIP}:8080"
 ```
 
 GitHub URL remains accessible via explicit `RepoURL <url>` override but is not the default.
