@@ -256,6 +256,18 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [Implemented] — Plan 4: Amnesiac_ShellReady.ps1 Sync
+
+Ported all stealth-overhaul changes (Plans 1-3) to `Amnesiac_ShellReady.ps1`:
+
+- **Preamble**: Prepended `$AmnesiacLoaderB64` constant and 14 helper functions (`Get-AmsiBypassSnippet`, `Get-EtwBypassSnippet`, `Get-SblBypassSnippet`, `New-PayloadScript`, `Get-PayloadLauncher`, `Initialize-DiskStructure`, `Initialize-ToolCache`, `New-EmbeddedTool`, `Send-Module`, `Test-NetworkLogonToken`, `Protect-PipeMessage`, `Unprotect-PipeMessage`, `Get-PskDerivedKey`, `Show-OpsecBanner`) -- ShellReady transform applied (Write-Output, no colour params, `-` for box-drawing, `--` for em-dash)
+- **Initialization**: Replaced inline folder-creation block with `Initialize-DiskStructure`; added stealth-overhaul globals (`$global:DiskMode`, `$global:AmnesiacArtifacts`, `$global:ToolCache`, `$global:EndMarker`, `$global:BufferSize`, `$global:PayloadConfig`, `$global:EngagementProfile`, `$global:PSKPhrase`, `$global:PSKBytes`); added `Initialize-ToolCache` and `Show-OpsecBanner` calls
+- **Protocol constants**: Replaced 66 x `"#END#"` (both operator-side equality checks and target-script embedded sends) with `$global:EndMarker`; replaced 25 x `1028` with `$global:BufferSize`
+- **Main loop**: Updated `toggle` to include `stealth` format cycling and `exe` DiskMode warning; added handlers for `diskmode`, `artifacts`, `save`, `modules`, `payload`, `psk`, `engagement`
+- **Session loop**: Updated session `toggle` to include `stealth` format; added `load loader`, `Migrate ps new <path>`, `Migrate ps <pid>` handlers before the existing `Migrate *` handler
+
+---
+
 ---
 
 ## [Implemented] — Plan 3: Fixes, Multi-Frame Call Stack, Extended Tests
@@ -281,8 +293,3 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
-## [Planned] — Future Work
-
-**Port all changes to `Amnesiac_ShellReady.ps1`**
-- Shell-compatible version hasn't received any of the above changes
-- Deferred until all layers are stable
