@@ -287,13 +287,13 @@ Describe "Migrate ps command regex patterns" {
 
     It "Migrate ps <pid> regex matches a numeric pid" {
         $command = "Migrate ps 1234"
-        ($command -match '^Migrate ps (\d+)$') | Should -Be $true
+        $null = $command -match '^Migrate ps (\d+)$'
         $Matches[1] | Should -Be '1234'
     }
 
     It "Migrate ps new <proc> regex matches a process path" {
         $command = "Migrate ps new C:\Windows\System32\svchost.exe"
-        ($command -match '^Migrate ps new (.+)') | Should -Be $true
+        $null = $command -match '^Migrate ps new (.+)'
         $Matches[1] | Should -Be 'C:\Windows\System32\svchost.exe'
     }
 
@@ -312,6 +312,10 @@ Describe "Send-Module framing protocol" {
     BeforeAll {
         $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
         . $scriptPath
+    }
+
+    BeforeEach {
+        $global:ToolCache = @{}
     }
 
     It "Send-Module returns false when tool not in ToolCache" {
@@ -346,6 +350,10 @@ Describe "Send-Module framing protocol" {
         ($lines | Where-Object { $_ -like '__MODULE_BEGIN__:TestTool:*' }) | Should -Not -BeNullOrEmpty
         ($lines | Where-Object { $_ -like '__MODULE_CHUNK__:*' })          | Should -Not -BeNullOrEmpty
         ($lines | Where-Object { $_ -eq '__MODULE_END__:TestTool' })       | Should -Not -BeNullOrEmpty
+
+        $beginLine  = $lines | Where-Object { $_ -like '__MODULE_BEGIN__:TestTool:*' } | Select-Object -First 1
+        $byteLength = [int]($beginLine -split ':')[2]
+        $byteLength | Should -Be ([System.Text.Encoding]::UTF8.GetByteCount('Write-Host hello'))
     }
 
     It "Send-Module chunk content is valid base64" {
@@ -364,8 +372,9 @@ Describe "Send-Module framing protocol" {
 
         $chunkLine = $lines | Where-Object { $_ -like '__MODULE_CHUNK__:*' } | Select-Object -First 1
         $chunkLine | Should -Not -BeNullOrEmpty
-        $b64Part = $chunkLine.Substring('__MODULE_CHUNK__:'.Length)
-        { [Convert]::FromBase64String($b64Part) } | Should -Not -Throw
+        $b64Part   = $chunkLine.Substring('__MODULE_CHUNK__:'.Length)
+        $decoded   = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64Part))
+        $decoded   | Should -Be 'hello world'
     }
 
     It "Send-Module returns true when reader returns EndMarker as ack" {
@@ -382,6 +391,11 @@ Describe "Send-Module framing protocol" {
 }
 
 Describe "AmnesiacLoader build artifact" {
+    BeforeAll {
+        $scriptPath = Join-Path $PSScriptRoot "..\Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "AmnesiacLoader bin directory exists after build" {
         $binDir = Join-Path $PSScriptRoot "..\AmnesiacLoader\bin"
         Test-Path $binDir | Should -Be $true
@@ -400,8 +414,6 @@ Describe "AmnesiacLoader build artifact" {
     }
 
     It "AmnesiacLoaderB64 in Amnesiac.ps1 matches the DLL on disk" {
-        $scriptPath = Join-Path $PSScriptRoot "..\Amnesiac.ps1"
-        . $scriptPath
         $dll    = Join-Path $PSScriptRoot "..\AmnesiacLoader\bin\AmnesiacLoader.dll"
         $dllB64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($dll))
         $AmnesiacLoaderB64 | Should -Be $dllB64
