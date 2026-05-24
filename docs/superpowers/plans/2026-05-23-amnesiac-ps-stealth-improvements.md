@@ -1,6 +1,6 @@
-# Amnesiac PS-Level Stealth Improvements — Implementation Plan
+﻿# Amnesiac PS-Level Stealth Improvements — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Implement Layers 0, 1, 2 (PS-only portions), 3, and 4 of the Amnesiac stealth overhaul entirely in PowerShell — no C# build toolchain required.
 
@@ -46,7 +46,7 @@ No other files are touched in this plan.
 **Files:**
 - Create: `Tests/Test-AmnesiacHelpers.ps1`
 
-- [ ] **Step 1.1: Verify Pester is available**
+- [x] **Step 1.1: Verify Pester is available**
 
 ```powershell
 # Run in PS terminal
@@ -58,7 +58,7 @@ Expected: Pester 5.x listed. If missing:
 Install-Module Pester -Force -SkipPublisherCheck
 ```
 
-- [ ] **Step 1.2: Create test file skeleton**
+- [x] **Step 1.2: Create test file skeleton**
 
 Create `Tests/Test-AmnesiacHelpers.ps1`:
 
@@ -273,7 +273,7 @@ Describe "Initialize-ToolCache" {
 }
 ```
 
-- [ ] **Step 1.3: Run test file to confirm it fails cleanly**
+- [x] **Step 1.3: Run test file to confirm it fails cleanly**
 
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
@@ -281,7 +281,7 @@ Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 
 Expected: Multiple failures — all the functions (`Get-AmsiBypassSnippet` etc.) don't exist yet. This confirms the test file is wired up correctly.
 
-- [ ] **Step 1.4: Commit test skeleton**
+- [x] **Step 1.4: Commit test skeleton**
 
 ```powershell
 git add Tests/Test-AmnesiacHelpers.ps1
@@ -295,7 +295,7 @@ git commit -m "test: add Pester test skeleton for Amnesiac module-level helpers"
 **Files:**
 - Modify: `Amnesiac.ps1` (prepend before line 1; add globals after line 84)
 
-- [ ] **Step 2.1: Prepend module-level function stubs and AmnesiacLoaderB64 constant**
+- [x] **Step 2.1: Prepend module-level function stubs and AmnesiacLoaderB64 constant**
 
 Insert the following block at the very top of `Amnesiac.ps1`, before `function Amnesiac {`:
 
@@ -326,7 +326,7 @@ function Unprotect-PipeMessage  { param([string]$CipherB64,[byte[]]$Key) throw "
 function Show-OpsecBanner       {}
 ```
 
-- [ ] **Step 2.2: Add new global variables inside `Amnesiac {}` after line 84**
+- [x] **Step 2.2: Add new global variables inside `Amnesiac {}` after line 84**
 
 After `$global:ScanModer = $False` (line 84), insert:
 
@@ -359,7 +359,7 @@ After `$global:ScanModer = $False` (line 84), insert:
     # ---- End stealth overhaul globals ----
 ```
 
-- [ ] **Step 2.3: Run tests — verify dot-source works and stubs are accessible**
+- [x] **Step 2.3: Run tests — verify dot-source works and stubs are accessible**
 
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
@@ -367,7 +367,7 @@ Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 
 Expected: `"Module-level helpers are importable"` describe block now passes. Other describes still fail with "Not implemented".
 
-- [ ] **Step 2.4: Commit**
+- [x] **Step 2.4: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -381,7 +381,7 @@ git commit -m "feat: add module-level function stubs and stealth overhaul global
 **Files:**
 - Modify: `Amnesiac.ps1`
 
-- [ ] **Step 3.1: Replace unconditional folder creation with Initialize-DiskStructure**
+- [x] **Step 3.1: Replace unconditional folder creation with Initialize-DiskStructure**
 
 Replace lines 60–63 (the `$basePath`/`$subfolders` block):
 ```powershell
@@ -397,7 +397,7 @@ Replace with a single call (the function is now at module level, the call goes w
     Initialize-DiskStructure
 ```
 
-- [ ] **Step 3.2: Implement Initialize-DiskStructure at module level**
+- [x] **Step 3.2: Implement Initialize-DiskStructure at module level**
 
 Replace the `Initialize-DiskStructure {}` stub with:
 
@@ -414,7 +414,7 @@ function Initialize-DiskStructure {
 }
 ```
 
-- [ ] **Step 3.3: Add `diskmode` command handler in the main while loop**
+- [x] **Step 3.3: Add `diskmode` command handler in the main while loop**
 
 In the main `while($true)` loop, before the `if($choice -eq 'exit')` block, add:
 
@@ -443,7 +443,7 @@ Also add a warning when `exe` payload format is selected while disk mode is off.
             }
 ```
 
-- [ ] **Step 3.4: Run tests**
+- [x] **Step 3.4: Run tests**
 
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed -Tag "Initialize-DiskStructure"
@@ -451,7 +451,7 @@ Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed -Tag "Init
 
 Expected: `"Initialize-DiskStructure"` describe block passes.
 
-- [ ] **Step 3.5: Commit**
+- [x] **Step 3.5: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -465,7 +465,7 @@ git commit -m "feat(layer1): disk elimination — conditional folder creation, d
 **Files:**
 - Modify: `Amnesiac.ps1`
 
-- [ ] **Step 4.1: Add `artifacts` command handler**
+- [x] **Step 4.1: Add `artifacts` command handler**
 
 In the main loop, add:
 
@@ -508,7 +508,7 @@ In the main loop, add:
             }
 ```
 
-- [ ] **Step 4.2: Add `save` command handler**
+- [x] **Step 4.2: Add `save` command handler**
 
 ```powershell
             if ($choice -match '^save(\s+(all|keylogger|screenshots|clipboard|tgts|downloads))?(\s+(.+))?$') {
@@ -545,7 +545,7 @@ In the main loop, add:
             }
 ```
 
-- [ ] **Step 4.3: Wire artifact capture for keylogger output**
+- [x] **Step 4.3: Wire artifact capture for keylogger output**
 
 Find where the keylogger output is currently written to disk (search for `Keylogger` in the file). Replace/supplement the disk write with a memory store call:
 
@@ -561,7 +561,7 @@ if ($global:DiskMode) {
 
 Apply the same pattern for clipboard and download captures throughout the session handling code.
 
-- [ ] **Step 4.4: Commit**
+- [x] **Step 4.4: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -575,7 +575,7 @@ git commit -m "feat(layer1): in-memory artifact store, artifacts and save comman
 **Files:**
 - Modify: `Amnesiac.ps1` (module-level section)
 
-- [ ] **Step 5.1: Implement Get-AmsiBypassSnippet**
+- [x] **Step 5.1: Implement Get-AmsiBypassSnippet**
 
 Replace the stub with:
 
@@ -625,7 +625,7 @@ function Get-AmsiBypassSnippet {
 }
 ```
 
-- [ ] **Step 5.2: Run AMSI bypass tests**
+- [x] **Step 5.2: Run AMSI bypass tests**
 
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
@@ -633,7 +633,7 @@ Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 
 Expected: `"Get-AmsiBypassSnippet"` describe block (6 tests) all pass.
 
-- [ ] **Step 5.3: Commit**
+- [x] **Step 5.3: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -647,7 +647,7 @@ git commit -m "feat(layer0): AMSI bypass snippet catalog (fail, direct, pageguar
 **Files:**
 - Modify: `Amnesiac.ps1` (module-level section)
 
-- [ ] **Step 6.1: Implement Get-EtwBypassSnippet**
+- [x] **Step 6.1: Implement Get-EtwBypassSnippet**
 
 Replace the stub with:
 
@@ -696,7 +696,7 @@ function Get-EtwBypassSnippet {
 }
 ```
 
-- [ ] **Step 6.2: Implement Get-SblBypassSnippet**
+- [x] **Step 6.2: Implement Get-SblBypassSnippet**
 
 Replace the stub with:
 
@@ -707,7 +707,7 @@ function Get-SblBypassSnippet {
 }
 ```
 
-- [ ] **Step 6.3: Run ETW/SBL tests**
+- [x] **Step 6.3: Run ETW/SBL tests**
 
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
@@ -715,7 +715,7 @@ Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 
 Expected: `"Get-EtwBypassSnippet"` and `"Get-SblBypassSnippet"` describe blocks all pass.
 
-- [ ] **Step 6.4: Commit**
+- [x] **Step 6.4: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -731,7 +731,7 @@ git commit -m "feat(layer0): ETW bypass catalog (provider, patch, thread), SBL b
 
 The globals `$global:EndMarker` and `$global:BufferSize` were initialized in Task 2. This task fixes the existing `New-StealthScript` to use them, and verifies no payload still contains `#END#`.
 
-- [ ] **Step 7.1: Fix existing New-StealthScript to use EndMarker**
+- [x] **Step 7.1: Fix existing New-StealthScript to use EndMarker**
 
 Find `New-StealthScript` (≈line 1116). Locate the two occurrences of `'#END#'` inside the `$loop` variable (one in the client variant, one in the server variant). Replace both with the session-unique marker:
 
@@ -760,7 +760,7 @@ Also update the server variant's `NamedPipeServerStream` buffer size arguments f
 # ...-ArgumentList '$PipeName',...,$($global:BufferSize),$($global:BufferSize),...
 ```
 
-- [ ] **Step 7.2: Update InteractWithPipeSession to use EndMarker**
+- [x] **Step 7.2: Update InteractWithPipeSession to use EndMarker**
 
 Search the file for all occurrences of `'#END#'` (the operator-side reader that waits for the end marker). Replace each with `$global:EndMarker`:
 
@@ -769,7 +769,7 @@ Search the file for all occurrences of `'#END#'` (the operator-side reader that 
 # Replace with: while($line -ne $global:EndMarker){ / if($line -eq $global:EndMarker){
 ```
 
-- [ ] **Step 7.3: Run payload builder tests**
+- [x] **Step 7.3: Run payload builder tests**
 
 ```powershell
 # Run tests — New-PayloadScript doesn't exist yet so those fail, but verify EndMarker tests pass
@@ -778,7 +778,7 @@ Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 
 Expected: EndMarker tests in `"New-PayloadScript"` describe block still fail (function not implemented), but no regressions in other passing tests.
 
-- [ ] **Step 7.4: Commit**
+- [x] **Step 7.4: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -794,7 +794,7 @@ git commit -m "feat(layer2): session-unique EndMarker/BufferSize — replace har
 
 This is the core payload builder. It replaces `New-StealthScript`.
 
-- [ ] **Step 8.1: Implement New-PayloadScript at module level**
+- [x] **Step 8.1: Implement New-PayloadScript at module level**
 
 Replace the `New-PayloadScript` stub with the full implementation:
 
@@ -949,7 +949,7 @@ function New-PayloadScript {
 }
 ```
 
-- [ ] **Step 8.2: Run New-PayloadScript tests**
+- [x] **Step 8.2: Run New-PayloadScript tests**
 
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
@@ -957,7 +957,7 @@ Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 
 Expected: `"New-PayloadScript"` describe block (all 6 tests) now pass.
 
-- [ ] **Step 8.3: Wire New-PayloadScript into Start-Listener**
+- [x] **Step 8.3: Wire New-PayloadScript into Start-Listener**
 
 Find `Start-Listener` (≈line 1174). Locate the `elseif($global:payloadformat -eq 'stealth')` block (≈line 1278):
 
@@ -985,7 +985,7 @@ elseif($global:payloadformat -eq 'stealth'){
 
 Apply the same replacement in the GListener (`Start-GListener`) equivalent block.
 
-- [ ] **Step 8.4: Commit**
+- [x] **Step 8.4: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -999,7 +999,7 @@ git commit -m "feat(layer2): New-PayloadScript modular builder — replaces New-
 **Files:**
 - Modify: `Amnesiac.ps1` (main loop)
 
-- [ ] **Step 9.1: Add payload command handler in main loop**
+- [x] **Step 9.1: Add payload command handler in main loop**
 
 Add the following handler in the main `while($true)` loop (before the `exit` check):
 
@@ -1113,7 +1113,7 @@ Add the following handler in the main `while($true)` loop (before the `exit` che
             }
 ```
 
-- [ ] **Step 9.2: Commit**
+- [x] **Step 9.2: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -1127,7 +1127,7 @@ git commit -m "feat(layer2): payload command handler — amsi/etw/launcher/encod
 **Files:**
 - Modify: `Amnesiac.ps1` (module-level section)
 
-- [ ] **Step 10.1: Implement Get-PayloadLauncher at module level**
+- [x] **Step 10.1: Implement Get-PayloadLauncher at module level**
 
 Replace the stub with:
 
@@ -1177,7 +1177,7 @@ function Get-PayloadLauncher {
 }
 ```
 
-- [ ] **Step 10.2: Run launcher tests**
+- [x] **Step 10.2: Run launcher tests**
 
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
@@ -1185,7 +1185,7 @@ Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 
 Expected: `"Get-PayloadLauncher"` describe block (4 tests) all pass.
 
-- [ ] **Step 10.3: Commit**
+- [x] **Step 10.3: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -1199,7 +1199,7 @@ git commit -m "feat(layer2): Get-PayloadLauncher — ps/wmi/schtask/com launcher
 **Files:**
 - Modify: `Amnesiac.ps1` (module-level section)
 
-- [ ] **Step 11.1: Implement Test-NetworkLogonToken**
+- [x] **Step 11.1: Implement Test-NetworkLogonToken**
 
 Replace the stub with:
 
@@ -1235,7 +1235,7 @@ function Test-NetworkLogonToken {
 }
 ```
 
-- [ ] **Step 11.2: Run token detection test**
+- [x] **Step 11.2: Run token detection test**
 
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
@@ -1243,7 +1243,7 @@ Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 
 Expected: `"Test-NetworkLogonToken"` describe block passes (returns a bool — actual value depends on how the test is run).
 
-- [ ] **Step 11.3: Commit**
+- [x] **Step 11.3: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -1257,7 +1257,7 @@ git commit -m "feat(layer4): Test-NetworkLogonToken — detect runas /netonly Ty
 **Files:**
 - Modify: `Amnesiac.ps1`
 
-- [ ] **Step 12.1: Implement Show-OpsecBanner at module level**
+- [x] **Step 12.1: Implement Show-OpsecBanner at module level**
 
 Replace the stub with:
 
@@ -1297,7 +1297,7 @@ function Show-OpsecBanner {
 }
 ```
 
-- [ ] **Step 12.2: Call Show-OpsecBanner at Amnesiac startup**
+- [x] **Step 12.2: Call Show-OpsecBanner at Amnesiac startup**
 
 Inside `function Amnesiac {}`, after `Initialize-ToolCache` is called (which you'll add in Task 14), add:
 
@@ -1307,7 +1307,7 @@ Inside `function Amnesiac {}`, after `Initialize-ToolCache` is called (which you
 
 This goes in the startup section, before `while($true)`.
 
-- [ ] **Step 12.3: Add `engagement` command handler in main loop**
+- [x] **Step 12.3: Add `engagement` command handler in main loop**
 
 ```powershell
             if ($choice -match '^engagement(\s+(nondomained|domained|reset))?$') {
@@ -1345,7 +1345,7 @@ This goes in the startup section, before `while($true)`.
             }
 ```
 
-- [ ] **Step 12.4: Commit**
+- [x] **Step 12.4: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -1359,7 +1359,7 @@ git commit -m "feat(layer4): Show-OpsecBanner, engagement command, profile-drive
 **Files:**
 - Modify: `Amnesiac.ps1` (module-level + main loop + session interaction)
 
-- [ ] **Step 13.1: Implement Protect-PipeMessage and Unprotect-PipeMessage**
+- [x] **Step 13.1: Implement Protect-PipeMessage and Unprotect-PipeMessage**
 
 Replace the stubs with:
 
@@ -1403,7 +1403,7 @@ function Get-PskDerivedKey {
 }
 ```
 
-- [ ] **Step 13.2: Run AES tests**
+- [x] **Step 13.2: Run AES tests**
 
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
@@ -1430,7 +1430,7 @@ function Protect-PipeMessage {
 
 Re-run tests: all 3 pass.
 
-- [ ] **Step 13.3: Add `psk` command handler**
+- [x] **Step 13.3: Add `psk` command handler**
 
 ```powershell
             if ($choice -match '^psk(\s+(.+))?$') {
@@ -1454,7 +1454,7 @@ Re-run tests: all 3 pass.
             }
 ```
 
-- [ ] **Step 13.4: Integrate AES encryption into session read/write**
+- [x] **Step 13.4: Integrate AES encryption into session read/write**
 
 Locate the `InteractWithPipeSession` function (or the equivalent loop that reads/writes to an established pipe session). The encryption wrapper applies only when `$global:PSKBytes` is set and a session key has been exchanged.
 
@@ -1534,7 +1534,7 @@ if ($global:PSKBytes) {
 
 Add `$keyExchange` to `$rawScript` after `$jitter`: `$rawScript = "$keyBlock;$asmLoad;$etwSnippet;$sblSnippet;$amsiSnippet;$jitter;$keyExchange;$pipeSetup;$loop"`
 
-- [ ] **Step 13.5: Commit**
+- [x] **Step 13.5: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -1548,7 +1548,7 @@ git commit -m "feat(layer4): AES-128 CBC pipe encryption — Protect/Unprotect, 
 **Files:**
 - Modify: `Amnesiac.ps1` (module-level + main loop)
 
-- [ ] **Step 14.1: Implement Initialize-ToolCache**
+- [x] **Step 14.1: Implement Initialize-ToolCache**
 
 Replace the stub with:
 
@@ -1611,7 +1611,7 @@ Call `Initialize-ToolCache` at Amnesiac startup, before `Show-OpsecBanner`:
     Show-OpsecBanner
 ```
 
-- [ ] **Step 14.2: Embed core tools using New-EmbeddedTool**
+- [x] **Step 14.2: Embed core tools using New-EmbeddedTool**
 
 For each core tool, run to get the base64 blob, then paste into the `$coreTools` hashtable:
 
@@ -1627,7 +1627,7 @@ New-EmbeddedTool -Path .\Tools\Find-LocalAdminAccess.ps1 -Name 'Find-LocalAdminA
 
 Paste output into `$coreTools = @{ ... }` in `Initialize-ToolCache`.
 
-- [ ] **Step 14.3: Add `modules` command handler**
+- [x] **Step 14.3: Add `modules` command handler**
 
 ```powershell
             if ($choice -match '^modules(\s+(reload|status))?$') {
@@ -1660,7 +1660,7 @@ Paste output into `$coreTools = @{ ... }` in `Initialize-ToolCache`.
             }
 ```
 
-- [ ] **Step 14.4: Run tool cache tests**
+- [x] **Step 14.4: Run tool cache tests**
 
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
@@ -1668,7 +1668,7 @@ Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 
 Expected: `"Initialize-ToolCache"` describe block passes (core tools in cache after init, assuming `Tools\` folder is present).
 
-- [ ] **Step 14.5: Commit**
+- [x] **Step 14.5: Commit**
 
 ```powershell
 git add Amnesiac.ps1
@@ -1682,7 +1682,7 @@ git commit -m "feat(layer3): Initialize-ToolCache, core tool embedding, modules 
 **Files:**
 - Modify: `Amnesiac.ps1` (module-level + Start-Listener)
 
-- [ ] **Step 15.1: Implement Send-Module at module level**
+- [x] **Step 15.1: Implement Send-Module at module level**
 
 Replace the stub with:
 
@@ -1736,7 +1736,7 @@ function Send-Module {
 }
 ```
 
-- [ ] **Step 15.2: Update default ServerURL**
+- [x] **Step 15.2: Update default ServerURL**
 
 Find line 67 (`$global:ServerURL = "https://raw.githubusercontent.com/..."`). Replace with:
 
@@ -1751,7 +1751,7 @@ Find line 67 (`$global:ServerURL = "https://raw.githubusercontent.com/..."`). Re
     $global:GitHubURL = "https://raw.githubusercontent.com/Leo4j/Amnesiac/main/Tools"  # preserved fallback
 ```
 
-- [ ] **Step 15.3: Add GitHub fallback warning**
+- [x] **Step 15.3: Add GitHub fallback warning**
 
 Find all occurrences where tools are downloaded from `$global:ServerURL` when the URL points to GitHub. Add a warning when falling back:
 
@@ -1762,7 +1762,7 @@ if ($global:ServerURL -match 'githubusercontent') {
 }
 ```
 
-- [ ] **Step 15.4: Add `load loader` command handler**
+- [x] **Step 15.4: Add `load loader` command handler**
 
 ```powershell
             if ($choice -eq 'load loader') {
@@ -1788,7 +1788,7 @@ if ($global:ServerURL -match 'githubusercontent') {
 
 Note: The actual in-session delivery of AmnesiacLoader requires plugging into the session interaction send/receive flow. The exact integration point depends on the session management code structure, which is session-specific. The command above prepares the loader command string; wiring it into the active session send path follows the same pattern as other session commands.
 
-- [ ] **Step 15.5: Commit**
+- [x] **Step 15.5: Commit**
 
 ```powershell
 git add Amnesiac.ps1

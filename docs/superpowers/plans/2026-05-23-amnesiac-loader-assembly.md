@@ -1,6 +1,6 @@
-# AmnesiacLoader C# Assembly Implementation Plan
+﻿# AmnesiacLoader C# Assembly Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Implement the AmnesiacLoader C# assembly (Bypass.cs, Loader.cs, CallStack.cs, SleepMask.cs, Stomper.cs, UnmanagedPS.cs) with indirect syscalls, call stack spoofing, sleep masking, AMSI/ETW bypasses, and CLR hosting.
 
@@ -30,7 +30,7 @@
 **Files:**
 - Modify: `AmnesiacLoader/Build.ps1`
 
-- [ ] **Step 1: Overwrite Build.ps1**
+- [x] **Step 1: Overwrite Build.ps1**
 
 ```powershell
 # AmnesiacLoader Build Script — uses csc.exe (no dotnet SDK required)
@@ -78,7 +78,7 @@ if ($content -match $pattern) {
 Write-Host "[+] Done." -ForegroundColor Green
 ```
 
-- [ ] **Step 2: Verify stubs compile**
+- [x] **Step 2: Verify stubs compile**
 
 In PowerShell from the AmnesiacLoader directory:
 ```powershell
@@ -86,7 +86,7 @@ In PowerShell from the AmnesiacLoader directory:
 ```
 Expected: `[+] Built: ...\bin\AmnesiacLoader.dll` — the existing stubs (NotImplementedException) compile cleanly.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add AmnesiacLoader/Build.ps1
 git commit -m "build: rewrite Build.ps1 to use csc.exe (no dotnet SDK)"
@@ -99,7 +99,7 @@ git commit -m "build: rewrite Build.ps1 to use csc.exe (no dotnet SDK)"
 **Files:**
 - Modify: `AmnesiacLoader/Bypass.cs`
 
-- [ ] **Step 1: Write Bypass.cs**
+- [x] **Step 1: Write Bypass.cs**
 
 ```csharp
 // AmnesiacLoader — AMSI/ETW Bypass Methods
@@ -305,13 +305,13 @@ namespace AmnesiacLoader
 }
 ```
 
-- [ ] **Step 2: Compile**
+- [x] **Step 2: Compile**
 ```powershell
 .\Build.ps1
 ```
 Expected: `[+] Built: ...\bin\AmnesiacLoader.dll` with no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add AmnesiacLoader/Bypass.cs
 git commit -m "feat(loader): implement Bypass.cs — pageguard, hwbp, ETW patch"
@@ -324,7 +324,7 @@ git commit -m "feat(loader): implement Bypass.cs — pageguard, hwbp, ETW patch"
 **Files:**
 - Modify: `AmnesiacLoader/Loader.cs` (replace stub with full implementation — this task: SyscallResolver inner class + P/Invoke declarations + stub allocator)
 
-- [ ] **Step 1: Write Loader.cs — Part A (SyscallResolver + shared declarations)**
+- [x] **Step 1: Write Loader.cs — Part A (SyscallResolver + shared declarations)**
 
 Replace the entire Loader.cs with the following. The Injector methods remain `throw new NotImplementedException` for now — they are filled in Tasks 4 and 5.
 
@@ -693,13 +693,13 @@ namespace AmnesiacLoader
 }
 ```
 
-- [ ] **Step 2: Compile**
+- [x] **Step 2: Compile**
 ```powershell
 .\Build.ps1
 ```
 Expected: compiles cleanly (NotImplementedException stubs are valid C#).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add AmnesiacLoader/Loader.cs
 git commit -m "feat(loader): SyscallResolver — EAT walk, Halo's Gate neighbor scan, stub allocator"
@@ -712,7 +712,7 @@ git commit -m "feat(loader): SyscallResolver — EAT walk, Halo's Gate neighbor 
 **Files:**
 - Modify: `AmnesiacLoader/CallStack.cs`
 
-- [ ] **Step 1: Write CallStack.cs**
+- [x] **Step 1: Write CallStack.cs**
 
 ```csharp
 // AmnesiacLoader — Call Stack Gadget Provider
@@ -795,13 +795,13 @@ namespace AmnesiacLoader
 }
 ```
 
-- [ ] **Step 2: Compile**
+- [x] **Step 2: Compile**
 ```powershell
 .\Build.ps1
 ```
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add AmnesiacLoader/CallStack.cs
 git commit -m "feat(loader): CallStack — ntdll .text RET gadget finder for syscall stub frame spoofing"
@@ -814,7 +814,7 @@ git commit -m "feat(loader): CallStack — ntdll .text RET gadget finder for sys
 **Files:**
 - Modify: `AmnesiacLoader/Loader.cs` — replace `InjectShellcode` NotImplementedException
 
-- [ ] **Step 1: Replace InjectShellcode in Loader.cs**
+- [x] **Step 1: Replace InjectShellcode in Loader.cs**
 
 Find the `InjectShellcode` method body and replace the `throw` with:
 
@@ -923,13 +923,13 @@ static uint FindThreadInProcess(uint pid)
 }
 ```
 
-- [ ] **Step 2: Compile**
+- [x] **Step 2: Compile**
 ```powershell
 .\Build.ps1
 ```
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add AmnesiacLoader/Loader.cs
 git commit -m "feat(loader): InjectShellcode — thread hijack via indirect syscalls"
@@ -942,7 +942,7 @@ git commit -m "feat(loader): InjectShellcode — thread hijack via indirect sysc
 **Files:**
 - Modify: `AmnesiacLoader/Loader.cs` — replace `InjectNewProcess` NotImplementedException
 
-- [ ] **Step 1: Replace InjectNewProcess body**
+- [x] **Step 1: Replace InjectNewProcess body**
 
 ```csharp
 public static bool InjectNewProcess(string processPath, byte[] shellcode, int spoofParentPid)
@@ -1024,13 +1024,13 @@ public static bool InjectNewProcess(string processPath, byte[] shellcode, int sp
 }
 ```
 
-- [ ] **Step 2: Compile**
+- [x] **Step 2: Compile**
 ```powershell
 .\Build.ps1
 ```
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add AmnesiacLoader/Loader.cs
 git commit -m "feat(loader): InjectNewProcess — Early Bird APC + PPID spoof via PROC_THREAD_ATTRIBUTE_LIST"
@@ -1043,7 +1043,7 @@ git commit -m "feat(loader): InjectNewProcess — Early Bird APC + PPID spoof vi
 **Files:**
 - Modify: `AmnesiacLoader/SleepMask.cs`
 
-- [ ] **Step 1: Write SleepMask.cs**
+- [x] **Step 1: Write SleepMask.cs**
 
 ```csharp
 // AmnesiacLoader — Sleep Masking
@@ -1171,7 +1171,7 @@ namespace AmnesiacLoader
 }
 ```
 
-- [ ] **Step 2: Compile**
+- [x] **Step 2: Compile**
 ```powershell
 .\Build.ps1
 ```
@@ -1184,7 +1184,7 @@ $refs = @("/r:System.dll", "/r:System.Core.dll")
 $cscArgs = @("/target:library", "/out:$outDll", "/unsafe", "/optimize+", "/debug-") + $refs + $sources
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add AmnesiacLoader/SleepMask.cs AmnesiacLoader/Build.ps1
 git commit -m "feat(loader): SleepMask — AES-128 CBC in-place encrypt + PAGE_NOACCESS during sleep"
@@ -1197,7 +1197,7 @@ git commit -m "feat(loader): SleepMask — AES-128 CBC in-place encrypt + PAGE_N
 **Files:**
 - Create: `AmnesiacLoader/Stomper.cs`
 
-- [ ] **Step 1: Write Stomper.cs**
+- [x] **Step 1: Write Stomper.cs**
 
 ```csharp
 // AmnesiacLoader — Module Stomping (PE Header Concealment)
@@ -1312,13 +1312,13 @@ namespace AmnesiacLoader
 }
 ```
 
-- [ ] **Step 2: Compile**
+- [x] **Step 2: Compile**
 ```powershell
 .\Build.ps1
 ```
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add AmnesiacLoader/Stomper.cs
 git commit -m "feat(loader): Stomper — PE header concealment via donor DLL header overwrite"
@@ -1331,7 +1331,7 @@ git commit -m "feat(loader): Stomper — PE header concealment via donor DLL hea
 **Files:**
 - Create: `AmnesiacLoader/UnmanagedPS.cs`
 
-- [ ] **Step 1: Write UnmanagedPS.cs**
+- [x] **Step 1: Write UnmanagedPS.cs**
 
 ```csharp
 // AmnesiacLoader — CLR Hosting (Unmanaged PowerShell)
@@ -1466,13 +1466,13 @@ namespace AmnesiacLoader
 }
 ```
 
-- [ ] **Step 2: Compile**
+- [x] **Step 2: Compile**
 ```powershell
 .\Build.ps1
 ```
 Expected: no errors.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 ```
 git add AmnesiacLoader/UnmanagedPS.cs
 git commit -m "feat(loader): UnmanagedPS — in-process CLR hosting via SMA Runspace reflection"
@@ -1485,7 +1485,7 @@ git commit -m "feat(loader): UnmanagedPS — in-process CLR hosting via SMA Runs
 **Files:**
 - Modify: `Amnesiac.ps1` — add `$AmnesiacLoaderB64` constant, `load loader` command handler, `Migrate ps` handler
 
-- [ ] **Step 1: Run Build.ps1 to produce and embed the DLL**
+- [x] **Step 1: Run Build.ps1 to produce and embed the DLL**
 ```powershell
 cd AmnesiacLoader
 .\Build.ps1
@@ -1500,7 +1500,7 @@ $AmnesiacLoaderB64 = ""
 ```
 Then rerun `.\Build.ps1`.
 
-- [ ] **Step 2: Add `load loader` command handler in Amnesiac.ps1**
+- [x] **Step 2: Add `load loader` command handler in Amnesiac.ps1**
 
 Find the `modules` command handler block (search for `elseif ($choice -match '^modules')`). Add immediately after that entire block:
 
@@ -1522,7 +1522,7 @@ Find the `modules` command handler block (search for `elseif ($choice -match '^m
                 }
 ```
 
-- [ ] **Step 3: Add `Migrate ps` command handler**
+- [x] **Step 3: Add `Migrate ps` command handler**
 
 Find the existing `Migrate` command handler (search for `elseif ($choice -match '^Migrate')`). Add a sub-branch at the top of that handler:
 
@@ -1554,7 +1554,7 @@ Find the existing `Migrate` command handler (search for `elseif ($choice -match 
                     }
 ```
 
-- [ ] **Step 4: Update OPSEC banner to show loader status**
+- [x] **Step 4: Update OPSEC banner to show loader status**
 
 Find `Show-OpsecBanner`. Find the line printing `[+] Loader:` (or add one after the Buffer size line):
 
@@ -1563,20 +1563,20 @@ Find `Show-OpsecBanner`. Find the line printing `[+] Loader:` (or add one after 
     Write-Host " [+] Loader:           AmnesiacLoader — $loaderStatus" -ForegroundColor $(if([string]::IsNullOrEmpty($AmnesiacLoaderB64)){'Yellow'}else{'Green'})
 ```
 
-- [ ] **Step 5: Dot-source test**
+- [x] **Step 5: Dot-source test**
 ```powershell
 . .\Amnesiac.ps1
 Write-Host "Load loader handler exists: $($null -ne (Get-Command Send-Module -ErrorAction SilentlyContinue))"
 ```
 Expected: no parse errors.
 
-- [ ] **Step 6: Run tests**
+- [x] **Step 6: Run tests**
 ```powershell
 Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 ```
 Expected: all 28 tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 ```
 git add Amnesiac.ps1 AmnesiacLoader/Build.ps1
 git commit -m "feat: embed AmnesiacLoader — load loader command, Migrate ps handler, OPSEC banner loader status"
