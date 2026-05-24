@@ -278,3 +278,132 @@ Describe "load loader command handler" {
         $written[0]    | Should -Not -Match '__MODULE_BEGIN__'
     }
 }
+
+Describe "Migrate ps command regex patterns" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
+    It "Migrate ps <pid> regex matches a numeric pid" {
+        $command = "Migrate ps 1234"
+        ($command -match '^Migrate ps (\d+)$') | Should -Be $true
+        $Matches[1] | Should -Be '1234'
+    }
+
+    It "Migrate ps new <proc> regex matches a process path" {
+        $command = "Migrate ps new C:\Windows\System32\svchost.exe"
+        ($command -match '^Migrate ps new (.+)') | Should -Be $true
+        $Matches[1] | Should -Be 'C:\Windows\System32\svchost.exe'
+    }
+
+    It "Migrate ps does not match plain Migrate <pid>" {
+        $command = "Migrate 1234"
+        ($command -match '^Migrate ps (\d+)$') | Should -Be $false
+    }
+
+    It "Migrate ps new does not match Migrate new" {
+        $command = "Migrate new notepad.exe"
+        ($command -match '^Migrate ps new (.+)') | Should -Be $false
+    }
+}
+
+Describe "Send-Module framing protocol" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
+    It "Send-Module returns false when tool not in ToolCache" {
+        $global:ToolCache = @{}
+        $mockWriter = [PSCustomObject]@{}
+        $mockWriter | Add-Member -MemberType ScriptMethod -Name WriteLine -Value { param($l) }
+        $mockWriter | Add-Member -MemberType ScriptMethod -Name Flush     -Value { }
+        $mockReader = [PSCustomObject]@{}
+        $mockReader | Add-Member -MemberType ScriptMethod -Name ReadLine  -Value { return $global:EndMarker }
+
+        $result = Send-Module -ToolName 'NonExistentTool' -Writer $mockWriter -Reader $mockReader
+        $result | Should -Be $false
+    }
+
+    It "Send-Module sends __MODULE_BEGIN__, chunks, and __MODULE_END__ for a cached tool" {
+        $global:ToolCache = @{ 'TestTool' = 'Write-Host hello' }
+        $lines = [System.Collections.Generic.List[string]]::new()
+
+        $mockWriter = [PSCustomObject]@{}
+        $mockWriter | Add-Member -MemberType ScriptMethod -Name WriteLine -Value {
+            param($l) $lines.Add($l)
+        }
+        $mockWriter | Add-Member -MemberType ScriptMethod -Name Flush -Value { }
+
+        $mockReader = [PSCustomObject]@{}
+        $mockReader | Add-Member -MemberType ScriptMethod -Name ReadLine -Value {
+            return $global:EndMarker
+        }
+
+        Send-Module -ToolName 'TestTool' -Writer $mockWriter -Reader $mockReader
+
+        ($lines | Where-Object { $_ -like '__MODULE_BEGIN__:TestTool:*' }) | Should -Not -BeNullOrEmpty
+        ($lines | Where-Object { $_ -like '__MODULE_CHUNK__:*' })          | Should -Not -BeNullOrEmpty
+        ($lines | Where-Object { $_ -eq '__MODULE_END__:TestTool' })       | Should -Not -BeNullOrEmpty
+    }
+
+    It "Send-Module chunk content is valid base64" {
+        $global:ToolCache = @{ 'ChunkTool' = 'hello world' }
+        $lines = [System.Collections.Generic.List[string]]::new()
+
+        $mockWriter = [PSCustomObject]@{}
+        $mockWriter | Add-Member -MemberType ScriptMethod -Name WriteLine -Value {
+            param($l) $lines.Add($l)
+        }
+        $mockWriter | Add-Member -MemberType ScriptMethod -Name Flush -Value { }
+        $mockReader = [PSCustomObject]@{}
+        $mockReader | Add-Member -MemberType ScriptMethod -Name ReadLine -Value { return $global:EndMarker }
+
+        Send-Module -ToolName 'ChunkTool' -Writer $mockWriter -Reader $mockReader
+
+        $chunkLine = $lines | Where-Object { $_ -like '__MODULE_CHUNK__:*' } | Select-Object -First 1
+        $chunkLine | Should -Not -BeNullOrEmpty
+        $b64Part = $chunkLine.Substring('__MODULE_CHUNK__:'.Length)
+        { [Convert]::FromBase64String($b64Part) } | Should -Not -Throw
+    }
+
+    It "Send-Module returns true when reader returns EndMarker as ack" {
+        $global:ToolCache = @{ 'AckTool' = 'code here' }
+        $mockWriter = [PSCustomObject]@{}
+        $mockWriter | Add-Member -MemberType ScriptMethod -Name WriteLine -Value { param($l) }
+        $mockWriter | Add-Member -MemberType ScriptMethod -Name Flush     -Value { }
+        $mockReader = [PSCustomObject]@{}
+        $mockReader | Add-Member -MemberType ScriptMethod -Name ReadLine  -Value { return $global:EndMarker }
+
+        $result = Send-Module -ToolName 'AckTool' -Writer $mockWriter -Reader $mockReader
+        $result | Should -Be $true
+    }
+}
+
+Describe "AmnesiacLoader build artifact" {
+    It "AmnesiacLoader bin directory exists after build" {
+        $binDir = Join-Path $PSScriptRoot "..\AmnesiacLoader\bin"
+        Test-Path $binDir | Should -Be $true
+    }
+
+    It "AmnesiacLoader.dll exists in bin directory" {
+        $dll = Join-Path $PSScriptRoot "..\AmnesiacLoader\bin\AmnesiacLoader.dll"
+        Test-Path $dll | Should -Be $true
+    }
+
+    It "AmnesiacLoader.dll is a valid PE (MZ header)" {
+        $dll = Join-Path $PSScriptRoot "..\AmnesiacLoader\bin\AmnesiacLoader.dll"
+        $bytes = [System.IO.File]::ReadAllBytes($dll)
+        $bytes[0] | Should -Be 0x4D
+        $bytes[1] | Should -Be 0x5A
+    }
+
+    It "AmnesiacLoaderB64 in Amnesiac.ps1 matches the DLL on disk" {
+        $scriptPath = Join-Path $PSScriptRoot "..\Amnesiac.ps1"
+        . $scriptPath
+        $dll    = Join-Path $PSScriptRoot "..\AmnesiacLoader\bin\AmnesiacLoader.dll"
+        $dllB64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($dll))
+        $AmnesiacLoaderB64 | Should -Be $dllB64
+    }
+}
