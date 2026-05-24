@@ -1772,15 +1772,15 @@ function New-StealthScript {
 }
 
 function Show-PayloadMenu {
-	Write-Output ""
+	Write-Host ""
 	Write-Host " Select payload format:" -Foreground cyan
-	Write-Output ""
-	Write-Output "  [1] b64     — base64 encoded one-liner (most compatible)"
-	Write-Output "  [2] gzip    — gzip+base64 compressed, shorter footprint"
-	Write-Output "  [3] stealth — gzip+obfuscated, includes AMSI/ETW/SBL bypasses"
-	Write-Output "  [4] raw     — inline PowerShell, no encoding"
-	Write-Output "  [5] pwsh    — Start-Process launcher, spawns hidden PS process"
-	Write-Output ""
+	Write-Host ""
+	Write-Host "  [1] b64     -- base64 encoded one-liner (most compatible)"
+	Write-Host "  [2] gzip    -- gzip+base64 compressed, shorter footprint"
+	Write-Host "  [3] stealth -- gzip+obfuscated, includes AMSI/ETW/SBL bypasses"
+	Write-Host "  [4] raw     -- inline PowerShell, no encoding"
+	Write-Host "  [5] pwsh    -- Start-Process launcher, spawns hidden PS process"
+	Write-Host ""
 	Write-Host " Choice [1-5]: " -Foreground yellow -NoNewline
 	$c = Read-Host
 	switch ($c.Trim()) {
