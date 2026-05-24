@@ -324,7 +324,18 @@ function New-EmbeddedTool {
     Write-Host "'$Name' = '$b64'"
 }
 function Send-Module            { param([string]$ToolName,$Writer,$Reader) throw "Not implemented" }
-function Test-NetworkLogonToken { return $false }
+function Test-NetworkLogonToken {
+    try {
+        $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        if ($id.AuthenticationType -in 'Kerberos','NTLM') {
+            $domainPart = ($id.Name -split '\\')[0]
+            $localNames = @($env:COMPUTERNAME, 'NT AUTHORITY', 'BUILTIN')
+            if ($domainPart -notin $localNames) { return $true }
+        }
+        return $false
+    } catch { return $false }
+}
+
 function Protect-PipeMessage {
     param([string]$PlainText, [byte[]]$Key)
     $aes = [System.Security.Cryptography.Aes]::Create()
@@ -363,7 +374,36 @@ function Get-PskDerivedKey {
     $sha.Dispose()
     return $hash[0..15]
 }
-function Show-OpsecBanner       {}
+function Show-OpsecBanner {
+    $diskState   = if ($global:DiskMode)          { "ON " } else { "OFF" }
+    $engState    = if ($global:EngagementProfile) { $global:EngagementProfile } else { "(not set)" }
+    $tokenInfo   = if (Test-NetworkLogonToken) {
+                       ([System.Security.Principal.WindowsIdentity]::GetCurrent()).Name
+                   } else { "(no network logon token)" }
+    $cacheCount  = $global:ToolCache.Keys.Count
+    $loaderState = if ($AmnesiacLoaderB64) { "embedded" } else { "(not embedded)" }
+    $pskState    = if ($global:PSKBytes) { "configured" } else { "derived (pipe name)" }
+
+    Write-Host ""
+    Write-Host " [+] Amnesiac — Red Team Edition" -ForegroundColor Green
+    Write-Host " [+] Disk mode:        $diskState"
+    Write-Host " [+] Engagement:       $engState"
+    Write-Host " [+] Network token:    $tokenInfo"
+    Write-Host " [+] Tool cache:       $cacheCount modules loaded"
+    Write-Host " [+] End marker:       $($global:EndMarker)  (session-unique)"
+    Write-Host " [+] Buffer size:      $($global:BufferSize) bytes"
+    Write-Host " [+] Loader:           AmnesiacLoader ($loaderState)"
+    Write-Host " [+] Payload profile:  amsi=$($global:PayloadConfig.Amsi) etw=$($global:PayloadConfig.Etw) launcher=$($global:PayloadConfig.Launcher) obfuscation=$($global:PayloadConfig.Obfuscation)"
+    Write-Host " [+] PSK:              $pskState"
+
+    $heavyNames = @('Suntour','Ferrari','ppl','TermsrvPatcher','RDPKeylog.exe')
+    $missing = $heavyNames | Where-Object { -not $global:ToolCache.ContainsKey($_) }
+    if ($missing) {
+        Write-Host " [!] Heavy modules not cached: $($missing -join ', ')" -ForegroundColor Yellow
+        Write-Host "     Run 'serve' to enable via local HTTP server" -ForegroundColor Yellow
+    }
+    Write-Host ""
+}
 
 function Amnesiac {
 
@@ -472,6 +512,9 @@ function Amnesiac {
     $global:PSKPhrase         = $null
     $global:PSKBytes          = $null   # 16-byte derived key; $null = unset
     # ---- End stealth overhaul globals ----
+
+    Initialize-ToolCache
+    Show-OpsecBanner
 
 	if(!$ScanMode){$global:Message = " [+] Welcome to Amnesiac. Type 'help' to list/hide available commands"}
 	
@@ -711,8 +754,128 @@ function Amnesiac {
 			continue
 		}
 
+		# ---- modules command (Task 14) ----
+		if ($choice -match '^modules(\s+(reload|status))?$') {
+			$sub = $Matches[2]
+			if ($sub -eq 'reload') {
+				Initialize-ToolCache
+				$global:Message = " [+] Tool cache refreshed: $($global:ToolCache.Count) modules"
+			} elseif ($sub -eq 'status') {
+				Write-Host ""
+				Write-Host " [+] Tool cache breakdown:" -ForegroundColor Cyan
+				$coreNames  = @('SimpleAMSI','NETAMSI','Token-Impersonation','Invoke-SMBRemoting','Invoke-WMIRemoting','Find-LocalAdminAccess')
+				$heavyNames = @('Suntour','Ferrari','ppl','TermsrvPatcher','RDPKeylog.exe')
+				$core  = $coreNames  | Where-Object { $global:ToolCache.ContainsKey($_) }
+				$std   = $global:ToolCache.Keys | Where-Object { $_ -notin $coreNames -and $_ -notin $heavyNames }
+				$heavy = $heavyNames | Where-Object { $global:ToolCache.ContainsKey($_) }
+				Write-Host "  Core    (embedded): $($core.Count)/$($coreNames.Count) — $($core -join ', ')"
+				Write-Host "  Standard (Tools\):  $($std.Count) — $($std -join ', ')"
+				Write-Host "  Heavy   (HTTP):     $($heavy.Count)/$($heavyNames.Count) — run 'serve' to load"
+				Write-Host ""
+			} else {
+				Write-Host ""
+				Write-Host " [+] Cached modules ($($global:ToolCache.Count)):" -ForegroundColor Cyan
+				$global:ToolCache.Keys | Sort-Object | ForEach-Object { Write-Host "  [+] $_" }
+				Write-Host ""
+			}
+			continue
+		}
+
+		# ---- payload command (Task 9) ----
+		if ($choice -match '^payload(\s+(.+))?$') {
+			$sub = ($Matches[2] -split '\s+', 3)
+			$subcmd = $sub[0]; $val = if ($sub.Count -ge 2) { $sub[1] } else { $null }; $extra = if ($sub.Count -ge 3) { $sub[2] } else { $null }
+			switch ($subcmd) {
+				'amsi' {
+					if ($val -in 'pageguard','hwbp','fail','direct') {
+						$global:PayloadConfig.Amsi = $val
+						$global:Message = " [+] Payload AMSI bypass: $val"
+						if ($val -in 'pageguard','hwbp') { $global:Message += " (PS uses 'fail' fallback; full $val activates after 'load loader')" }
+					} else { $global:Message = " [-] Valid: pageguard hwbp fail direct" }
+				}
+				'etw' {
+					if ($val -in 'provider','patch','thread') { $global:PayloadConfig.Etw = $val; $global:Message = " [+] Payload ETW: $val" }
+					else { $global:Message = " [-] Valid: provider patch thread" }
+				}
+				'launcher' {
+					if ($val -in 'ps','wmi','schtask','com') { $global:PayloadConfig.Launcher = $val; $global:Message = " [+] Payload launcher: $val" }
+					else { $global:Message = " [-] Valid: ps wmi schtask com" }
+				}
+				'encoding' {
+					if ($val -in 'gzip','b64','raw','pwraw') { $global:PayloadConfig.Encoding = $val; $global:payloadformat = $val; $global:Message = " [+] Payload encoding: $val" }
+					else { $global:Message = " [-] Valid: gzip b64 raw pwraw" }
+				}
+				'jitter' {
+					if ($val -in 'off','low','medium','high') { $global:PayloadConfig.Jitter = $val; $global:Message = " [+] Payload jitter: $val" }
+					else { $global:Message = " [-] Valid: off low medium high" }
+				}
+				'obfuscation' {
+					if ($val -in 'low','medium','high') { $global:PayloadConfig.Obfuscation = $val; $global:Message = " [+] Payload obfuscation: $val" }
+					else { $global:Message = " [-] Valid: low medium high" }
+				}
+				'key' {
+					if ($val -in 'hostname','domain','user' -and $extra) { $global:PayloadConfig.Keys[$val] = $extra; $global:Message = " [+] Payload key $val = $extra" }
+					elseif ($val -eq 'clear') { $global:PayloadConfig.Keys = @{}; $global:Message = " [+] Payload keys cleared" }
+					elseif ($val -eq 'show') {
+						if ($global:PayloadConfig.Keys.Count -eq 0) { $global:Message = " [-] No payload keys set" }
+						else { $global:PayloadConfig.Keys.GetEnumerator() | % { Write-Host "  $($_.Key) = $($_.Value)" } }
+					} else { $global:Message = " [-] Usage: payload key [hostname|domain|user] <value>  |  payload key clear|show" }
+				}
+				'reset' {
+					$global:PayloadConfig = @{ Amsi='pageguard'; Etw='provider'; Sbl=$true; Launcher='ps'; Encoding='gzip'; Jitter='medium'; Obfuscation='high'; Keys=@{} }
+					$global:Message = " [+] Payload config reset to defaults"
+				}
+				default {
+					Write-Host ""; Write-Host " [+] Current payload configuration:" -ForegroundColor Cyan
+					Write-Host "     amsi:        $($global:PayloadConfig.Amsi)"
+					Write-Host "     etw:         $($global:PayloadConfig.Etw)"
+					Write-Host "     sbl:         $($global:PayloadConfig.Sbl)"
+					Write-Host "     launcher:    $($global:PayloadConfig.Launcher)"
+					Write-Host "     encoding:    $($global:PayloadConfig.Encoding)"
+					Write-Host "     jitter:      $($global:PayloadConfig.Jitter)"
+					Write-Host "     obfuscation: $($global:PayloadConfig.Obfuscation)"
+					if ($global:PayloadConfig.Keys.Count -gt 0) { Write-Host "     keys:        $($global:PayloadConfig.Keys | ConvertTo-Json -Compress)" }
+					else { Write-Host "     keys:        (none)" }; Write-Host ""
+				}
+			}
+			continue
+		}
+
+		# ---- psk command (Task 13) ----
+		if ($choice -match '^psk(\s+(.+))?$') {
+			$arg = $Matches[2]
+			if (-not $arg) {
+				if ($global:PSKBytes) { $global:Message = " [+] PSK: configured (masked)" } else { $global:Message = " [+] PSK: using default (derived from pipe name)" }
+			} elseif ($arg -eq 'reset') {
+				$global:PSKPhrase = $null; $global:PSKBytes = $null; $global:Message = " [+] PSK reset to default"
+			} else {
+				$global:PSKPhrase = $arg; $global:PSKBytes = Get-PskDerivedKey -Passphrase $arg; $global:Message = " [+] PSK configured"
+			}
+			continue
+		}
+
+		# ---- engagement command (Task 12) ----
+		if ($choice -match '^engagement(\s+(nondomained|domained|reset))?$') {
+			$profile = $Matches[2]
+			switch ($profile) {
+				'nondomained' {
+					$global:EngagementProfile = 'nondomained'
+					$tokenOk = Test-NetworkLogonToken
+					if ($tokenOk) { $id = [System.Security.Principal.WindowsIdentity]::GetCurrent(); $global:Message = " [+] Engagement: nondomained | Network token: $($id.Name)" }
+					else {
+						Write-Host ""; Write-Host " [!] WARNING: No network logon token detected." -ForegroundColor Red
+						Write-Host "     Launch Amnesiac from: runas /netonly /user:DOMAIN\user powershell.exe" -ForegroundColor Yellow; Write-Host ""
+					}
+				}
+				'domained' { $global:EngagementProfile = 'domained'; $global:Message = " [+] Engagement: domained (assumed breach)" }
+				'reset'    { $global:EngagementProfile = $null; $global:Message = " [+] Engagement profile cleared" }
+				default    { $state = if ($global:EngagementProfile) { $global:EngagementProfile } else { "(not set)" }; $global:Message = " [+] Engagement: $state" }
+			}
+			continue
+		}
+
 		if ($choice -eq 'exit') {
-			
+
 			for ($i = $global:listenerSessions.Count - 1; $i -ge 0; $i--) {
 				$selectedSession = $global:listenerSessions[$i]
 				
