@@ -323,6 +323,8 @@ function Amnesiac {
 					$sz = $global:AmnesiacArtifacts.Downloads[$_].Length
 					Write-Host "  $_ ($sz bytes)"
 				}
+			} elseif ($type -eq 'screenshots') {
+				$global:Message = " [+] Screenshots: $($global:AmnesiacArtifacts.Screenshots.Count) captured (use 'save screenshots <path>' to write to disk)"
 			}
 			continue
 		}
@@ -356,6 +358,22 @@ function Amnesiac {
 					[System.IO.File]::WriteAllBytes("$path\$($_.Key)", $_.Value)
 				}
 				$global:Message = " [+] Downloads saved to: $path"
+			} elseif ($type -eq 'clipboard') {
+				$outFile = if ($Matches[4]) { $Matches[4] } else { "$env:USERPROFILE\Desktop\clipboard.txt" }
+				$global:AmnesiacArtifacts.Clipboard | Out-File $outFile -Encoding UTF8
+				$global:Message = " [+] Clipboard saved to: $outFile"
+			} elseif ($type -eq 'tgts') {
+				$outFile = if ($Matches[4]) { $Matches[4] } else { "$env:USERPROFILE\Desktop\tgts.txt" }
+				$global:AmnesiacArtifacts.TGTs | Out-File $outFile -Encoding UTF8
+				$global:Message = " [+] TGTs saved to: $outFile"
+			} elseif ($type -eq 'screenshots') {
+				$null = New-Item -Path $path -ItemType Directory -Force
+				$i = 0
+				$global:AmnesiacArtifacts.Screenshots | ForEach-Object {
+					[System.IO.File]::WriteAllBytes("$path\screenshot_$i.png", $_)
+					$i++
+				}
+				$global:Message = " [+] $i screenshot(s) saved to: $path"
 			}
 			continue
 		}
