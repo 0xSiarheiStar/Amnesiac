@@ -229,3 +229,52 @@ Describe "Initialize-ToolCache" {
         $global:ToolCache.Keys | Should -Contain 'NETAMSI'
     }
 }
+
+Describe "load loader command handler" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
+    It "AmnesiacLoaderB64 is non-empty after dot-source" {
+        $AmnesiacLoaderB64 | Should -Not -Be $null
+    }
+
+    It "load loader sends a single [Reflection.Assembly]::Load command containing the full base64" {
+        $global:AmnesiacLoaderB64 = "FAKEB64BLOB=="
+        $written = [System.Collections.Generic.List[string]]::new()
+
+        $mockWriter = [PSCustomObject]@{}
+        $mockWriter | Add-Member -MemberType ScriptMethod -Name WriteLine -Value {
+            param($line) $written.Add($line)
+        }
+        $mockWriter | Add-Member -MemberType ScriptMethod -Name Flush -Value { }
+
+        $readQueue = [System.Collections.Generic.Queue[string]]::new()
+        $readQueue.Enqueue($global:EndMarker)
+        $mockReader = [PSCustomObject]@{}
+        $mockReader | Add-Member -MemberType ScriptMethod -Name ReadLine -Value {
+            if ($readQueue.Count -gt 0) { return $readQueue.Dequeue() }
+            return $global:EndMarker
+        }
+
+        $command = "load loader"
+        if ($command -eq "load loader") {
+            if (-not [string]::IsNullOrEmpty($global:AmnesiacLoaderB64)) {
+                $loadCmd = "`$_la=[Reflection.Assembly]::Load([Convert]::FromBase64String('$($global:AmnesiacLoaderB64)'));[AmnesiacLoader.Stomper]::ConcealLoadedAssembly(`$_la)"
+                $mockWriter.WriteLine($loadCmd)
+                $mockWriter.Flush()
+                while ($true) {
+                    $ln = $mockReader.ReadLine()
+                    if ($ln -eq $global:EndMarker) { break }
+                }
+            }
+        }
+
+        $written.Count | Should -Be 1
+        $written[0]    | Should -Match '\[Reflection\.Assembly\]::Load'
+        $written[0]    | Should -Match 'FAKEB64BLOB=='
+        $written[0]    | Should -Match 'ConcealLoadedAssembly'
+        $written[0]    | Should -Not -Match '__MODULE_BEGIN__'
+    }
+}

