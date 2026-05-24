@@ -2,13 +2,7 @@
 # Amnesiac helper function tests — dot-sources Amnesiac.ps1 to get module-level functions
 # Run: Invoke-Pester -Path .\Tests\Test-AmnesiacHelpers.ps1 -Output Detailed
 
-# Dot-source once at file level — functions are then available to all Describe/It blocks.
-# In Pester 5, code at file scope runs during discovery so functions land in the module scope
-# that Pester shares with all tests in this file.
-$global:AmnesiacScriptPath = Join-Path $PSScriptRoot "..\Amnesiac.ps1"
-. $global:AmnesiacScriptPath
-
-# Initialise globals that New-PayloadScript tests depend on
+# Global setup for New-PayloadScript tests
 $global:EndMarker  = 'TESTMARK'
 $global:BufferSize = 1024
 $global:PayloadConfig = @{
@@ -23,13 +17,22 @@ $global:PayloadConfig = @{
 }
 
 Describe "Module-level helpers are importable" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "Amnesiac.ps1 dot-sources without error" {
-        # If dot-source threw, we'd never reach this assertion
         $true | Should -Be $true
     }
 }
 
 Describe "Get-AmsiBypassSnippet" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "returns non-empty string for 'fail'" {
         $s = Get-AmsiBypassSnippet -Technique 'fail'
         $s | Should -Not -BeNullOrEmpty
@@ -61,6 +64,11 @@ Describe "Get-AmsiBypassSnippet" {
 }
 
 Describe "Get-EtwBypassSnippet" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "returns non-empty string for all techniques" {
         foreach ($t in 'provider','patch','thread') {
             $s = Get-EtwBypassSnippet -Technique $t
@@ -78,6 +86,11 @@ Describe "Get-EtwBypassSnippet" {
 }
 
 Describe "Get-SblBypassSnippet" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "returns non-empty string" {
         $s = Get-SblBypassSnippet
         $s | Should -Not -BeNullOrEmpty
@@ -89,6 +102,11 @@ Describe "Get-SblBypassSnippet" {
 }
 
 Describe "New-PayloadScript" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "returns object with InlinePS and FullCommand properties" {
         $r = New-PayloadScript -ComputerName 'target' -PipeName 'testpipe'
         $r.InlinePS    | Should -Not -BeNullOrEmpty
@@ -119,6 +137,11 @@ Describe "New-PayloadScript" {
 }
 
 Describe "Get-PayloadLauncher" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "ps launcher returns powershell.exe command" {
         $r = Get-PayloadLauncher -Script 'PAYLOAD' -Launcher 'ps'
         $r | Should -Match 'powershell.exe'
@@ -139,6 +162,11 @@ Describe "Get-PayloadLauncher" {
 }
 
 Describe "Initialize-DiskStructure" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "creates no folders when DiskMode is false" {
         $global:DiskMode = $false
         $testPath = "C:\Users\Public\Documents\Amnesiac"
@@ -151,6 +179,11 @@ Describe "Initialize-DiskStructure" {
 }
 
 Describe "AES pipe encryption helpers" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "Protect-PipeMessage and Unprotect-PipeMessage round-trip" {
         $key = [byte[]](1..16)
         $plain = "test command output with special chars: !@#$%"
@@ -172,6 +205,11 @@ Describe "AES pipe encryption helpers" {
 }
 
 Describe "Test-NetworkLogonToken" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "returns a boolean" {
         $r = Test-NetworkLogonToken
         $r | Should -BeOfType [bool]
@@ -179,10 +217,14 @@ Describe "Test-NetworkLogonToken" {
 }
 
 Describe "Initialize-ToolCache" {
+    BeforeAll {
+        $scriptPath = Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1"
+        . $scriptPath
+    }
+
     It "populates ToolCache with at least the core embedded tools" {
         $global:ToolCache = @{}
         Initialize-ToolCache
-        # Core tools are always embedded
         $global:ToolCache.Keys | Should -Contain 'SimpleAMSI'
         $global:ToolCache.Keys | Should -Contain 'NETAMSI'
     }
