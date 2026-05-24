@@ -15,8 +15,10 @@ All existing Amnesiac functionality (sessions, commands, tool modules) remains f
 
 ## Operational Scenarios
 
-### Scenario 1 — Non-Domain-Joined Operator
-Operator machine is not joined to the target domain. Launch Amnesiac from a domain-credentialed session:
+### Scenario 1 — Non-Domain-Joined Operator (Red Team External)
+Operator machine is **not joined to the target domain**. The operator has full local admin on their own machine and has domain credentials for the target environment. Amnesiac runs with no EDR constraints on the operator side.
+
+Launch from a domain-credentialed session:
 
 ```powershell
 runas /netonly /user:DOMAIN\username powershell.exe
@@ -29,14 +31,34 @@ Set engagement profile:
 engagement nondomained
 ```
 
-Amnesiac will detect the network logon token automatically and confirm domain credential availability.
+Amnesiac detects the network logon token (`runas /netonly` creates a Type-9 NewCredentials logon) and confirms domain credential availability.
 
-### Scenario 2 — Domain-Joined Operator (Assumed Breach)
-Operator machine is domain-joined. Launch normally:
+**Key characteristics:**
+- Operator machine is NOT monitored — no AMSI/EDR constraints on loading Amnesiac itself
+- Full local admin — can write files, start listeners, run `serve`, etc.
+- `diskmode` defaults to OFF to protect targets, but can be enabled on operator side safely
+- All target-side operations remain in-memory
 
-```powershell
-. .\Amnesiac.ps1; Amnesiac
-```
+### Scenario 2 — Low-Privilege Assumed Breach (Domain-Joined, EDR-Protected)
+Operator has obtained a **low-privilege shell on a domain-joined machine** that is running Windows Defender and a corporate EDR (e.g., CrowdStrike Falcon). The operator needs to run Amnesiac on THIS compromised machine to enumerate, exploit, and move laterally — not from their own clean machine.
+
+**Key characteristics:**
+- Amnesiac.ps1 itself must not be detected when loaded — AMSI scans the entire script before execution
+- Script Block Logging (event 4104) would expose every command typed
+- Low-privilege: cannot write to system paths, cannot install services, limited WMI access
+- EDR behavioral rules monitor process creation, pipe usage, reflective loading
+- Must use `Amnesiac_ShellReady.ps1` (no ANSI colour codes that may trigger signatures)
+- `diskmode` MUST remain OFF — any disk write may be scanned
+
+**⚠️ KNOWN GAP — Self-protection loader not yet implemented:**
+Amnesiac.ps1 has no self-bypass. AMSI scans the file before any code runs, so a bypass inside the file cannot protect itself. A separate small loader/bypass stub is required to:
+1. Bypass AMSI in the current PS process
+2. Disable ETW/SBL
+3. Then dot-source Amnesiac_ShellReady.ps1
+
+This is planned but not yet implemented. See: `docs/superpowers/specs/` for future spec.
+
+Current workaround: load from an already-AMSI-patched PS session, or use a pre-existing AMSI bypass technique before dot-sourcing.
 
 Set engagement profile:
 ```
@@ -102,17 +124,40 @@ Run `Build.ps1` only if you modify the C# source.
 
 ---
 
-## Tool Cache
+## Tool Delivery
 
-Tools are loaded in three priority tiers:
+Tools reach targets via the named pipe channel exclusively — no network calls from targets.
 
-| Tier | Location | Contents |
-|------|----------|---------|
-| Core (embedded) | Inside Amnesiac.ps1 as gzip+base64 | SimpleAMSI, NETAMSI, Token-Impersonation, Invoke-SMBRemoting, Invoke-WMIRemoting, Find-LocalAdminAccess |
-| Standard (local) | `Tools\` directory | All other PS modules |
-| Heavy (operator HTTP) | `http://<operator-IP>:8080` via `serve` | Suntour, Ferrari, ppl, RDPKeylog.exe |
+### Operator-Side Tool Cache (pre-session)
 
-No tool ever downloads from GitHub during a live session.
+`Initialize-ToolCache` populates `$global:ToolCache` at startup in priority order:
+
+| Priority | Source | How |
+|----------|--------|-----|
+| 1 | Embedded gzip+base64 in Amnesiac.ps1 | Always available: SimpleAMSI, NETAMSI, Token-Impersonation, Invoke-SMBRemoting, Invoke-WMIRemoting, Find-LocalAdminAccess |
+| 2 | `Tools\` directory | Loaded at startup; `modules reload` refreshes |
+| 3 | Operator local HTTP server | Run `serve` to start; loads heavy modules (Suntour, Ferrari, ppl, RDPKeylog.exe) |
+| 4 | GitHub (fallback) | `https://raw.githubusercontent.com/Leo4j/Amnesiac/main/Tools` — used only if tool not found in tiers 1–3 |
+
+**The intended fallback chain:** Operator HTTP server first → GitHub only if server not running.
+
+**⚠️ KNOWN GAP — Fallback chain not fully wired:**
+Currently `Initialize-ToolCache` only loads tiers 1 and 2. The `serve` command downloads tools from GitHub to disk (requires `diskmode on`) then starts the HTTP server — but tools from the HTTP server are NOT automatically loaded into `$global:ToolCache`. `Send-Module` fails if the tool is not in cache; it does not auto-fetch from the HTTP server or GitHub.
+
+The intended behavior (not yet implemented):
+- `serve` should load `Tools\` into memory and start the HTTP server from that, no GitHub download
+- If a tool is missing from cache, check operator HTTP server, then GitHub (operator-side fetch only)
+- Target never makes any network call for tools
+
+### Target-Side Delivery (in-session)
+
+`Send-Module <toolname>` streams from `$global:ToolCache` over the named pipe:
+1. `__MODULE_BEGIN__:<name>:<length>`
+2. `__MODULE_CHUNK__:<base64-4KB>` (repeated)
+3. `__MODULE_END__:<name>`
+
+Target assembles chunks and executes via `[scriptblock]::Create($source).Invoke()`.
+Binary modules (.exe/.dll): base64-decode → `[Reflection.Assembly]::Load()`.
 
 ---
 
@@ -153,6 +198,16 @@ Amnesiac-main/
 ├── CHANGELOG.md                    — change history
 └── README.md                       — original Amnesiac readme
 ```
+
+---
+
+## Known Gaps (Not Yet Implemented)
+
+| Gap | Impact | Description |
+|-----|--------|-------------|
+| **Scenario 2 self-protection loader** | High | No AMSI/ETW/SBL bypass for loading Amnesiac.ps1 itself on a defender-protected machine. Requires a separate small loader stub that bypasses AMSI in the PS process before dot-sourcing Amnesiac_ShellReady.ps1. |
+| **Tool cache fallback chain** | Medium | `serve` still downloads from GitHub to disk (disk write dependency). `Send-Module` does not auto-fetch missing tools from operator HTTP or GitHub. Tiers 3 and 4 are documented but not wired. |
+| **`serve` diskmode conflict** | Medium | The `serve` command writes files to `Scripts\` folder, which is blocked when `diskmode off`. Should host from `Tools\` in-memory instead of downloading to disk first. |
 
 ---
 
