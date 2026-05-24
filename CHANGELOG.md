@@ -256,20 +256,33 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
-## [Planned] — Future Work
+---
 
-**Fix `load loader` delivery redundancy**
-- Current implementation sends chunks then also sends full base64 directly — duplicate delivery path
-- Should be simplified to single `Send-Module` call only
+## [Implemented] — Plan 3: Fixes, Multi-Frame Call Stack, Extended Tests
+
+**Fixed `load loader` delivery path** (commit: `fix(loader): load loader`)
+- Removed broken framing-chunk-then-load-command sequence: chunks were sent before `$loadCmd` tried to read them, leaving the pipe dry; then a redundant second send was attempted after the operator blocked waiting for a response that never arrived
+- Replaced with a single direct pipe write: `$_la=[Reflection.Assembly]::Load([Convert]::FromBase64String('$AmnesiacLoaderB64'));[AmnesiacLoader.Stomper]::ConcealLoadedAssembly($_la)`
+- *Context: The previous implementation was silently a no-op on the target — AmnesiacLoader was never loaded despite the operator seeing a success message. This fix makes `load loader` actually work.*
+
+**Multi-frame call stack spoofing** (commit: `feat(loader): multi-frame call stack spoofing`)
+- `CallStack.cs`: Added `GetKernelbaseGadget()` — scans `kernelbase.dll` .text section for RET gadget using shared `FindGadgetInModule()` helper; falls back to ntdll gadget if kernelbase not loaded
+- `Loader.cs`: Changed `AllocateStub(ssn, ntdllGadget, kbaseGadget)` — stub now 48 bytes; pushes two fake frames: kernelbase gadget at [rsp+8] (outermost) and ntdll gadget at [rsp] (adjacent to syscall); call stack at syscall shows `[kernelbase] -> [ntdll] -> syscall`
+- Rebuilt and re-embedded AmnesiacLoader DLL (23552 bytes vs prior 23040)
+- *Context: A single ntdll RET gadget as the only spoofed frame is identifiable — legitimate Windows API call chains have multiple frames through kernelbase/kernel32. Two levels is meaningfully more convincing.*
+
+**Extended Pester test coverage** (commits: `test: extend coverage`, `test: fix test quality issues`)
+- `Migrate ps <pid>` and `Migrate ps new <proc>` regex patterns: 4 tests
+- `Send-Module` framing protocol with mock writer/reader: cache miss returns false, correct BEGIN/CHUNK/END framing, chunk decodes to original content, EndMarker ack returns true: 4 tests
+- AmnesiacLoader build artifact integrity: bin directory, DLL exists, MZ header, `$AmnesiacLoaderB64` matches on-disk DLL: 4 tests
+- `load loader` command handler: blob non-null, single direct send with `::Load` and `ConcealLoadedAssembly`, no framing markers: 2 tests
+- Test quality: $Matches capture before Should, base64 round-trip content assertion, __MODULE_BEGIN__ byte-length field assertion, BeforeEach ToolCache isolation, BeforeAll for build artifact scope
+- *Total: 28 → 42 tests*
+
+---
+
+## [Planned] — Future Work
 
 **Port all changes to `Amnesiac_ShellReady.ps1`**
 - Shell-compatible version hasn't received any of the above changes
 - Deferred until all layers are stable
-
-**Extend Pester test coverage**
-- Current 28 tests cover PS-level helpers only
-- Add tests for: `load loader` command behavior, `Migrate ps` handlers, `Send-Module` framing, AmnesiacLoader build verification (compile check)
-
-**Multi-frame call stack spoofing**
-- `CallStack.SpoofFrames()` is a stub — current implementation inserts only one fake frame
-- Extend to 3-5 frames for a more convincing ntdll→kernelbase→kernel32 chain
