@@ -5,6 +5,40 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-05-24] Listener UX overhaul — payload picker, no-timeout wait, auto-session, live scan loop
+> Commits: `23651e3`, `e494b31`
+
+### Changes
+
+**Added `Show-PayloadMenu` function** (`Amnesiac.ps1` line 1774)
+- Presents a numbered 1–5 format picker every time the operator launches a single or global listener
+- Options: `[1] b64`, `[2] gzip`, `[3] stealth`, `[4] raw`, `[5] pwsh` (with one-line descriptions)
+- Returns the format token used to branch payload display; `HidePayload` flag bypasses menu and falls back to `$global:payloadformat`
+- *Context: Previously the active payload format was set by a separate `toggle` command whose current value was not shown at listener start. Operators had to remember which format was set, or `toggle` repeatedly to cycle to the right one. Showing a picker at the moment of listener invocation eliminates that cognitive load.*
+
+**`Start-Listener` — remove 30-second timeout, add async cancel, auto-enter session**
+- Removed: `Start-Process powershell.exe -enc <30-second-sleep-dummy>` and `$pipeServer.WaitForConnection()`
+- Added: `$pipeServer.WaitForConnectionAsync()` loop, polling `$Host.UI.RawUI.KeyAvailable` every 150ms; pressing `Q` self-connects a dummy pipe client to unblock the pending wait, sets `$_cancelled`, and exits the loop cleanly
+- Added at function end: `InteractWithPipeSession` called immediately when a real callback arrives — operator lands directly in the interactive session instead of returning to the menu
+- *Context: The 30-second countdown was an arbitrary hard limit that forced operators to regenerate and redeploy payloads for targets that took longer to call back. The Q-cancel pattern gives the operator full control with no time pressure. Auto-entering the session removes one menu round-trip per connection.*
+
+**`Print-MultiListener` — live scan loop with session arrival notifications**
+- Removed: `if(!$NoWait){Start-Sleep 4}` (static 4-second wait)
+- Added: active loop calling `Scan-WaitingTargets` every 500ms; when `$global:MultipleSessions.Count` increases, prints arriving session details in green: `[+] Session received: HOSTNAME [user]`; pressing `Q` exits the loop and prints total new sessions collected
+- *Context: The 4-second sleep was a race condition — targets that connected after the sleep was over were silently missed until the operator manually rescanned. The live loop catches every arrival in real time. The Q-gate lets the operator decide when enough sessions have landed without guessing how long to wait.*
+
+**Bypass snippet hardening — try/catch wrapping** (`e494b31`)
+- `Get-AmsiBypassSnippet 'fail'`, `Get-EtwBypassSnippet 'provider'`, `Get-SblBypassSnippet 'scriptblock'`: all wrapped in `try{}catch{}` in both `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`
+- Hardcoded bypass strings in `New-StealthScript` (`$etw`, `$sbl`) also wrapped
+- *Context: `ScriptBlock.checkScriptBlockLoggingCache` field is absent from the PS 5.1 build on Windows 10 19045 — `GetField()` returns null, `.SetValue()` throws before the pipe client ever calls `Connect()`. The payload crashed silently, producing a connection timeout with no error message. Wrapping each bypass in `try{}catch{}` ensures a missing field or patched function no-ops rather than terminating the payload.*
+
+**Pipe constructor fix — string enum names** (`e494b31`)
+- `New-PayloadScript` client and server pipe constructors changed from `[System.IO.Pipes.PipeDirection]::InOut` (enum expression) to `'InOut'` (string name), client from 4-arg to 3-arg (drops `PipeOptions::None`)
+- Same fix applied in `New-StealthScript`
+- *Context: When `-TypeName` is a string variable (`New-Object -TypeName $vT`), PowerShell cannot resolve `[Enum]::Value` expressions in `-ArgumentList` — they are passed as-is and the constructor fails with "Cannot convert argument" at payload runtime. Using the string form works regardless of how TypeName is specified.*
+
+---
+
 ## [2026-05-24] Plan 5 — serve fix (no-download project-root HTTP server)
 
 ### Changes

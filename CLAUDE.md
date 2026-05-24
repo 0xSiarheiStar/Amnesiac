@@ -103,6 +103,28 @@ Four improvement layers, all changes in `Amnesiac.ps1`:
 | `artifacts` | List in-memory captured artifacts |
 | `save <type>` | Write artifact to operator disk |
 
+## Listener UX
+
+When the operator selects **single listener** or **global listener** from the main menu, `Show-PayloadMenu` runs first and presents a numbered format picker:
+
+```
+  [1] b64     — base64 encoded one-liner (most compatible)
+  [2] gzip    — gzip+base64 compressed, shorter footprint
+  [3] stealth — gzip+obfuscated, includes AMSI/ETW/SBL bypasses
+  [4] raw     — inline PowerShell, no encoding
+  [5] pwsh    — Start-Process launcher, spawns hidden PS process
+```
+
+**Single listener behaviour:**
+- Waits indefinitely (no timeout) using `WaitForConnectionAsync` + 150ms poll loop
+- Press `Q` to cancel — a self-connecting dummy pipe unblocks the server cleanly
+- On callback: automatically enters `InteractWithPipeSession` (no extra menu step)
+
+**Global listener behaviour:**
+- Polls `Scan-WaitingTargets` every 500ms after displaying the payload
+- Prints arriving sessions in green as they connect: `[+] Session received: HOST [user]`
+- Press `Q` to stop; reports total new sessions collected
+
 ---
 
 ## AmnesiacLoader — C# Assembly
@@ -222,4 +244,4 @@ Amnesiac-main/
 - Test each layer independently before combining
 - Run against GOAD lab with CrowdStrike enabled to validate evasion
 - Document every change in `CHANGELOG.md` with the operational context for the change
-- The `stealth` payload format must be regenerated (re-toggle) after any protocol change — the gzip blob is built at generation time with the current session's `$global:EndMarker` and `$global:BufferSize`
+- The `stealth` payload is built at generation time (when the operator selects it from `Show-PayloadMenu`) — it embeds the current session's `$global:EndMarker` and `$global:BufferSize`. If the protocol changes mid-session, re-invoke the listener to regenerate the stealth payload
