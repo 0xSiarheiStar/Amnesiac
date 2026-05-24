@@ -15,7 +15,16 @@ function Get-EtwBypassSnippet   { param([string]$Technique) throw "Not implement
 function Get-SblBypassSnippet   { throw "Not implemented" }
 function New-PayloadScript      { param([switch]$IsServer,[string]$ComputerName,[string]$PipeName,[string]$SID,[hashtable]$Config) throw "Not implemented" }
 function Get-PayloadLauncher    { param([string]$Script,[string]$Launcher) throw "Not implemented" }
-function Initialize-DiskStructure {}
+function Initialize-DiskStructure {
+    if (-not $global:DiskMode) { return }
+    $basePath   = "C:\Users\Public\Documents\Amnesiac"
+    $subfolders = @("Clipboard","Downloads","History","Keylogger","Payloads","Screenshots","Scripts","Monitor_TGTs")
+    if (-not (Test-Path $basePath)) { New-Item -Path $basePath -ItemType Directory | Out-Null }
+    $subfolders | ForEach-Object {
+        $p = Join-Path $basePath $_
+        if (-not (Test-Path $p)) { New-Item -Path $p -ItemType Directory | Out-Null }
+    }
+}
 function Initialize-ToolCache   {}
 function Send-Module            { param([string]$ToolName,$Writer,$Reader) throw "Not implemented" }
 function Test-NetworkLogonToken { return $false }
@@ -82,10 +91,7 @@ function Amnesiac {
 	Set-Variable MaximumHistoryCount 32767
 	
 	# Folder Structure Creation
-	$basePath = "C:\Users\Public\Documents\Amnesiac"
-	$subfolders = @("Clipboard", "Downloads", "History", "Keylogger", "Payloads", "Screenshots", "Scripts", "Monitor_TGTs")
-	if (-not (Test-Path $basePath)) {New-Item -Path $basePath -ItemType Directory > $null}
-	$subfolders | ForEach-Object {$subfolderPath = Join-Path -Path $basePath -ChildPath $_;if (-not (Test-Path $subfolderPath)) {New-Item -Path $subfolderPath -ItemType Directory > $null}}
+	Initialize-DiskStructure
 	
 	# Global Variables Setup
 	Remove-Variable -Name FileServerProcess -Scope Global -ErrorAction SilentlyContinue
@@ -224,6 +230,9 @@ function Amnesiac {
    			elseif($global:payloadformat -eq 'gzip'){
 				$global:payloadformat = 'exe'
 				$global:Message = " [+] Payload format: exe"
+				if (-not $global:DiskMode) {
+					$global:Message = " [!] exe format requires disk write. Enable with 'diskmode on' or switch format."
+				}
 			}
 			elseif($global:payloadformat -eq 'exe'){
 				$global:payloadformat = 'stealth'
@@ -266,7 +275,22 @@ function Amnesiac {
 			$global:Message = " [+] New Global-Listener PipeName: $global:MultiPipeName | Revert: [GLSet $OldGlobalPipeName]"
 			continue
 		}
-		
+
+		if ($choice -match '^diskmode(\s+(on|off))?$') {
+			if ($Matches[2] -eq 'on') {
+				$global:DiskMode = $true
+				Initialize-DiskStructure
+				$global:Message = " [+] Disk mode: ON — artifact directories created"
+			} elseif ($Matches[2] -eq 'off') {
+				$global:DiskMode = $false
+				$global:Message = " [+] Disk mode: OFF — no disk writes on operator or target"
+			} else {
+				$state = if ($global:DiskMode) { "ON" } else { "OFF" }
+				$global:Message = " [+] Disk mode: $state"
+			}
+			continue
+		}
+
 		if ($choice -eq 'exit') {
 			
 			for ($i = $global:listenerSessions.Count - 1; $i -ge 0; $i--) {
