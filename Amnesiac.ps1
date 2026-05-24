@@ -1908,13 +1908,15 @@ while (`$true) {
 		elseif($chosenFormat -eq 'stealth'){
 			$built = New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName
 			$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
-			$_clipPayload = $built.InlinePS
-			Write-Output " [Inline PS -- paste into existing session]"
-			Write-Output " $_clipPayload"
+			Write-Output " [1] Inline PS -- paste into existing session"
+			Write-Output " $($built.InlinePS)"
 			Write-Output ""
-			Write-Output " [Full command -- launcher: $($global:PayloadConfig.Launcher)]"
+			Write-Output " [2] Full command -- launcher: $($global:PayloadConfig.Launcher)"
 			Write-Output " $wrapped"
 			Write-Output ""
+			Write-Host " Copy to clipboard [1] Inline PS  [2] Full command: " -Foreground yellow -NoNewline
+			$_sc = (Read-Host).Trim()
+			$_clipPayload = if ($_sc -eq '2') { $wrapped } else { $built.InlinePS }
 		}
 		if ($_clipPayload) {
 			Set-Clipboard -Value $_clipPayload
@@ -2130,13 +2132,15 @@ while (`$true) {
 		$stealthSID = if($global:Detach){'S-1-1-0'} else {$SID}
 		$built = New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID
 		$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
-		$_clipPayload = $built.InlinePS
-		Write-Output " [Inline PS -- paste into existing session on target]"
-		Write-Output " $_clipPayload"
+		Write-Output " [1] Inline PS -- paste into existing session on target"
+		Write-Output " $($built.InlinePS)"
 		Write-Output ""
-		Write-Output " [Full command -- launcher: $($global:PayloadConfig.Launcher)]"
+		Write-Output " [2] Full command -- launcher: $($global:PayloadConfig.Launcher)"
 		Write-Output " $wrapped"
 		Write-Output ""
+		Write-Host " Copy to clipboard [1] Inline PS  [2] Full command: " -Foreground yellow -NoNewline
+		$_sc = (Read-Host).Trim()
+		$_clipPayload = if ($_sc -eq '2') { $wrapped } else { $built.InlinePS }
 	}
 	if ($_clipPayload) {
 		Set-Clipboard -Value $_clipPayload
