@@ -212,7 +212,7 @@ Amnesiac-main/
 | Gap | Impact | Description |
 |-----|--------|-------------|
 | **Tool cache fallback chain** | Medium | `Send-Module` fails if tool not in cache — no auto-fetch from operator HTTP server or GitHub. Tiers 3 and 4 in the load chain are documented but not wired in code. |
-| **`serve` diskmode conflict** | Medium | `serve` downloads tools from GitHub to `Scripts\` folder (disk write), which is blocked by default `diskmode off`. Should instead host tools from `Tools\` in-memory, and also host `Amnesiac_ShellReady.ps1` for Scenario 2 iex loads. |
+| **`serve` diskmode conflict** | RESOLVED (Plan 5) | `serve` now roots `SimpleFileServer` at `$global:AmnesiacRoot` (project root), serving `Tools\` and `Amnesiac_ShellReady.ps1` directly — no GitHub download, no disk write. |
 
 ---
 

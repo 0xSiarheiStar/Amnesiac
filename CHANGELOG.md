@@ -5,6 +5,21 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-05-24] Plan 5 — serve fix (no-download project-root HTTP server)
+
+### Changes
+
+- **`Amnesiac.ps1` line 6**: Added `$global:AmnesiacRoot` — captures `$PSScriptRoot` at dot-source time so `function Amnesiac {}` can reference the project root reliably when called interactively (where `$PSScriptRoot` is empty inside function scope).
+- **`Amnesiac.ps1` serve handler**: Replaced 144-line GitHub-download serve handler with 46-line version. No longer downloads tools from GitHub. Roots `SimpleFileServer` at `$global:AmnesiacRoot` (project root), serving `/Tools/` for tool modules and `/Amnesiac_ShellReady.ps1` for Scenario 2 iex bootstrap. Sets `$global:ServerURL = "http://host:port/Tools"` to preserve all 27 existing iex(DownloadString) session command URLs unchanged. Calls `Initialize-ToolCache` on serve to refresh in-memory cache from `Tools\`.
+- **`Amnesiac_ShellReady.ps1`**: Synced both changes (AmnesiacRoot + serve handler) from Amnesiac.ps1.
+- **`Tests\Test-AmnesiacHelpers.ps1`**: Added 5 new Pester tests — AmnesiacRoot global (3) and serve command URL structure (2). Total: 47 tests.
+
+### OPSEC rationale
+
+`serve` previously wrote GitHub-fetched tools to `Scripts\` folder — a disk write blocked by `diskmode off` (default). The fix eliminates all disk writes from `serve`. The `Tools\` directory on the operator machine serves as the sole source; no network fetch occurs at serve time.
+
+---
+
 ## [Implemented] — Layer 2 (Partial): Payload Format `stealth`
 > Added prior to formal design doc. Included here for completeness.
 

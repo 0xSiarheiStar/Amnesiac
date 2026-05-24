@@ -419,3 +419,27 @@ Describe "AmnesiacLoader build artifact" {
         $AmnesiacLoaderB64 | Should -Be $dllB64
     }
 }
+
+Describe "AmnesiacRoot global" {
+    BeforeAll { . (Join-Path (Split-Path $PSScriptRoot) "Amnesiac.ps1") }
+    It "is set and non-empty after dot-sourcing" {
+        $global:AmnesiacRoot | Should -Not -BeNullOrEmpty
+    }
+    It "points to directory containing Amnesiac_ShellReady.ps1" {
+        Test-Path (Join-Path $global:AmnesiacRoot "Amnesiac_ShellReady.ps1") | Should -Be $true
+    }
+    It "points to directory containing Tools subfolder" {
+        Test-Path (Join-Path $global:AmnesiacRoot "Tools") | Should -Be $true
+    }
+}
+
+Describe "serve command URL structure" {
+    It "ServerURL built with /Tools suffix is valid" {
+        "http://192.168.1.1:8080/Tools" | Should -Match '/Tools'
+    }
+    It "Loader URL references Amnesiac_ShellReady.ps1 at server root not Tools subfolder" {
+        $url = "http://192.168.1.1:8080/Amnesiac_ShellReady.ps1"
+        $url | Should -Not -Match '/Tools/'
+        $url | Should -Match 'Amnesiac_ShellReady\.ps1'
+    }
+}
