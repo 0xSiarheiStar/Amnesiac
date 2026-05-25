@@ -1557,7 +1557,7 @@ function Start-LocalShell {
 
     Write-Output ""
     Write-Host " [+] Local Shell — $localFQDN [$localUser]" -ForegroundColor Green
-    Write-Host " [*] 'load <module>' imports from tool cache into this session. 'modules' lists cache. 'back' returns to menu." -ForegroundColor Cyan
+    Write-Host " [*] Type 'help' to see available commands." -ForegroundColor Cyan
     Write-Output ""
 
     while ($true) {
@@ -1568,6 +1568,25 @@ function Start-LocalShell {
         if ($cmd -eq '') { continue }
 
         if ($cmd -eq 'back' -or $cmd -eq 'exit') { break }
+
+        if ($cmd -eq 'help' -or $cmd -eq '?') {
+            Write-Output ""
+            Write-Host " [+] Local Shell — Amnesiac Commands" -ForegroundColor Cyan
+            Write-Output ""
+            Write-Host "  modules           " -NoNewline -ForegroundColor Yellow; Write-Host "List all tools in Amnesiac tool cache"
+            Write-Host "  load <name>       " -NoNewline -ForegroundColor Yellow; Write-Host "Import a cached tool into this session, then call its functions directly"
+            Write-Host "  help / ?          " -NoNewline -ForegroundColor Yellow; Write-Host "Show this help"
+            Write-Host "  back / exit       " -NoNewline -ForegroundColor Yellow; Write-Host "Return to session menu"
+            Write-Output ""
+            Write-Host " [*] Workflow:" -ForegroundColor Cyan
+            Write-Host "     1. 'modules'          — see what tools are available"
+            Write-Host "     2. 'load SimpleAMSI'  — load a tool (imports all its functions)"
+            Write-Host "     3. Run the functions   — e.g. Bypass-AMSI, Get-Domain, Invoke-SMBRemoting"
+            Write-Output ""
+            Write-Host " [*] Any other input is executed as PowerShell in this session." -ForegroundColor Cyan
+            Write-Output ""
+            continue
+        }
 
         if ($cmd -eq 'modules') {
             if ($global:ToolCache.Count -eq 0) {
