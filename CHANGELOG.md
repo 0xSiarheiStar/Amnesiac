@@ -5,6 +5,162 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-05-25] fix(encoding): add UTF-8 BOM so ParseFile reads em-dash correctly
+
+### Problem
+After the AMSI fix (parallel arrays), `. .\Amnesiac.ps1` failed with 476 cascading parse errors starting at L521 "Unexpected token '}'". `ParseFile` reported the errors but `ParseInput` of the same content returned 0 errors — meaning the file content was syntactically valid but something changed how `ParseFile` read it.
+
+### Root Cause
+`WriteAllLines` (used by the AMSI fix) writes UTF-8 **without BOM**. When `ParseFile` encounters a UTF-8-no-BOM file on Windows, it falls back to the system code page (CP1252). The em dash `—` on line 504 is encoded in UTF-8 as bytes `E2 80 94`. In CP1252, byte `0x94` maps to RIGHT DOUBLE QUOTATION MARK (`"`), which PowerShell accepts as a string terminator. This silently closed the string literal on line 504 mid-word, throwing the parser off for the next ~200 lines until it encountered a stray `}`.
+
+### Fix — `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`
+Used `[System.IO.File]::WriteAllText` with `[System.Text.Encoding]::UTF8` (which includes BOM) to rewrite both files. `ParseFile` now sees the BOM, reads as UTF-8, and reports 0 errors. The `iex`/`DownloadString` scenario is unaffected — .NET's `WebClient` strips BOM automatically.
+
+### Verification
+`Tests/FindParseError.ps1` reports `ParseFile errors: 0` and `ParseInput errors: 0`. `Initialize-ToolCache` loads all 27 tools (6 embedded + 21 from `Tools\`).
+
+---
+
+## [2026-05-25] fix(amsi-load): break context-based AMSI signature in Initialize-ToolCache
+
+### Problem
+`. .\Amnesiac.ps1` (and `iex` loading) was blocked by Windows Defender AMSI with `ScriptContainedMaliciousContent`. A multi-part context-based signature fired on three consecutive lines in `Initialize-ToolCache`: the comment `# --- CORE TIER: embedded as gzip+base64 ---`, the `$coreTools = @{` hashtable opener, and the first key-value pair `'SimpleAMSI' = '<base64 blob>'`. Neither the comment+header alone nor the key+blob alone triggered — only the three together. This made the framework completely unusable as a dot-sourced script.
+
+### Root Cause
+`Initialize-ToolCache` stored the six embedded tools as `$coreTools = @{ 'ToolName' = 'blob' }`. The name `'SimpleAMSI'` paired with its base64 blob on the same line, right below a comment containing both "AMSI" and "embedded", formed the exact context pattern Defender's rule requires.
+
+### Fix — `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`
+Replaced the `$coreTools` hashtable with two parallel arrays `$_cb` (blobs) and `$_cn` (names), iterated by index. No tool name now appears adjacent to its blob anywhere in the file. Data is unchanged — only the structural adjacency is broken.
+
+### Verification
+`Tests/DiagnoseAMSITrigger.ps1` (binary-search AmsiScanString scan) reports file NOT flagged after fix.
+
+---
+
+## [2026-05-24] feat(local-shell): option [5] runs commands on the local machine without a pipe session
+
+### Problem
+Running tools like PowerView on the machine running Amnesiac (Scenario 2 — assumed breach) required going through a full Bind Shell setup: generate payload → open second PS window → run it → wait for pipe. That is four steps to get a session to yourself, which is redundant when Amnesiac is already executing in that process.
+
+### Changes
+
+**Added `Start-LocalShell` function**
+- Interactive command loop that runs `Invoke-Expression` in the current PowerShell process — no pipe, no second window
+- `load <module>`: imports a module from `$global:ToolCache` via `Invoke-Expression`, making its functions immediately available in the same runspace
+- `modules`: lists cached modules (same as main-menu `modules` command)
+- `back` / `exit`: returns to the main menu
+- Prompt shows short hostname: `DESKTOP-F9B8G02> `
+- Header shows FQDN and current user on entry
+
+**Added `[5] Local Shell` to `Display-SessionMenu`**
+- Immediately below `[4] Shell via Find-LocalAdminAccess`
+- Dispatches to `Start-LocalShell`
+
+**Session numbering shifted from base-5 to base-6**
+- Sessions listed in the menu now start at `[6]` instead of `[5]`
+- All offset arithmetic updated: `default` switch branch, `bookmark` handler, `kill` handler (both `directAdminEndIndex` base and all `sessionNumber - N` / `indexToRemove + N` expressions)
+- *Context: Adding `[5]` as a fixed menu entry would otherwise collide with the first captured session's display number.*
+
+### Usage (Scenario 2)
+```
+# At the main menu:
+5
+# Prompt appears:
+ DESKTOP-F9B8G02> load PowerView
+ [+] PowerView loaded.
+ DESKTOP-F9B8G02> Get-DomainUser
+ DESKTOP-F9B8G02> back
+```
+
+---
+
+## [2026-05-24] ux: rename listeners + parameter aliases + local context indicator + IP auto-detect
+
+### Changes
+
+**Renamed listener modes to standard red team terminology**
+- "Single Listener" → **Reverse Shell** (target calls back to operator)
+- "Global Listener" → **Bind Shell** (operator connects out to target)
+- Menu, session headers, and pipe-name display updated throughout `Display-SessionMenu` and `Print-MultiListener`
+- Removed "(single target)" / "(multiple targets)" parenthetical labels — both modes can accept any number of targets; the labels were misleading
+- *Context: "Single/Global Listener" was Amnesiac-internal naming. Operators working in red team engagements use "reverse shell" and "bind shell" as universal terms. Renaming removes one layer of translation on every engagement.*
+
+**`-HostIP` parameter with `-IP` / `-Server` aliases; `-NonDomain` alias for `-Detached`**
+- `$HostIP` is the canonical parameter name; `-IP` and `-Server` both resolve to it
+- `$Detached` gains the `-NonDomain` alias
+- *Context: `-IP` was not self-describing — operators new to the tool did not know whether it was the operator's IP or a target IP. `-Server` makes the intent clear (this machine is the server payloads phone home to). `-NonDomain` makes the flag's purpose explicit without requiring reading the help text.*
+
+**IP auto-detection when `-NonDomain` used without `-HostIP`**
+- On `Amnesiac -NonDomain` (no `-HostIP`): enumerates non-loopback private IPv4 addresses (RFC-1918: 10/8, 172.16-31/12, 192.168/16)
+- Single match: sets `$global:IP` automatically and prints `[*] Auto-detected operator IP: <IP>`
+- Multiple matches: numbered picker lets operator choose
+- No match: error with instructions to specify manually
+- *Context: On a machine with a single internal NIC this is unambiguous. Auto-detection reduces the required command from `Amnesiac -NonDomain -HostIP 10.3.10.157` to just `Amnesiac -NonDomain` for the common case.*
+
+**`Start-Listener` — callback address display + scenario awareness**
+- `$ComputerName` now resolves to `$global:IP` when set, falling back to DNS hostname
+- Prints `[+] Callback address embedded in payload: <addr>` at listener start so operator can verify what is baked into the payload
+- When `-NonDomain` is active: warns that reverse shell requires inbound port 445 (typically blocked on external machines) and suggests using Bind Shell instead
+- *Context: Operators were surprised when payloads silently failed because the embedded callback pointed at an unresolvable hostname rather than the routable IP. The display makes the embedded value visible before deployment.*
+
+**Local context indicator in `Display-SessionMenu`**
+- Shows `Local: <FQDN>  [DOMAIN\user]` in cyan below the options list, always visible regardless of whether sessions exist
+- *Context: In Scenario 2 (assumed breach on domain-joined machine), Amnesiac itself is the interactive shell for the local host. Showing the operator which machine they are on and which user context they hold prevents confusion about local vs. remote sessions, especially when multiple sessions are active.*
+
+---
+
+## [2026-05-24] fix(server-payload): maxInstances=-1 fixes "Access to the path is denied" pipe recreation crash
+
+### Root cause
+`New-PayloadScript -IsServer` validation loop calls `$vPipe.Dispose()` after a phantom connection, then immediately calls `New-Object NamedPipeServerStream` with the same pipe name and `maxNumberOfServerInstances = 1`. Windows `CreateNamedPipe` with `nMaxInstances=1` returns `ERROR_ACCESS_DENIED` when any handle to the pipe name is still alive — including the phantom *client* handle. This translated to `UnauthorizedAccessException: "Access to the path '\\.\pipe\<name>' is denied."` The exception was unhandled in the loop (the `try/catch` only wraps `ReadLineAsync`), propagating to the top level and killing the server process.
+
+### Changes
+
+**`New-PayloadScript -IsServer` — pipeSetup (line 203)**
+- Changed `maxNumberOfServerInstances` from `1` to `-1` (`NamedPipeServerStream.MaxAllowedServerInstances` = `PIPE_UNLIMITED_INSTANCES`)
+- With unlimited instances, `CreateNamedPipe` never fails due to instance count. The new server is created even while the phantom client still holds a handle to the previous pipe instance.
+- *Context: Named pipe instance limits are enforced globally across all handles — both server and client. With `maxInstances=1`, disposing the server does not free the "slot" until the client handle also closes. The phantom (AV/EDR probe) may not close its handle immediately, making the window between Dispose and recreation a guaranteed crash. Using unlimited instances eliminates this race entirely.*
+
+**`New-PayloadScript -IsServer` — loop end (line 219)**
+- Removed `$vPipe.Disconnect()` before `$vPipe.Dispose()` at end of main command loop
+- `Disconnect()` throws `InvalidOperationException` when `PipeState` is already `Disconnected` (e.g., if the loop broke via `!IsConnected`). `Dispose()` is always safe regardless of state.
+- *Context: Secondary latent crash path. Fixing it now prevents the same class of exception appearing after the primary fix is applied.*
+
+### Verification
+- `Tests/StealthServerDebug.ps1`: 3/3 PASS (RawScript, InlinePS, scriptblock::Invoke)
+- `Tests/LocalGListenerTest.ps1`: 7/7 PASS (full end-to-end: generate → launch → pipe up → direct connect → Scan-WaitingTargets session capture)
+- `Tests/Test-AmnesiacHelpers.ps1`: 42/47 (5 pre-existing failures unrelated to this change)
+
+---
+
+## [2026-05-24] fix(global-listener): prompt for targets when AD enumeration throws on non-domain-joined operator
+
+### Root cause — two bugs, both now fixed
+
+**Bug A — `CheckReachableHosts` throws on non-domain machine, crashing `Print-MultiListener`:**
+`[System.DirectoryServices.ActiveDirectory.Domain]::GetCurrentDomain()` (line 1 of `CheckReachableHosts`) throws `MethodInvocationException: "Current security context is not associated with an Active Directory domain or forest."` — it does not return empty, it **throws** (confirmed: 4.5s then exception). `Scan-WaitingTargets` called this without try/catch; the exception propagated up through `Print-MultiListener`'s scan loop, terminating the listener before any connection was ever attempted. Operator sees no sessions and no clear error.
+
+**Bug B — no targets configured warning:**
+Even if `CheckReachableHosts` were to return empty gracefully, `$FinalTargets` would be empty and `Scan-WaitingTargets`'s `foreach` loop would silently do nothing. The operator has no way to know this is happening.
+
+### Changes
+
+**`Print-MultiListener` — pre-scan target check (inserted before `while ($true)` scan loop)**
+- Checks `AllUserDefinedTargets` and `AllOurTargets` *without calling `CheckReachableHosts`*
+- If neither is populated, prompts the operator: `"Enter target(s) to scan, comma-separated (IP/hostname, '.' for localhost)"`
+- Operator input is stored in `$global:AllUserDefinedTargets`; `Scan-WaitingTargets` reads this on every tick and bypasses the `CheckReachableHosts` path entirely
+- *Context: Non-domain-joined operator is the primary stealth global listener scenario. AD enumeration is impossible there. Prompting ensures the operator is never silently blocked.*
+
+**`Scan-WaitingTargets` — try/catch around `CheckReachableHosts` call**
+- Wraps `CheckReachableHosts` in `try { ... } catch { $TempAccessVar = @() }`
+- Prevents domain-enum exceptions from crashing the scan loop when `AllUserDefinedTargets` is not set (defensive; normal path now bypasses this entirely via the pre-check prompt)
+
+### Verification
+- `Tests/LocalFullFlowTest.ps1`: PASS — real PayloadConfig (Jitter='medium', Obfuscation='high', pageguard AMSI bypass), pipe appeared in 4.5s, phantom rejection settled, `Scan-WaitingTargets` captured session `desktop-f9b8g02\localuser`
+- `Tests/DebugCheckReachable.ps1`: confirms `CheckReachableHosts` throws after 4.5s on non-domain machine (root cause evidence)
+
+---
+
 ## [2026-05-24] Listener UX overhaul — payload picker, no-timeout wait, auto-session, live scan loop
 > Commits: `23651e3`, `e494b31`
 
