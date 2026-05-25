@@ -1,0 +1,58 @@
+﻿Core Commands
+Download — Download file from remote system [file name]
+Exit — Background the current session
+GListener — Print Global-Listener Payload
+GLSet < > — Set Global-Listener Pipe Name
+Help — Help menu
+Kill — Terminate the current session
+OneIsNone — Get a Backup Shell
+Scramble — Rotate Global-Listener Pipe Name
+Sync — Re-Sync Stream
+Toggle — Switch payload format [default: cmd(b64)]
+Upload — Upload file to remote system [full path]
+System Commands
+AV — Check local AV
+Net — Netstat Command
+Process — Display Running Processes
+Services — Display Running Services
+Sessions — Show active Sessions
+Software — Display Installed Software
+Startup — Display Startup Apps
+User Activity
+ClearHistory — Clear History for Current User
+ClearLogs — Clear Logs from Event Viewer
+Clipboard — Get the clipboard (text)
+History — Get pwsh history for all users
+Keylog — Start Keylogger
+KeylogRead — Read Keylog output
+ScreenShot — Take a screenshot [1080p]
+Screen4K — Take a screenshot [4K]
+Scripts Loading
+Mimi — Load Katz
+Patch — Patch 4MZI
+PatchNet — Patch 4MZI .NET
+PInject — Load ProcessInjection
+PowerView — Load PowerView
+Rubeus — Load Rubeus
+TLS — Enable TLS 1.2
+Local Actions
+Ask4Creds — Prompt User for Credentials
+AutoMimi — Load Katz and dump
+CredMan — CredManager Dump
+Dpapi — Retrieve credentials protected by DPAPI
+GetSystem — Get a System Shell [New Session]
+HashGrab — Attempt to retrieve the Hash of the current user
+Hive — HiveDump
+Kerb — Kerb TGTs Dump
+Migrate <pid> — Inject payload into specified pid [New Session]
+Monitor — Monitor Cache for TGTs
+MonitorRead — Retrieve TGTs from Monitor activity
+MonitorClear — Clear TGTs from Monitor activity
+Domain Actions
+CredValidate — Validate Domain Credentials
+DCSync — Performs DCSync
+Impersonation — Token Impersonation | Make or Steal a Token
+LocalAdminAccess — Check targets for Local Admin Access
+PassSpray — Domain Password Spray
+Remoting — Remote Command Execution SMB|WMI|WinRM
+SessionHunter — Hunt for Active User Sessions
