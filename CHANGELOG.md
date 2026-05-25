@@ -39,6 +39,24 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-05-24] fix(server-payload): phantom connection rejection loop
+
+### Changes
+
+**`New-PayloadScript` — IsServer path** (`Amnesiac.ps1`)
+- Replaced single `WaitForConnection()` call with a validation loop: after each `WaitForConnection()`, calls `ReadLineAsync().Wait(2000)`. If no command arrives within 2 seconds (or the result is null/EOF), calls `Disconnect()` and loops back to `WaitForConnection()`.
+- The main command loop uses a `$vCb` flag to skip the initial `ReadLine()` on the first iteration, since the first command is already captured by the validation loop.
+- *Context: Windows Defender (and likely CrowdStrike/other EDR) connects to newly-created named pipes within milliseconds of creation when the host process has run AMSI/ETW/SBL bypass code. This phantom connection consumed the single `WaitForConnection()` call — pipe was visible in `\\.\pipe\`, server process was alive, but the operator's `Scan-WaitingTargets` connect attempt always timed out. Confirmed via transcript logging: server reported "Client connected!" immediately while operator's `Connect(5000)` returned timeout. The 2-second validation timeout is long enough for a real operator connect to send a command, but short enough that a silent scanner is reliably rejected.*
+
+**Added test files:**
+- `Tests/LocalGListenerTest.ps1` — end-to-end test: stealth payload generation → launch → pipe appearance → direct connect → Scan-WaitingTargets session capture (7 steps, all now PASS)
+- `Tests/MinimalServerTest.ps1` — in-process runspace isolation test for individual bypass components
+- `Tests/PipeConstructorTest.ps1` — named pipe constructor variant tests (2-arg, 7-arg, 8-arg PipeSecurity)
+- `Tests/PipeSecTest.ps1` — PipeSecurity with user SID and Everyone SID variants
+- `Tests/StealthServerDebug.ps1` — RawScript vs InlinePS vs scriptblock::Invoke comparison
+
+---
+
 ## [2026-05-24] Plan 5 — serve fix (no-download project-root HTTP server)
 
 ### Changes
