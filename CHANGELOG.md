@@ -5,6 +5,64 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-05-25] docs: full architecture reference for AI development sessions
+
+Created `docs/ARCHITECTURE.md` — comprehensive reference document covering:
+- Detection evasion as primary engineering constraint (explicitly stated and prioritized)
+- Scenario 1 (non-domain-joined operator) and Scenario 2 (assumed breach) with setup, launch commands, and key constraints
+- Shell types: Local Shell, Reverse Shell, Bind Shell — with session flow diagrams
+- Named pipe protocol, module streaming framing, AES pipe encryption
+- Tool delivery tiers (1 embedded, 2 local, 3 GitHub), `$global:ToolSources` override map
+- Complete tool inventory: all 28 tools with cache key, file, category, and source tier
+- Payload formats 1–5 with stealth payload feature table and bypass technique catalog
+- AmnesiacLoader module reference (all 6 .cs files, each method)
+- End-to-end session flow for both shell types
+- All key globals with descriptions
+- Development rules for AI sessions (7 rules covering disk writes, tool delivery, editing constraints, parse verification)
+- OPSEC pre-engagement checklist
+- Known technical constraints table
+
+Updated `CLAUDE.md`:
+- Added prominent AI-session banner at top referencing architecture doc and stating detection-evasion priority
+- Updated Scenario 2 GitHub URL to operator's fork (`0xSiarheiStar/Amnesiac`)
+- Corrected Tool Delivery table (removed stale Tier 4 row, updated Tier 3 to reflect current implementation)
+
+---
+
+## [2026-05-25] feat(local-shell): add PsMapExec to Domain Actions
+
+Added PsMapExec network mapping/relay tool to the local shell:
+- `$global:ToolSources['PsMapExec']` → `https://raw.githubusercontent.com/0xSiarheiStar/PsMapExec/main/PsMapExec.ps1` (fetched on demand when not in local cache)
+- `PsMapExec.ps1` also added to `Tools\` directory as local copy (Tier 2, available in Scenario 1 without network fetch)
+- Keyword `PsMapExec` added to `$_kw` dispatch in `Start-LocalShell` → cache key `PsMapExec`, no auto-invoke
+- Help entry added under Domain Actions: `PsMapExec — Network attacks/mapping - use: PsMapExec <Method> -Targets <targets> [-Domain <domain>]`
+
+Usage example: `PsMapExec GenRelayList -Targets "All" -Domain "domain.local"`
+
+---
+
+## [2026-05-25] feat(tool-cache): per-tool URL overrides via $global:ToolSources
+
+Added `$global:ToolSources` hashtable (initialized in `Initialize-ToolCache`) to support tools hosted in external repos (not the Amnesiac `Tools/` directory). `Fetch-ToolFromGitHub` now checks `$global:ToolSources` for a per-tool URL before falling back to the default Amnesiac Tools URL pattern. Enables adding tools from any GitHub repo with a single hashtable entry — no other code changes required.
+
+---
+
+## [2026-05-25] feat(tool-cache): GitHub on-demand fallback via Fetch-ToolFromGitHub
+
+### Problem
+In Scenario 2 (assumed breach — operator has only the compromised machine, no separate operator box), `Initialize-ToolCache` could only populate tiers 1 (6 embedded tools) and 2 (`Tools\` directory). If the operator typed `PowerView` or `load pwv` in the local shell and the tool wasn't in the `Tools\` directory, the command silently failed with "not in cache". There was no fallback.
+
+### Fix
+Added `Fetch-ToolFromGitHub` helper function. When a tool is requested but not in `$global:ToolCache`, it fetches `https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/<ToolName>.ps1` from the **operator's** process (never from the target), caches it, and continues normally. Wired into three call sites:
+- `Send-Module` — remote session tool delivery
+- `Start-LocalShell` keyword dispatch (`PowerView`, `Mimi`, `HashGrab`, etc.)
+- `Start-LocalShell` `load <name>` command
+
+### Operational context
+Scenario 2 is the assumed-breach case: operator has gotten a low-priv shell on a domain-joined machine and loaded Amnesiac via `iex` — no `Tools\` directory exists, no local HTTP server, GitHub is the only source. Scenario 1 (operator's own box on the network) already has `Tools\` populated so the fallback is a no-op there.
+
+---
+
 ## [2026-05-25] fix(encoding): add UTF-8 BOM so ParseFile reads em-dash correctly
 
 ### Problem
