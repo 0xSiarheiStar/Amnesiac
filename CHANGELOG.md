@@ -1,4 +1,4 @@
-# Changelog — Amnesiac Red Team Edition
+﻿# Changelog — Amnesiac Red Team Edition
 
 All changes are documented with the operational context that motivated them.
 Format: `[LAYER] Change description — *why this matters operationally*`
@@ -684,3 +684,50 @@ Ported all stealth-overhaul changes (Plans 1-3) to `Amnesiac_ShellReady.ps1`:
 
 ---
 
+
+---
+
+## [2026-05-25] feat(native-bypass): compile patchless AMSI+ETW bypass binaries locally
+
+### Background
+The msi-pageguard-veh-master directory contains the native patchless AMSI+ETW bypass
+(PAGE_GUARD VEH technique). These binaries are NOT hosted on public GitHub to avoid
+VirusTotal indexing. They must be compiled locally and served from the operator HTTP server.
+
+### Build blockers resolved
+- **Windows 11 SDK 10.0.26100.0** dropped metahost.h and mscoree.h (CLR hosting headers
+  removed since ~SDK 19041). Fix: wrote minimal shim headers in the source directory.
+- **metahost.h shim** — defines ICLRMetaHost, ICLRRuntimeInfo, CLRCreateInstance,
+  all GUIDs. Includes local mscoree.h instead of the missing system header.
+- **mscoree.h shim** — defines ICorRuntimeHost with correct 19-method vtable order
+  (matches published COM spec: CreateLogicalThreadState...CurrentDomain). Defines
+  CLSID_CorRuntimeHost, IID_ICorRuntimeHost.
+- **guids.cpp** — defines all five CLSID/IID values as EXTERN_C const (CLSID_CLRMetaHost,
+  IID_ICLRMetaHost, IID_ICLRRuntimeInfo, CLSID_CorRuntimeHost, IID_ICorRuntimeHost).
+  Required because shim headers declare them extern but do not define them.
+- **mscoree.lib missing** — not in SDK 26100. Generated from mscoree.def using lib.exe
+  /def:mscoree.def /machine:x64. Def file lists the exports actually present in
+  C:\Windows\System32\mscoree.dll.
+- **mscorlib.tlb** — copied from C:\Windows\Microsoft.NET\Framework64\v4.0.30319\ to
+  source directory so #import "mscorlib.tlb" resolves.
+- **AmnesiacBridge.cs — InitialSessionState.ExecutionPolicy not in PS5.1 SMA** —
+  ExecutionPolicy property was added in PowerShell Core 6.0. Fix: removed the property
+  assignment; added Set-ExecutionPolicy -Scope Process -ExecutionPolicy Unrestricted -Force
+  via a separate PowerShell.Create() call before the main script run.
+- **AmnesiacBridge.cs — C# 6+ syntax** — the old csc.exe in .NET Framework 4.0 does not
+  support expression-bodied members. Fix: use Roslyn csc.exe from VS2022 Build Tools
+  (MSBuild\Current\Bin\Roslyn\csc.exe) with /langversion:7.3.
+
+### Outputs (all local, not committed to repo)
+- msi_bypass.dll (103 KB) — injectable DLL: PAGE_GUARD bypass only, no CLR dependency
+- msi_bypass_test.exe (138 KB) — standalone test: decodes XOR+b64 payload from data.txt,
+  installs bypass, loads .NET assembly via CLR hosting, invokes entry point
+- mnesiac_launcher.exe (140 KB) — full operator launcher: downloads AmnesiacBridge.dll +
+  Amnesiac_ShellReady.ps1 from operator HTTP server, installs AMSI+ETW bypass, starts CLR,
+  loads bridge into AppDomain, runs Amnesiac interactively via PS Runspace
+- AmnesiacBridge.dll (10 KB) — C# Runspace host: ConsoleHost/ConsoleUI/ConsoleRawUI
+  wrappers, Launcher.Run(string) entry point called by native CLR hosting code
+
+### Reproducibility
+Build-Native.ps1 in the source directory contains all build commands. Run from PowerShell
+as: cd amsi-pageguard-veh-master; .\Build-Native.ps1

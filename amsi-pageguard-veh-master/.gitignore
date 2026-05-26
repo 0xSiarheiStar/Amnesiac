@@ -1,0 +1,9 @@
+*.exe
+*.dll
+*.lib
+*.exp
+*.obj
+*.pdb
+*.tlh
+*.tli
+mscorlib.tlb

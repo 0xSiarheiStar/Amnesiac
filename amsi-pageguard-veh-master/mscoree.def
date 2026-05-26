@@ -1,0 +1,18 @@
+LIBRARY "mscoree.dll"
+EXPORTS
+    CLRCreateInstance
+    CorBindToRuntime
+    CorBindToRuntimeEx
+    CorBindToRuntimeHost
+    CorExitProcess
+    GetCORVersion
+    GetFileVersion
+    GetRequestedRuntimeInfo
+    GetRequestedRuntimeVersion
+    LoadLibraryShim
+    LoadStringRC
+    StrongNameErrorInfo
+    StrongNameFreeBuffer
+    StrongNameKeyGen
+    StrongNameSignatureSize
+    StrongNameTokenFromPublicKey
