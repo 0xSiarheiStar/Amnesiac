@@ -1780,6 +1780,8 @@ function Start-LocalShell {
     Write-Output " [*] Type 'help' for available commands and tools."
     Write-Output ""
 
+    [console]::TreatControlCAsInput = $true
+    try {
     while ($true) {
         Write-Host " ${shortHost}> " -NoNewline
         $cmd = Read-Host
@@ -1986,6 +1988,9 @@ function Start-LocalShell {
         } catch {
             Write-Output " [-] $($_.Exception.Message)"
         }
+    }
+    } finally {
+        [console]::TreatControlCAsInput = $false
     }
 }
 
@@ -2625,6 +2630,8 @@ function InteractWithPipeSession{
    	if($computerNameOnly -match $ipPattern){$PromptComputerName = $computerNameOnly}
     	else{$PromptComputerName = $computerNameOnly -split '\.' | Select-Object -First 1}
 
+	[console]::TreatControlCAsInput = $true
+	try {
 	while ($true) {
 		
 		$timeoutSeconds = 5
@@ -4476,7 +4483,10 @@ function InteractWithPipeSession{
 		$runspace.Close()
 
 	}
-	
+	} finally {
+		[console]::TreatControlCAsInput = $false
+	}
+
 }
 
 function PS1ToEXE {

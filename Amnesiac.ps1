@@ -1846,6 +1846,8 @@ function Start-LocalShell {
     Write-Host " [*] Type 'help' for available commands and tools." -ForegroundColor Cyan
     Write-Output ""
 
+    [console]::TreatControlCAsInput = $true
+    try {
     while ($true) {
         Write-Host " ${shortHost}> " -NoNewline -ForegroundColor Yellow
         $cmd = Read-Host
@@ -2056,6 +2058,9 @@ function Start-LocalShell {
         } catch {
             Write-Host " [-] $($_.Exception.Message)" -ForegroundColor Red
         }
+    }
+    } finally {
+        [console]::TreatControlCAsInput = $false
     }
 }
 function Display-SessionMenu {
@@ -2890,6 +2895,8 @@ function InteractWithPipeSession{
    	if($computerNameOnly -match $ipPattern){$PromptComputerName = $computerNameOnly}
     	else{$PromptComputerName = $computerNameOnly -split '\.' | Select-Object -First 1}
 
+	[console]::TreatControlCAsInput = $true
+	try {
 	while ($true) {
 		
 		$timeoutSeconds = 5
@@ -4762,7 +4769,10 @@ function InteractWithPipeSession{
 		$runspace.Close()
 
 	}
-	
+	} finally {
+		[console]::TreatControlCAsInput = $false
+	}
+
 }
 
 function PS1ToEXE {
