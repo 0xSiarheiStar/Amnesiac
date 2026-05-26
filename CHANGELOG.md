@@ -5,6 +5,51 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-05-25] feat(lpe): LPE tool section — PowerUp, PrivescCheck, GodPotato
+
+### New section
+
+Added `[+] LPE:` to all four help surfaces and wired the three tools into both
+execution contexts (local shell and active pipe session).
+
+**Tools added** (sourced from `Tools\` cache; GitHub fallback added when pushed):
+
+| Keyword | File | Auto-invoke |
+|---------|------|-------------|
+| `PowerUp` | `PowerUp.ps1` | `Invoke-AllChecks` |
+| `PrivescCheck` | `PrivescCheck.ps1` | `Invoke-PrivescCheck` |
+| `GodPotato` | `Invoke-GodPotato.ps1` | prompts for `-cmd` argument |
+
+### Changes
+
+**`Start-LocalShell` keyword dispatch (`$_kw` hashtable)** — three new entries.
+PowerUp and PrivescCheck auto-invoke their main function on load. GodPotato loads
+and surfaces its functions; operator calls `Invoke-GodPotato -cmd "..."` manually
+(command argument varies per engagement).
+
+**`Start-LocalShell` help** — new `[+] LPE:` block after Domain Actions with
+usage hints for all three tools.
+
+**`InteractWithPipeSession`** — three new `elseif` blocks. PowerUp and PrivescCheck
+stream from the local cache over the named pipe via `Send-Module` (first use of
+`Send-Module` in session interaction — previously session tools all used
+`downloadstring` from GitHub). GodPotato prompts the operator for a command string
+with `Read-Host` before streaming, so the exact payload (add user, spawn shell,
+etc.) is decided at run time. All three blocks include a clear cache-miss message.
+
+**`Get-AvailableCommands` (session `help`)** — new `[+] LPE:` section at the bottom.
+
+### Operational impact
+- **Scenario 1 / local shell**: type `PowerUp`, `PrivescCheck`, or `GodPotato` at
+  the local shell prompt to run LPE checks on the operator machine or a compromised
+  host running Amnesiac directly.
+- **Scenario 2 / pipe session**: same keywords in an active session stream the tool
+  from the operator cache to the target over the pipe — no disk write on target,
+  no GitHub download from target network.
+- Cache miss path: `modules reload` after adding the `.ps1` to `Tools\`.
+
+---
+
 ## [2026-05-25] feat(native-launcher): amnesiac_launcher.exe + AmnesiacBridge.dll — patchless in-process PS Runspace loader
 
 ### What was built
