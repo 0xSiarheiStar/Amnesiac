@@ -11,7 +11,7 @@ if (-not (Test-Path $binDir)) { New-Item -Path $binDir -ItemType Directory | Out
 
 $outDll = Join-Path $binDir "AmnesiacLoader.dll"
 $refs   = @("/r:System.dll", "/r:System.Core.dll")
-$sources = @("Loader.cs","Bypass.cs","CallStack.cs","SleepMask.cs","Stomper.cs","UnmanagedPS.cs") |
+$sources = @("Loader.cs","Bypass.cs","CallStack.cs","SleepMask.cs","Stomper.cs","UnmanagedPS.cs","NativeLoader.cs") |
            ForEach-Object { Join-Path $PSScriptRoot $_ }
 
 Write-Host "[*] Building AmnesiacLoader with csc.exe..." -ForegroundColor Cyan
