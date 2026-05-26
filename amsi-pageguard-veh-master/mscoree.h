@@ -54,3 +54,24 @@ ICorRuntimeHost : public IUnknown
 // ── GUIDs ──────────────────────────────────────────────────────────────────
 EXTERN_C const CLSID CLSID_CorRuntimeHost;
 EXTERN_C const IID   IID_ICorRuntimeHost;
+
+// ── ICLRRuntimeHost ────────────────────────────────────────────────────────
+// .NET 4.x hosting interface. Used to start the runtime; once started,
+// CoCreateInstance(CLSID_CorRuntimeHost) becomes available in-process.
+// Only Start() is needed here — other methods are placeholders for vtable alignment.
+MIDL_INTERFACE("90F1A06C-7712-4762-86B5-7A5EBA6BDB02")
+ICLRRuntimeHost : public IUnknown
+{
+    virtual HRESULT STDMETHODCALLTYPE Start() = 0;
+    virtual HRESULT STDMETHODCALLTYPE Stop() = 0;
+    virtual HRESULT STDMETHODCALLTYPE SetHostControl(IUnknown *pHostControl) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetCLRControl(IUnknown **pCLRControl) = 0;
+    virtual HRESULT STDMETHODCALLTYPE UnloadAppDomain(DWORD dwAppDomainId, BOOL fWaitUntilDone) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ExecuteInAppDomain(DWORD dwAppDomainId, void *pCallback, void *cookie) = 0;
+    virtual HRESULT STDMETHODCALLTYPE GetCurrentAppDomainId(DWORD *pdwAppDomainId) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ExecuteApplication(LPCWSTR, DWORD, LPCWSTR*, DWORD, LPCWSTR*, int*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE ExecuteInDefaultAppDomain(LPCWSTR, LPCWSTR, LPCWSTR, LPCWSTR, DWORD*) = 0;
+};
+
+EXTERN_C const CLSID CLSID_CLRRuntimeHost;
+EXTERN_C const IID   IID_ICLRRuntimeHost;

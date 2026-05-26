@@ -140,7 +140,22 @@ static HRESULT ClrInit(ClrContext& ctx)
 
     hr = ctx.pRuntimeInfo->GetInterface(CLSID_CorRuntimeHost, IID_ICorRuntimeHost,
                                          (LPVOID*)&ctx.pCorHost);
-    if (FAILED(hr)) { printf("[-] GetInterface: 0x%08X\n", hr); return hr; }
+    if (FAILED(hr))
+    {
+        // .NET 4.x: start via ICLRRuntimeHost to register in-process class factory,
+        // then CoCreateInstance(CLSID_CorRuntimeHost) succeeds.
+        ICLRRuntimeHost* pTmp = nullptr;
+        if (SUCCEEDED(ctx.pRuntimeInfo->GetInterface(CLSID_CLRRuntimeHost, IID_ICLRRuntimeHost,
+                                                      (LPVOID*)&pTmp)))
+        {
+            pTmp->Start();
+            pTmp->Release();
+        }
+        CoInitializeEx(NULL, COINIT_MULTITHREADED);
+        hr = CoCreateInstance(CLSID_CorRuntimeHost, NULL, CLSCTX_INPROC_SERVER,
+                               IID_ICorRuntimeHost, (LPVOID*)&ctx.pCorHost);
+        if (FAILED(hr)) { printf("[-] CLR host: 0x%08X\n", hr); return hr; }
+    }
 
     hr = ctx.pCorHost->Start();
     if (FAILED(hr) && hr != S_FALSE)

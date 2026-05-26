@@ -5,6 +5,64 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-05-25] feat(native-launcher): amnesiac_launcher.exe + AmnesiacBridge.dll — patchless in-process PS Runspace loader
+
+### What was built
+
+`amsi-pageguard-veh-master/` now contains a working native launcher that:
+
+1. Downloads `AmnesiacBridge.dll` from the operator HTTP server (no disk write for the script)
+2. Installs the PAGE_GUARD VEH bypass for AMSI+ETW in the native process (protects the download phase)
+3. Starts the CLR via `ICLRMetaHost → ICLRRuntimeInfo → ICLRRuntimeHost`
+4. **Removes the native bypass** before entering managed code (see root cause below)
+5. Loads `AmnesiacBridge.dll` to a GUID-named temp file and calls `ExecuteInDefaultAppDomain`
+6. Inside the bridge: applies managed AMSI+ETW bypasses, opens a full `PSHost` Runspace, downloads and runs `Amnesiac_ShellReady.ps1` entirely in memory — no script ever touches disk
+
+### Root cause: PAGE_GUARD VEH is incompatible with in-process CLR
+
+`rs.Open()` initialises the PowerShell Runspace. During initialisation the CLR JIT-compiles
+AMSI interop stubs and reads from `amsi.dll`'s code page, which triggers our PAGE_GUARD.
+The VEH handler fires and manipulates `RIP/RSP/RAX` to fake a return. The CLR detects the
+corrupted managed→unmanaged transition frame and raises an `AccessViolationException` — which
+is not catchable in .NET 4.x — terminating the process with no output.
+
+### Fix: split native and managed bypass responsibilities
+
+**Native launcher** (`launcher.cpp`):
+- PAGE_GUARD VEH covers AMSI+ETW during the native execution phase (download)
+- `UninstallBypass()` called before `ExecuteInDefaultAppDomain` — before any managed code runs
+
+**Managed bridge** (`AmnesiacBridge.cs`):
+- `amsiInitFailed = true` via reflection (patchless — no bytes written; AMSI never initialises)
+- `EtwEventWrite` first byte patched to `0xC3` via P/Invoke `VirtualProtect` + `Marshal.WriteByte`
+- Both applied before `rs.Open()` so the Runspace opens under bypass from the start
+
+### Build infrastructure fixes (accumulated during development)
+
+- Wrote `mscoree.h` shim — SDK 10.0.26100.0 dropped this header; provides `ICorRuntimeHost`
+  (19-method vtable) and `ICLRRuntimeHost` (9-method vtable) interface definitions
+- Wrote `guids.cpp` — all 7 CLR hosting GUIDs as `EXTERN_C const` definitions
+- Generated `mscoree.lib` from `mscoree.def` using `lib.exe /def /machine:x64` (not in SDK)
+- Switched `AmnesiacBridge.cs` compiler to Roslyn `csc.exe` (VS2022 BuildTools) for C# 6+
+  expression-bodied member syntax; replaced `InitialSessionState.ExecutionPolicy` (PS Core only)
+  with `Set-ExecutionPolicy` cmdlet call inside a second `PowerShell.Create()` instance
+- `WebClient.Encoding = UTF8` — default encoding mangled em-dashes in `Amnesiac_ShellReady.ps1`
+- Switched CLR hosting from `ICorRuntimeHost` (REGDB_E_CLASSNOTREG on .NET 4.x-only machines)
+  to `ICLRRuntimeHost::ExecuteInDefaultAppDomain` — no COM registration required
+- `BeginInvoke/EndInvoke` + `PSDataCollection<PSObject>` DataAdded handler — streams
+  `Write-Output` pipeline output to `Console.WriteLine` in real time (plain `ps.Invoke()`
+  silently collects pipeline output without displaying it)
+- Made all `ConsoleRawUI` property getters safe with `try/catch` returning fixed defaults —
+  CLR Runspace initialisation calls host UI properties from background threads where
+  `Console.BufferWidth` etc. can throw
+
+### Operational impact
+Operator can drop `amnesiac_launcher.exe` on a target (or run it on their own machine),
+point it at the operator HTTP server, and get a fully interactive Amnesiac session with
+AMSI and ETW suppressed — no PS.exe spawned, no script written to disk.
+
+---
+
 ## [2026-05-25] feat(shell-ready): Local Shell, tool fetch fallback, iex compatibility fixes
 
 ### Changes to `Amnesiac_ShellReady.ps1`
