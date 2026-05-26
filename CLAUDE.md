@@ -116,6 +116,22 @@ Four improvement layers, all changes in `Amnesiac.ps1`:
 | `PrivescCheck` | `PrivescCheck.ps1` | Load and auto-run `Invoke-PrivescCheck` |
 | `GodPotato` | `Invoke-GodPotato.ps1` | Load GodPotato; prompts for command to run as SYSTEM |
 
+## Shell Types
+
+| Option | Direction | Auth | When to use |
+|--------|-----------|------|-------------|
+| `[1] Reverse Shell` | Target → operator machine (port 445 inbound on operator) | Target authenticates to operator's SMB — NTLM/guest, messy on non-domain machine | Scenario 2 (compromised domain-joined machine calling back) |
+| `[2] Bind Shell` | Operator → target machine (port 445 inbound on target) | Operator authenticates to target's SMB using domain creds — clean Kerberos | **Scenario 1** (non-domain-joined operator with domain creds) |
+
+Amnesiac shows an explicit warning when `-NoDomain` is set and reverse shell is selected: `Scenario 1 (non-domain): reverse shell requires port 445 inbound on this machine. Consider Bind Shell instead.`
+
+**Bind shell flow (Scenario 1):**
+1. Main menu → `[2] Bind Shell` → pick `stealth` payload format
+2. Deliver payload to target via WMI/SMB remoting using domain creds
+3. Target creates named pipe server on itself
+4. Amnesiac prompts for target IP — enter it to connect
+5. Session appears under `Bind Shell Sessions`
+
 ## Listener UX
 
 When the operator selects **single listener** or **global listener** from the main menu, `Show-PayloadMenu` runs first and presents a numbered format picker:
