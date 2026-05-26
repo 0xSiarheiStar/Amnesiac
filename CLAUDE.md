@@ -27,7 +27,7 @@ Launch from a domain-credentialed session:
 ```powershell
 runas /netonly /user:DOMAIN\username powershell.exe
 # In the new PS window:
-. .\Amnesiac.ps1; Amnesiac -Detached -IP <operator-IP>
+. .\Amnesiac.ps1; Amnesiac -NoDomain -IP <operator-IP>
 ```
 
 Set engagement profile:
