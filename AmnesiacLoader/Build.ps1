@@ -72,6 +72,7 @@ $subs = [ordered]@{
     'GetGadget'                   = $_gg
     'Injector'                    = $_inj
     'Stomper'                     = $_stp
+    'Bypass'                      = $_byp
 }
 
 # ── Copy sources to temp dir and apply substitutions ─────────────────────────
