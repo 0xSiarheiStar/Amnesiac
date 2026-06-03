@@ -1663,19 +1663,45 @@ exit
 			'5' {
 				Start-LocalShell
 			}
+			'6' {
+				Write-Output ""
+				Write-Output " Set engagement profile:"
+				Write-Output "   [1] nondomained  — runas /netonly operator (Scenario 1)"
+				Write-Output "   [2] domained     — assumed breach box (Scenario 2)"
+				Write-Output ""
+				Write-Host " Profile [1/2 or name]: " -ForegroundColor Yellow -NoNewline
+				$_ep = (Read-Host).Trim().ToLower()
+				switch ($_ep) {
+					{ $_ -in '1','nondomained' } {
+						$global:EngagementProfile = 'nondomained'
+						$tokenOk = Test-NetworkLogonToken
+						if ($tokenOk) { $global:Message = " [+] Engagement: nondomained | Network token: $tokenOk" }
+						else {
+							Write-Output ""; Write-Output " [!] WARNING: No network logon token detected."
+							Write-Output "     Launch Amnesiac from: runas /netonly /user:DOMAIN\user powershell.exe"; Write-Output ""
+							$global:Message = " [+] Engagement: nondomained (no network token detected)"
+						}
+					}
+					{ $_ -in '2','domained' } {
+						$global:EngagementProfile = 'domained'
+						$global:Message = " [+] Engagement: domained (assumed breach)"
+					}
+					default { $global:Message = " [-] Unknown profile — enter 1/nondomained or 2/domained" }
+				}
+			}
 			default {
-				# Sessions numbered from 6 (options 0-5 are menu entries)
-				if ($choice -is [int] -and $choice -ge 6 -and $choice -lt ($global:directAdminSessions.Count + 6)) {
-					$selectedIndex = $choice - 6
+				# Sessions numbered from 7 (options 0-6 are menu entries)
+				if ($choice -is [int] -and $choice -ge 7 -and $choice -lt ($global:directAdminSessions.Count + 7)) {
+					$selectedIndex = $choice - 7
 					$selectedTarget = $global:directAdminSessions[$selectedIndex]
 					if($global:Detach){Detached-Interaction -Target $selectedTarget -TimeOut $Timeout}
 					else{Choose-And-Interact -Target $selectedTarget -TimeOut $Timeout}
-				} elseif ($choice -is [int] -and $choice -ge ($global:directAdminSessions.Count + 6) -and $choice -lt ($global:directAdminSessions.Count + $global:listenerSessions.Count + 6)) {
-					$selectedIndex = $choice - 6 - $global:directAdminSessions.Count
+				} elseif ($choice -is [int] -and $choice -ge ($global:directAdminSessions.Count + 7) -and $choice -lt ($global:directAdminSessions.Count + $global:listenerSessions.Count + 7)) {
+					$selectedIndex = $choice - 7 - $global:directAdminSessions.Count
 					$selectedSession = $global:listenerSessions[$selectedIndex]
 					InteractWithPipeSession -PipeServer $selectedSession.PipeServer -StreamWriter $selectedSession.StreamWriter -StreamReader $selectedSession.StreamReader -computerNameOnly $selectedSession.ComputerName -PipeName $selectedSession.PipeName
-				} elseif ($choice -is [int] -and $choice -ge ($global:directAdminSessions.Count + $global:listenerSessions.Count + 6) -and $choice -lt ($global:directAdminSessions.Count + $global:listenerSessions.Count + $global:MultipleSessions.Count + 6)) {
-					$selectedIndex = $choice - 6 - $global:directAdminSessions.Count - $global:listenerSessions.Count
+				} elseif ($choice -is [int] -and $choice -ge ($global:directAdminSessions.Count + $global:listenerSessions.Count + 7) -and $choice -lt ($global:directAdminSessions.Count + $global:listenerSessions.Count + $global:MultipleSessions.Count + 7)) {
+					$selectedIndex = $choice - 7 - $global:directAdminSessions.Count - $global:listenerSessions.Count
 					$selectedMultiSession = $global:MultipleSessions[$selectedIndex]
 					InteractWithPipeSession -PipeClient $selectedMultiSession.PipeClient -StreamWriter $selectedMultiSession.StreamWriter -StreamReader $selectedMultiSession.StreamReader -computerNameOnly $selectedMultiSession.ComputerName -PipeName $selectedMultiSession.PipeName -UniquePipeID $selectedMultiSession.UniquePipeID
 				} else {
@@ -2419,6 +2445,7 @@ function Display-SessionMenu {
 	Write-Output " [3] Scan network for listening targets"
 	Write-Output " [4] Shell via Find-LocalAdminAccess"
 	Write-Output " [5] Local Shell  — run commands on this machine directly"
+	Write-Output " [6] Set engagement profile  — domained / nondomained"
 
     # Always show where Amnesiac is running — operator context
     $_localFQDN = try { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName } catch { $env:COMPUTERNAME }
@@ -2426,8 +2453,8 @@ function Display-SessionMenu {
     Write-Output ""
     Write-Output " Local:  $_localFQDN  [$_localUser]"
 
-	# Starting index (options 0-5 reserved; sessions numbered from 6)
-    $index = 6
+	# Starting index (options 0-6 reserved; sessions numbered from 7)
+    $index = 7
 	
 	#$global:MultipleSessions = [System.Collections.Generic.List[psobject]]$global:MultipleSessions
 	
