@@ -20,5 +20,11 @@ PME/
 # Serve log
 _serve.log
 
-# Superpowers plugin cache (local dev tooling only)
-docs/superpowers/
+# Development / AI session files — not published to GitHub
+docs/
+CLAUDE.md
+CHANGELOG.md
+Tests/
+commands_list.txt
+issue.md
+.github/FUNDING.yml
