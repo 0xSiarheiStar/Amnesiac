@@ -1,0 +1,24 @@
+# Runtime payload files generated per session
+pipe_*.ps1
+diagtest_pipe.ps1
+
+# Operational notes / test output
+test.txt
+
+# Compiled binaries
+AmnesiacLoader/bin/
+amsi-pageguard-veh-master/*.exe
+amsi-pageguard-veh-master/*.dll
+amsi-pageguard-veh-master/*.obj
+amsi-pageguard-veh-master/*.pdb
+Tools/*.exe
+Tools/*.exe._obf.exe
+
+# Operational evidence (PME — Post-exploitation Module Evidence)
+PME/
+
+# Serve log
+_serve.log
+
+# Superpowers plugin cache (local dev tooling only)
+docs/superpowers/

