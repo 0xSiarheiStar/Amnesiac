@@ -2540,11 +2540,28 @@ function Start-LocalShell {
                 if (-not $_spawnOk) {
                     Write-Host " [!] Process spawn denied — starting pipe server in background runspace." -ForegroundColor Yellow
                     try {
+                        $_mgEm = $global:EndMarker; $_mgBs = $global:BufferSize
+                        $_mgSrv = (
+                            "`$_sd=New-Object System.IO.Pipes.PipeSecurity;" +
+                            "`$_si=New-Object System.Security.Principal.SecurityIdentifier '$mySID';" +
+                            "`$_ar=New-Object System.IO.Pipes.PipeAccessRule(`$_si,'FullControl','Allow');" +
+                            "`$_sd.AddAccessRule(`$_ar);" +
+                            "`$_ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$_mgBs,$_mgBs,`$_sd);" +
+                            "`$_ps.WaitForConnection();" +
+                            "`$_sr=New-Object System.IO.StreamReader(`$_ps);" +
+                            "`$_sw=New-Object System.IO.StreamWriter(`$_ps);" +
+                            "while(`$true){if(-not `$_ps.IsConnected){break};" +
+                            "`$_c=`$_sr.ReadLine();" +
+                            "if(`$_c -eq 'exit'){break};" +
+                            "try{`$_r=iex `"`$_c 2>&1|Out-String`";`$_r -split([char]10)|%{`$_sw.WriteLine(`$_.TrimEnd())}}catch{`$_e=`$_.Exception.Message;`$_e -split([char]10)|%{`$_sw.WriteLine(`$_)}};" +
+                            "`$_sw.WriteLine('$_mgEm');`$_sw.Flush()};" +
+                            "`$_ps.Disconnect();`$_ps.Dispose()"
+                        )
                         $_mgRs = [RunspaceFactory]::CreateRunspace()
                         $_mgRs.Open()
                         $_mgPs = [PowerShell]::Create()
                         $_mgPs.Runspace = $_mgRs
-                        $_mgPs.AddScript($built.RawScript) | Out-Null
+                        $_mgPs.AddScript($_mgSrv) | Out-Null
                         $_mgPs.BeginInvoke() | Out-Null
                     } catch { Write-Host " [!] Runspace failed: $($_.Exception.Message)" -ForegroundColor Red }
                 }
