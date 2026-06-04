@@ -2418,28 +2418,32 @@ function Start-LocalShell {
                 if (-not $_spawnOk) {
                     Write-Output " [!] Process spawn denied -- starting pipe server in background runspace."
                     try {
-                        $_mgEm = $global:EndMarker; $_mgBs = $global:BufferSize
-                        $_mgSrv = (
-                            "`$_sd=New-Object System.IO.Pipes.PipeSecurity;" +
-                            "`$_si=New-Object System.Security.Principal.SecurityIdentifier '$mySID';" +
-                            "`$_ar=New-Object System.IO.Pipes.PipeAccessRule(`$_si,'FullControl','Allow');" +
-                            "`$_sd.AddAccessRule(`$_ar);" +
-                            "`$_ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$_mgBs,$_mgBs,`$_sd);" +
-                            "`$_ps.WaitForConnection();" +
-                            "`$_sr=New-Object System.IO.StreamReader(`$_ps);" +
-                            "`$_sw=New-Object System.IO.StreamWriter(`$_ps);" +
-                            "while(`$true){if(-not `$_ps.IsConnected){break};" +
-                            "`$_c=`$_sr.ReadLine();" +
-                            "if(`$_c -eq 'exit'){break};" +
-                            "try{`$_r=iex `"`$_c 2>&1|Out-String`";`$_r -split([char]10)|%{`$_sw.WriteLine(`$_.TrimEnd())}}catch{`$_e=`$_.Exception.Message;`$_e -split([char]10)|%{`$_sw.WriteLine(`$_)}};" +
-                            "`$_sw.WriteLine('$_mgEm');`$_sw.Flush()};" +
-                            "`$_ps.Disconnect();`$_ps.Dispose()"
-                        )
                         $_mgRs = [RunspaceFactory]::CreateRunspace()
                         $_mgRs.Open()
                         $_mgPs = [PowerShell]::Create()
                         $_mgPs.Runspace = $_mgRs
-                        $_mgPs.AddScript($_mgSrv) | Out-Null
+                        [void]$_mgPs.AddScript({
+                            param($pipeName, $sid, $bufSize, $endMarker)
+                            $sd = New-Object System.IO.Pipes.PipeSecurity
+                            $si = New-Object System.Security.Principal.SecurityIdentifier $sid
+                            $ar = New-Object System.IO.Pipes.PipeAccessRule($si, 'FullControl', 'Allow')
+                            $sd.AddAccessRule($ar)
+                            $srv = New-Object System.IO.Pipes.NamedPipeServerStream($pipeName, 'InOut', 1, 'Byte', 'None', $bufSize, $bufSize, $sd)
+                            $srv.WaitForConnection()
+                            $sr = New-Object System.IO.StreamReader($srv)
+                            $sw = New-Object System.IO.StreamWriter($srv)
+                            while ($true) {
+                                if (-not $srv.IsConnected) { break }
+                                $c = $sr.ReadLine()
+                                if ($c -eq 'exit') { break }
+                                try {
+                                    $r = iex "$c 2>&1" | Out-String
+                                    $r -split [char]10 | % { $sw.WriteLine($_.TrimEnd()) }
+                                } catch { $_.Exception.Message -split [char]10 | % { $sw.WriteLine($_) } }
+                                $sw.WriteLine($endMarker); $sw.Flush()
+                            }
+                            $srv.Disconnect(); $srv.Dispose()
+                        }).AddArgument($PN).AddArgument($mySID).AddArgument($global:BufferSize).AddArgument($global:EndMarker)
                         $_mgPs.BeginInvoke() | Out-Null
                     } catch { Write-Output " [!] Runspace failed: $($_.Exception.Message)" }
                 }
@@ -2449,6 +2453,7 @@ function Start-LocalShell {
             try {
                 $mgClient = New-Object System.IO.Pipes.NamedPipeClientStream('.', $PN, [System.IO.Pipes.PipeDirection]::InOut)
                 $mgClient.Connect(10000)
+                Write-Output " [+] Session connected (in-process runspace). Type 'back' to return."
                 $mgSW = New-Object System.IO.StreamWriter($mgClient)
                 $mgSR = New-Object System.IO.StreamReader($mgClient)
                 InteractWithPipeSession -PipeClient $mgClient -StreamWriter $mgSW -StreamReader $mgSR -computerNameOnly $localFQDN -PipeName $PN
