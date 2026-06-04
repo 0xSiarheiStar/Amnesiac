@@ -2575,10 +2575,31 @@ function Start-LocalShell {
             try {
                 $mgClient = New-Object System.IO.Pipes.NamedPipeClientStream('.', $PN, [System.IO.Pipes.PipeDirection]::InOut)
                 $mgClient.Connect(10000)
-                Write-Host " [+] Session connected (in-process runspace). Type 'back' to return." -ForegroundColor Green
+                Write-Host " [+] Session connected. Type 'back' to return." -ForegroundColor Green
                 $mgSW = New-Object System.IO.StreamWriter($mgClient)
                 $mgSR = New-Object System.IO.StreamReader($mgClient)
-                InteractWithPipeSession -PipeClient $mgClient -StreamWriter $mgSW -StreamReader $mgSR -computerNameOnly $localFQDN -PipeName $PN
+                $_mgEm   = $global:EndMarker
+                $_mgHost = ($localFQDN -split '\.' | Select-Object -First 1)
+                [console]::TreatControlCAsInput = $true
+                try {
+                    while ($true) {
+                        [Console]::Write("`n [$_mgHost]: ")
+                        $mgCmd = [Console]::ReadLine()
+                        if ($mgCmd -eq $null -or $mgCmd -ieq 'back') {
+                            try { $mgSW.WriteLine('exit'); $mgSW.Flush() } catch {}; break
+                        }
+                        if ([string]::IsNullOrWhiteSpace($mgCmd)) { continue }
+                        try {
+                            $mgSW.WriteLine($mgCmd); $mgSW.Flush()
+                            while ($true) {
+                                $mgLine = $mgSR.ReadLine()
+                                if ($mgLine -eq $null -or $mgLine -eq $_mgEm) { break }
+                                Write-Host $mgLine
+                            }
+                        } catch { Write-Host " [-] Pipe error: $($_.Exception.Message)" -ForegroundColor Red; break }
+                    }
+                } finally { [console]::TreatControlCAsInput = $false }
+                try { $mgClient.Close() } catch {}
             } catch { Write-Host " [-] Failed to connect to migrated process: $($_.Exception.Message)" -ForegroundColor Red }
             continue
         }
