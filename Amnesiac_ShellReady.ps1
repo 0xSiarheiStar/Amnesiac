@@ -734,7 +734,19 @@ function Amnesiac {
 			$global:AllUserDefinedTargets = $UserDefinedTargets
 		}
 	}
-	
+
+	trap [System.Management.Automation.PipelineStoppedException] {
+		$Host.UI.RawUI.FlushInputBuffer()
+		Write-Output ""
+		Write-Output " [!] Ctrl+C — Kill Amnesiac and all active sessions? [y/N]: "
+		$Host.UI.RawUI.FlushInputBuffer()
+		$_ctrlcKey = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+		Write-Output ""
+		if ($_ctrlcKey.Character -ieq 'y') { break }
+		Write-Output " [*] Continuing..."
+		continue
+	}
+
 	while ($true) {
 
 		# Display the Session Menu
@@ -1955,9 +1967,14 @@ function Start-LocalShell {
     Write-Output " [*] Type 'help' for available commands and tools."
     Write-Output ""
 
-    [console]::TreatControlCAsInput = $true
+    trap [System.Management.Automation.PipelineStoppedException] {
+        Write-Output " [!] Interrupted"
+        [console]::TreatControlCAsInput = $false
+        continue
+    }
     try {
     while ($true) {
+        [console]::TreatControlCAsInput = $false
         Write-Host " ${shortHost}> " -NoNewline
         $cmd = Read-Host
         if (-not $cmd) { continue }
