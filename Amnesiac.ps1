@@ -781,12 +781,9 @@ function Amnesiac {
 		Write-Output ""
 		Display-SessionMenu
 
-		if($ScanMode -OR $global:ScanModer){$choice = 3}
-		else{
-			# Get User Input
-			if(($global:directAdminSessions.Count -gt 0) -OR ($global:listenerSessions.Count -gt 0) -OR ($global:MultipleSessions.Count -gt 0)){$choice = Read-Host " Choose an option or session number, or type 'exit' to quit"}
-			else{$choice = Read-Host " Choose an option or type 'exit' to quit"}
-		}
+		# Get User Input — never auto-force option 3; operator decides what to do next
+		if(($global:directAdminSessions.Count -gt 0) -OR ($global:listenerSessions.Count -gt 0) -OR ($global:MultipleSessions.Count -gt 0)){$choice = Read-Host " Choose an option or session number, or type 'exit' to quit"}
+		else{$choice = Read-Host " Choose an option or type 'exit' to quit"}
 		
 		$choice = $choice.Trim()
 

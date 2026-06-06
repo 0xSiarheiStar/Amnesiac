@@ -753,17 +753,14 @@ function Amnesiac {
 		Write-Output ""
 		Display-SessionMenu
 
-		if($ScanMode -OR $global:ScanModer){$choice = 3}
+		# Get User Input — never auto-force option 3; operator decides what to do next
+		if(($global:directAdminSessions.Count -gt 0) -OR ($global:listenerSessions.Count -gt 0) -OR ($global:MultipleSessions.Count -gt 0)){
+			[Console]::Write(" Choose an option or session number, or type 'exit' to quit ")
+			$choice = Read-Host
+		}
 		else{
-			# Get User Input
-			if(($global:directAdminSessions.Count -gt 0) -OR ($global:listenerSessions.Count -gt 0) -OR ($global:MultipleSessions.Count -gt 0)){
-				[Console]::Write(" Choose an option or session number, or type 'exit' to quit ")
-				$choice = Read-Host
-			}
-			else{
-				[Console]::Write(" Choose an option or type 'exit' to quit ")
-				$choice = Read-Host
-			}
+			[Console]::Write(" Choose an option or type 'exit' to quit ")
+			$choice = Read-Host
 		}
 		
 		$choice = $choice.Trim()
@@ -1569,16 +1566,15 @@ exit
 			'3' {
 				if($ScanMode -OR $global:ScanModer){$ScanMode = $False;$global:ScanModer = $False}
 				else{Write-Output ""}
-				Write-Output " Scanning will stop in 40 seconds..."
+				Write-Output " Press any key to stop scanning..."
 				Write-Output ""
-				
-				$timeout = 40
-				$elapsedTime = 0
-				$timeInterval = 1 
-				
-				while ($elapsedTime -lt $timeout) {
-					#Start-Sleep -Milliseconds 500
-					#if($PlaceHolder){$PlaceHolder = $False;$Host.UI.RawUI.FlushInputBuffer()}
+
+				$Host.UI.RawUI.FlushInputBuffer()
+				$_scanPlaceholder = $True
+
+				while (-not $Host.UI.RawUI.KeyAvailable) {
+					Start-Sleep -Milliseconds 500
+					if($_scanPlaceholder){$_scanPlaceholder = $False;$Host.UI.RawUI.FlushInputBuffer()}
 					if($Domain -AND $DomainController){Scan-WaitingTargets -Domain $Domain -DomainController $DomainController}
 					else{Scan-WaitingTargets}
 					$global:Message = $global:Message -split "`n"
@@ -1587,17 +1583,9 @@ exit
 						Write-Output $line
 					}
 					$global:Message = $null
-					
-					# Sleep for a short interval before the next iteration
-					Start-Sleep -Seconds $timeInterval
-
-					# Increment elapsed time
-					$elapsedTime += $timeInterval
+					Start-Sleep -Milliseconds 100
 				}
-				
-				# Exit the loop properly by reading the key press
-				#$null = [System.Console]::ReadKey($true)
-				
+
 				$global:Message = $null
 				$choice = $null
 
