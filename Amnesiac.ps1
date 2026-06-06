@@ -1695,13 +1695,17 @@ exit
 				if ($finalstring -and $_laaMethod) {
 					$_laaTargets = if ($global:AllUserDefinedTargets) { $global:AllUserDefinedTargets -join "," } else { $null }
 					$_laaFunc = ${function:Find-LocalAdminAccess}
+					$_laaGetADComp = ${function:Get-ADComputers}
+					$_laaFindTrusts = ${function:FindDomainTrusts}
 					Write-Host " [*] Scanning for local admin access (90s timeout, Ctrl+C to cancel)..." -ForegroundColor Cyan
 					$_laaJob = Start-Job -ScriptBlock {
-						param($fd, $method, $cmd, $targets)
+						param($fd, $method, $cmd, $targets, $fdGetADComp, $fdFindTrusts)
 						New-Item -Path function:Find-LocalAdminAccess -Value ([scriptblock]::Create($fd)) | Out-Null
+						New-Item -Path function:Get-ADComputers -Value ([scriptblock]::Create($fdGetADComp)) | Out-Null
+						New-Item -Path function:FindDomainTrusts -Value ([scriptblock]::Create($fdFindTrusts)) | Out-Null
 						if ($targets) { Find-LocalAdminAccess -Targets $targets -Method $method -Command $cmd -NoOutput }
 						else { Find-LocalAdminAccess -Method $method -Command $cmd -NoOutput }
-					} -ArgumentList $_laaFunc, $_laaMethod, $finalstring, $_laaTargets
+					} -ArgumentList $_laaFunc, $_laaMethod, $finalstring, $_laaTargets, $_laaGetADComp, $_laaFindTrusts
 					$_laaTimeout = 90; $_laaElapsed = 0; $_laaCancelled = $false
 					[console]::TreatControlCAsInput = $true
 					while ($_laaJob.State -eq 'Running' -and $_laaElapsed -lt $_laaTimeout) {
