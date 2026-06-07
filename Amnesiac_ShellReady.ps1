@@ -1075,11 +1075,15 @@ function Amnesiac {
 						$global:Message = " [+] Payload AMSI bypass: $val"
 						if ($val -in 'pageguard','hwbp') { $global:Message += " (GetProcAddress AmsiScanBuffer patch)" }
 						if ($val -eq 'none') { $global:Message += " (disabled — use when DLL pre-patches AMSI)" }
+						if ($val -eq 'direct' -and -not $global:DiskMode) { $global:Message += " [!] 'direct' uses Add-Type which writes a temp DLL to %TEMP% on target — enable diskmode or use pageguard instead" }
 					} else { $global:Message = " [-] Valid: pageguard hwbp fail direct none" }
 				}
 				'etw' {
-					if ($val -in 'provider','patch','thread','none') { $global:PayloadConfig.Etw = $val; $global:Message = " [+] Payload ETW: $val$(if($val -eq 'none'){' (disabled)'})" }
-					else { $global:Message = " [-] Valid: provider patch thread none" }
+					if ($val -in 'provider','patch','thread','none') {
+						$global:PayloadConfig.Etw = $val
+						$global:Message = " [+] Payload ETW: $val$(if($val -eq 'none'){' (disabled)'})"
+						if ($val -eq 'patch' -and -not $global:DiskMode) { $global:Message += " [!] 'patch' uses Add-Type which writes a temp DLL to %TEMP% on target — enable diskmode or use provider instead" }
+					} else { $global:Message = " [-] Valid: provider patch thread none" }
 				}
 				'launcher' {
 					if ($val -in 'ps','wmi','schtask','com') { $global:PayloadConfig.Launcher = $val; $global:Message = " [+] Payload launcher: $val" }
