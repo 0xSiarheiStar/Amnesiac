@@ -5,6 +5,36 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-06q] fix(session): capture Write-Host output in all pipe session command loops via *>&1
+
+**Problem:** All target payload command loops used `2>&1|Out-String`, which only redirects
+stderr (stream 2) to the success stream. In PowerShell 5+, `Write-Host` writes to the
+Information stream (stream 6), not stdout — so any tool that uses `Write-Host` for output
+(PrivescCheck, PowerUp, and others) produced **no visible output** in pipe sessions. Only
+explicit errors (stream 2) came back. This made PrivescCheck appear broken over reverse
+and bind shell sessions: only the `ObjectSid` error was returned, none of the audit tables.
+
+**Fix:** Changed all target payload command execution loops from `2>&1|Out-String` to
+`*>&1|Out-String`. The `*>&1` redirector captures all output streams (2=error, 3=warning,
+6=information/Write-Host) into the success stream before `Out-String` processes them.
+
+**Scope — all payload types fixed:**
+- `New-PayloadScript` reverse shell target loop (pipe client mode)
+- `New-PayloadScript` bind shell target loop (pipe server mode)
+- GetSystem server scripts (both `Detach` and standard variants)
+- WinRM/DCOM delivery server scripts
+- Migrate inline session loop
+
+**Intentionally left unchanged:** local shell fall-through (`Write-Host` goes directly to
+the operator console — adding `*>&1` there would double-print every line), `net use IPC$`
+error suppression (operator-side), and `.Replace('2>&1 ',...)` cmd-escape string literals.
+
+**Confirmed working:** PrivescCheck full audit output now returns correctly over both reverse
+shell and bind shell sessions on domain-joined machines. Applies to any tool using Write-Host.
+Note: requires re-establishing the session — existing sessions carry the old payload.
+
+---
+
 ## [2026-06-06p] fix(session): Kerb auto-invokes Invoke-Kirby; SessionHunter/LocalAdminAccess use Send-Module
 
 **Problem:** `Kerb` pipe-session handler loaded the `dumper` module then hit `continue` — the
