@@ -542,7 +542,6 @@ a session where you have local admin.
 ### Bootstrap 3-Liner — Current Build (GitHub path)
 These are the live values for the current DLL on GitHub Releases. Update this block whenever the DLL is rebuilt and re-uploaded:
 
-> **Warning: GitHub Releases not yet updated** — eXciQ2Lokx.dll (old build) still on Releases. Upload cE6zHaZfi.dll first.
 
 
 ```powershell
