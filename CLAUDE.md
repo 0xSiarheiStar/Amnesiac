@@ -622,6 +622,7 @@ a session where you have local admin.
 | **Tool cache fallback chain** | RESOLVED | `Fetch-ToolFromGitHub` wired into `Send-Module`, local shell keyword dispatch, and `load <name>`. On cache miss, fetches from GitHub operator-side and caches. |
 | **`serve` diskmode conflict** | RESOLVED (Plan 5) | `serve` now roots `SimpleFileServer` at `$global:AmnesiacRoot` (project root), serving `Tools\` and `Amnesiac_ShellReady.ps1` directly — no GitHub download, no disk write. |
 | **`Find-LocalAdminAccess` helper functions missing in Start-Job** | RESOLVED | `Get-ADComputers` and `FindDomainTrusts` are now captured in the parent process and passed as arguments; all three functions registered in the child process before `Find-LocalAdminAccess` runs. |
+| **CS 3-minute HTTP delay in bootstrap** | TODO | CrowdStrike scrutinises HTTP connections from new processes within the first 3 minutes. The bootstrap 3-liner currently downloads immediately after process creation. Add a jittered pre-download sleep to the `bootstrap` command output as a recommended step: `Start-Sleep -Seconds (Get-Random -Min 180 -Max 300)` before line 1. Show it as an optional line in the bootstrap printout, not hardcoded — operator decides whether their delivery window allows the wait. |
 
 ---
 

