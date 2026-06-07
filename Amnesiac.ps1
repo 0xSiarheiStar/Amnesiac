@@ -747,22 +747,21 @@ function Amnesiac {
     Initialize-ToolCache
     Show-OpsecBanner
 
-    if ($Detached -and $global:IP) {
-        $_autoRoot = $global:AmnesiacRoot
-        $_autoSrvScript = $FileServerScript + "`nFile-Server -Port 8080 -Path '$_autoRoot'"
-        $_autoBytes     = [System.Text.Encoding]::Unicode.GetBytes($_autoSrvScript)
-        $_autoEnc       = [Convert]::ToBase64String($_autoBytes)
-        $global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
-            -ArgumentList "-ep Bypass", "-NoProfile", "-enc $_autoEnc" -PassThru
-        New-NetFirewallRule -Name "AmnesiacServe8080" -DisplayName "Amnesiac HTTP 8080" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 8080 -ErrorAction SilentlyContinue | Out-Null
-        $_autoPid = $global:FileServerProcess.Id
-        $_autoParentPid = $PID
-        if (Test-Path (Join-Path $_autoRoot "Tools")) { $global:ServerURL = "http://$($global:IP)`:8080/Tools" }
-        $_autoMon = "while(`$true){Start-Sleep -Seconds 5;if(-not(Get-Process -Id $_autoParentPid -ErrorAction SilentlyContinue)){Stop-Process -Id $_autoPid -ErrorAction SilentlyContinue;break}}"
-        $_autoMonEnc = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($_autoMon))
-        Start-Process powershell.exe -ArgumentList "-WindowStyle Hidden -ep Bypass -enc $_autoMonEnc" -WindowStyle Hidden
-        Write-Host " [+] serve auto-started (PID $_autoPid) — http://$($global:IP)`:8080/" -ForegroundColor Green
-    }
+    $_autoRoot = $global:AmnesiacRoot
+    $_autoIP   = if ($global:IP) { $global:IP } else { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName }
+    $_autoSrvScript = $FileServerScript + "`nFile-Server -Port 8080 -Path '$_autoRoot'"
+    $_autoBytes     = [System.Text.Encoding]::Unicode.GetBytes($_autoSrvScript)
+    $_autoEnc       = [Convert]::ToBase64String($_autoBytes)
+    $global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
+        -ArgumentList "-ep Bypass", "-NoProfile", "-enc $_autoEnc" -PassThru
+    New-NetFirewallRule -Name "AmnesiacServe8080" -DisplayName "Amnesiac HTTP 8080" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 8080 -ErrorAction SilentlyContinue | Out-Null
+    $_autoPid = $global:FileServerProcess.Id
+    $_autoParentPid = $PID
+    if (Test-Path (Join-Path $_autoRoot "Tools")) { $global:ServerURL = "http://$_autoIP`:8080/Tools" }
+    $_autoMon = "while(`$true){Start-Sleep -Seconds 5;if(-not(Get-Process -Id $_autoParentPid -ErrorAction SilentlyContinue)){Stop-Process -Id $_autoPid -ErrorAction SilentlyContinue;break}}"
+    $_autoMonEnc = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($_autoMon))
+    Start-Process powershell.exe -ArgumentList "-WindowStyle Hidden -ep Bypass -enc $_autoMonEnc" -WindowStyle Hidden
+    Write-Host " [+] serve auto-started (PID $_autoPid) — http://$_autoIP`:8080/" -ForegroundColor Green
 
 	if(!$ScanMode){$global:Message = " [+] Welcome to Amnesiac. Type 'help' to list/hide available commands"}
 	
