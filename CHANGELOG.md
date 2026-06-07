@@ -5,6 +5,34 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-07b] fix(evasion): strip bypass code from serve-delivered pipe script
+
+**Problem:** After switching the cradle to DLL-load (no AMSI signatures in command line), process
+was still being killed on CrowdStrike-protected target ("cmd got killed"). Root cause: CrowdStrike's
+network inspection driver examines HTTP response bodies independently of AMSI. The pipe_xxx.ps1
+served over HTTP contained plaintext ETW/SBL/AMSI bypass code (XOR-encoded for AMSI but visible
+to CS network inspection). CS killed the process when it saw the bypass patterns in the HTTP response.
+
+**Root cause:** Three layers of bypass code were inside the gzip+base64 pipe script:
+1. Outer wrapper: second AMSI bypass via `[char[]]` or XOR pattern
+2. Inner decoded script: ETW (`PSEtwLogProvider` access), SBL (`checkScriptBlockLoggingCache`),
+   and AMSI (`amsiInitFailed`) reflection — all XOR-encoded but structurally recognizable by CS
+
+All three were completely redundant because the DLL-load cradle pre-patches AMSI before
+`iex(downloadstring)` runs. They existed only as detection bait.
+
+**Fix:** When `$AmnesiacLoaderB64` is embedded (DLL available), the pipe file written to disk
+for serve delivery is now a "lite" version built with `Amsi='none'`, `Etw='none'`, `Sbl=$false`.
+The lite pipe script contains only: gzip decompress wrapper + jitter + named pipe server loop.
+Zero bypass-related strings anywhere in the HTTP response body.
+
+- Option [1] (inline paste) still receives the full-bypass payload — it needs it since no DLL
+  pre-patches AMSI in that path
+- Option [2] (serve cradle) now serves the lite pipe script: ~44% smaller, zero bypass signatures
+- `payload amsi none` and `payload etw none` added as valid commands for manual control
+
+---
+
 ## [2026-06-07] fix(cradle): DLL-based AMSI bypass in serve/sharprdp cradle — no plaintext signatures
 
 **Problem:** Serve cradle option [2] produced "Access is denied." on EDR-protected targets. The
