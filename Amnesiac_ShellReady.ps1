@@ -3406,12 +3406,16 @@ function InteractWithPipeSession{
 			$remotePath = $remotePath.Trim()
 		} else {
 			$global:Message += " [-] The operation timed out [$computerNameOnly]`n"
-			#$runspace.Close()
+			$psCmd.Stop()
+			$runspace.Close()
+			$runspace.Dispose()
+			$psCmd.Dispose()
 			break
 		}
 
 		$runspace.Close()
-		
+		$psCmd.Dispose()
+
 		if($ExecuteExitCommand){
 			$sw.WriteLine("exit")
 			$sw.Flush()
@@ -5269,11 +5273,15 @@ function InteractWithPipeSession{
 			Write-Output ""
 		} else {
 			$global:Message += " [-] The operation timed out [$computerNameOnly]`n"
-			#$runspace.Close()
+			$psCmd.Stop()
+			$runspace.Close()
+			$runspace.Dispose()
+			$psCmd.Dispose()
 			break
 		}
 
 		$runspace.Close()
+		$psCmd.Dispose()
 
 	}
 	} finally {
