@@ -447,10 +447,9 @@ function Send-Module {
     )
 
     if (-not $global:ToolCache.ContainsKey($ToolName)) {
-        Write-Output " [-] Module '$ToolName' not in cache. Options:"
-        Write-Output "     1. Add to Tools\ and run: modules reload"
-        Write-Output "     2. Start operator HTTP server: serve"
-        return $false
+        if (-not (Fetch-ToolFromGitHub -ToolName $ToolName)) {
+            return $false
+        }
     }
 
     $code      = $global:ToolCache[$ToolName]
