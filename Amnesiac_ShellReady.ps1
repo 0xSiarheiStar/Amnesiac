@@ -3373,24 +3373,24 @@ function InteractWithPipeSession{
 		$runspace.Open()
 
 		$scriptBlock = {
-			param ($sr, $sw)
-			
+			param ($sr, $sw, $endMarker)
+
 			# Write the command to the StreamWriter
 			$sw.WriteLine("prompt | Out-String")
 			$sw.Flush()
-			
+
 			# Read the response from the StreamReader
 			$output = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq $global:EndMarker) {
+				if ($line -eq $endMarker) {
 					return $output
 				}
 				$output += "$line`n"
 			}
 		}
 
-		$psCmd = [powershell]::Create().AddScript($scriptBlock).AddArgument($sr).AddArgument($sw)
+		$psCmd = [powershell]::Create().AddScript($scriptBlock).AddArgument($sr).AddArgument($sw).AddArgument($_em)
 		$psCmd.Runspace = $runspace
 		$handle = $psCmd.BeginInvoke()
 
@@ -5242,18 +5242,18 @@ function InteractWithPipeSession{
 		$runspace.Open()
 
 		$scriptBlock = {
-			param ($sr)
+			param ($sr, $endMarker)
 			$output = ""
 			while ($true) {
 				$line = $sr.ReadLine()
-				if ($line -eq $global:EndMarker) {
+				if ($line -eq $endMarker) {
 					return $output
 				}
 				$output += "$line`n"
 			}
 		}
 
-		$psCmd = [powershell]::Create().AddScript($scriptBlock).AddArgument($sr)
+		$psCmd = [powershell]::Create().AddScript($scriptBlock).AddArgument($sr).AddArgument($_em)
 		$psCmd.Runspace = $runspace
 		$handle = $psCmd.BeginInvoke()
 
