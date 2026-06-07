@@ -468,6 +468,8 @@ function Send-Module {
     $code      = $global:ToolCache[$ToolName]
     $codeBytes = [System.Text.Encoding]::UTF8.GetBytes($code)
     $chunkSize = 4096
+    $totalChunks = [Math]::Ceiling($codeBytes.Length / $chunkSize)
+    Write-Host " [*] Uploading '$ToolName' to target ($([Math]::Round($codeBytes.Length/1KB,0)) KB, $totalChunks chunks)..." -ForegroundColor Cyan
 
     $begin = "__MODULE_BEGIN__:${ToolName}:$($codeBytes.Length)"
     if ($SessionKey) { $begin = Protect-PipeMessage -PlainText $begin -Key $SessionKey }

