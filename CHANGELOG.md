@@ -5,6 +5,31 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-06r] fix(ux): remove unusable Full command option from stealth payload output
+
+**Problem:** After selecting stealth format, a sub-prompt offered two options:
+`[1] Inline PS` (paste into existing session) and `[2] Full command` (wrapped in a
+launcher: `powershell.exe -nop -enc <b64>`, wmic, schtask, or com). Option 2 always
+failed — the stealth payload embeds AMSI+ETW+SBL bypass code plus a gzip+obfuscated pipe
+script, making the total length several KB. Base64-encoding it for `powershell.exe -enc`
+routinely exceeds cmd.exe's ~8KB command-line limit, silently truncating the payload on
+delivery. WMI and schtask wrappers hit the same wall.
+
+**Fix:** Removed the `Get-PayloadLauncher` call and the `[1]/[2]` sub-prompt from both the
+reverse shell and bind shell stealth branches. The inline PS payload is now auto-copied to
+clipboard immediately with a note: `[*] Stealth payload copied to clipboard (inline PS only
+-- too large for command-line launchers; use b64/gzip for standalone delivery)`.
+
+The SharpRDP cradle setup (pipe file write to disk, `$global:LastSharpRDPCradleFile`,
+`$global:LastSharpRDPB64`) is preserved — SharpRDP uses a download cradle (~120 chars),
+not the full payload as a command-line argument.
+
+**Guidance:** Stealth is for paste-into-existing-PS-session delivery (no command-line length
+limit). For standalone launcher delivery (WMI, schtasks, registry run key), use `b64` or
+`gzip` — both already output a launcher-ready command directly without a sub-prompt.
+
+---
+
 ## [2026-06-06q] fix(session): capture Write-Host output in all pipe session command loops via *>&1
 
 **Problem:** All target payload command loops used `2>&1|Out-String`, which only redirects
