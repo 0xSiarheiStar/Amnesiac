@@ -5,6 +5,36 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-06s] fix(serve): remove Tools\ blocker + auto-start serve on -NoDomain init
+
+**Problem:** `serve` (main menu and local shell) hard-blocked with `Cannot start server` when
+`Tools\` wasn't found under `$global:AmnesiacRoot`. In Scenario 2, `$global:AmnesiacRoot`
+resolves to `$PWD` (e.g. `C:\Users\robb.stark`) via the `iex` load path — no `Tools\` there,
+so serve was completely unusable. Even in Scenario 1, missing `Tools\` blocked serve from
+hosting pipe files for the download cradle, forcing the operator to create the directory first.
+
+In Scenario 1 (`-NoDomain`/`-Detached`), the operator had to type `serve` manually every
+session despite the operator machine being unmonitored and serve being needed immediately for
+payload delivery.
+
+**Fix — Tools\ blocker removed:**
+- Main menu `serve` handler: `Tools\` check downgraded from hard block to warning; serve
+  starts regardless. `$global:ServerURL` and the Tools line in the status message only shown
+  when `Tools\` actually exists.
+- Local shell `serve` handler: if/else restructured — warning prints if `Tools\` missing, then
+  serve starts unconditionally. Tools URL line gated on `Test-Path Tools\`.
+
+**Fix — auto-start serve for Scenario 1:**
+- At Amnesiac init, if `-NoDomain`/`-Detached` and `-IP`/`-HostIP` are both set, serve is
+  started automatically on port 8080 with the same monitoring subprocess (kills the file server
+  when the Amnesiac process exits). `$global:ServerURL` set to local HTTP URL if `Tools\`
+  present. Status line printed after OPSEC banner.
+- Not triggered for Scenario 2 (`$Detached` false) — no opsec risk on EDR-monitored machines.
+
+**Files:** `Amnesiac.ps1`, `Amnesiac_ShellReady.ps1`
+
+---
+
 ## [2026-06-06r] fix(ux): replace broken stealth Full command with serve-based download cradle
 
 **Problem:** After selecting stealth format, option `[2] Full command` wrapped the entire
