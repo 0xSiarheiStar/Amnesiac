@@ -5,6 +5,41 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-07g] fix(output): correct Write-Host param names + streaming list to survive mid-run crashes
+
+**Problem (continued from [2026-06-07f]):** PrivescCheck (and any tool using `-ForegroundColor` /
+`-BackgroundColor`) still produced no output via the pipe session.
+
+**Root causes (two bugs):**
+
+1. **Wrong Write-Host override parameter names.** The override defined `$whO`, `$whFC`, etc.
+   These don't match Write-Host's real parameter names (`Object`, `ForegroundColor`, etc.).
+   When PrivescCheck calls `Write-Host "text" -ForegroundColor Cyan`, PowerShell tries to bind
+   `-ForegroundColor` to a parameter named `ForegroundColor` — but the override's parameter is
+   named `whFC`. Even with `ValueFromRemainingArguments=$true`, named args that don't bind can
+   cause silent mis-binding: `-ForegroundColor Cyan` ends up in the catch-all `$whO` alongside
+   the actual message text, producing garbled output or silently failing.
+
+2. **`Out-String` loses pre-crash output on terminating exceptions.** PrivescCheck calls some
+   service/SID check with a null ObjectSid — `[ValidateNotNullOrEmpty()]` throws a
+   `ParameterBindingValidationException`. This is terminating and propagates through the pipeline.
+   When `$vRes = . (...) *>&1 | Out-String` is aborted mid-run, `Out-String`'s `EndProcessing()`
+   is never called — its internal string builder is discarded and `$vRes` ends up null. Any
+   Write-Host output already produced before the crash is permanently lost.
+
+**Fix:**
+
+1. Corrected `$whFuncDef` to use proper parameter names matching the real Write-Host cmdlet:
+   `$Object` (Position=0, ValueFromRemainingArguments), `$NoNewline`, `$ForegroundColor`,
+   `$BackgroundColor`, `$Separator`. `-ForegroundColor Cyan` now binds to `$ForegroundColor`
+   (ignored), message text binds to `$Object`, and `Write-Output $Object` captures it on stream 1.
+
+2. Replaced `$vRes = . (...) *>&1 | Out-String` in both client and server loops with a streaming
+   `[System.Collections.Generic.List[string]]` collector. Each output object is committed to the
+   list individually via `% { $vCl.Add("$_") }` as it arrives. When the ObjectSid exception
+   terminates the pipeline, `$vCl` retains every line produced before the crash. The catch block
+   appends the exception message to the same list. Both partial output and the error are returned.
+
 ## [2026-06-07f] fix(output): capture Write-Host output in CLR Runspace (InjectUnmanagedPS path)
 
 **Problem:** When a pipe session is delivered via the Bootstrap CMD payload (option [2]), tools that

