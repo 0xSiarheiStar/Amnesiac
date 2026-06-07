@@ -460,9 +460,10 @@ function Send-Module {
     $gzs = [System.IO.Compression.GzipStream]::new($ms, [System.IO.Compression.CompressionMode]::Compress)
     $gzs.Write($codeBytes, 0, $codeBytes.Length)
     $gzs.Close()
-    $b64 = [Convert]::ToBase64String($ms.ToArray())
+    $gzBytes = $ms.ToArray()
+    $b64 = [Convert]::ToBase64String($gzBytes)
 
-    Write-Host " [*] Uploading '$ToolName' to target ($([Math]::Round($codeBytes.Length/1KB,0)) KB raw, $([Math]::Round($ms.Length/1KB,0)) KB compressed)..."
+    Write-Host " [*] Uploading '$ToolName' to target ($([Math]::Round($codeBytes.Length/1KB,0)) KB raw, $([Math]::Round($gzBytes.Length/1KB,0)) KB compressed)..."
 
     # Send as a single iex one-liner through the normal command path.
     # The target's .(scriptblock::Create($cmd)) runs this in scope L so all
@@ -3460,7 +3461,7 @@ function InteractWithPipeSession{
 			"ClearLogs", "ClearHistory"
 		)
 
-  		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*" -OR $command -like "KrbRelayUp*"){
+  		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*" -OR $command -like "KrbRelayUp*" -OR $command -like "PrivescCheck" -OR $command -like "PowerUp" -OR $command -like "GodPotato" -OR $command -like "Invoke-PrivescCheck*" -OR $command -like "Invoke-AllChecks*"){
 			$global:RestoreTimeout = $True
 			$timeoutSeconds = 300
 		}

