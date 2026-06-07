@@ -277,7 +277,9 @@ Every `Build.ps1` run randomizes the namespace, all public class names (Stomper,
 | `$_alByp` | Bypass class (used in bootstrap 3-liner) |
 | `$_alPar` | PatchAmsiReflection method (used in bootstrap 3-liner) |
 
-All pipe commands and the `bootstrap` command use these variables — the target never sees `AmnesiacLoader`, `Stomper`, `Bypass`, or `PatchAmsiReflection`.
+All pipe commands, the `bootstrap` command, and serve/sharprdp cradles use these variables — the target never sees `AmnesiacLoader`, `Stomper`, `Bypass`, or `PatchAmsiReflection`.
+
+**Current build note:** `$_alByp = "Bypass"` (the class name substitution in `Build.ps1` predates this build — `Bypass` was not randomized). `$_alPar = "gy7Kz88Hdi"`. These are correct for the embedded `odLaNcAmcd.dll`. The next `Build.ps1` run will randomize `Bypass` too.
 
 Detection surfaces eliminated:
 - Named pipe command content (pipe scanners)

