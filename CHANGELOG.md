@@ -5,6 +5,47 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-07f] fix(output): capture Write-Host output in CLR Runspace (InjectUnmanagedPS path)
+
+**Problem:** When a pipe session is delivered via the Bootstrap CMD payload (option [2]), tools that
+use `Write-Host` for output — most notably `Invoke-PrivescCheck` (PrivescCheck) — produce only
+their error/exception messages and none of their normal audit table output. Only the `ObjectSid`
+null-collection error (stream 2) was visible; no privilege escalation findings appeared.
+
+**Root cause:** The Bootstrap CMD option runs the pipe loop script via `InjectUnmanagedPS`, which
+creates a CLR Runspace with `RunspaceFactory.CreateRunspace()` — no PSHost attached. In PS 5.1,
+`Write-Host` internally routes to the Information stream (stream 6) and then to `PSHost.UI`. With
+no PSHost in a bare CLR Runspace, `Write-Host` silently discards all output. `*>&1|Out-String`
+in the command loop cannot merge what was never emitted to a stream. The error line appeared
+because PrivescCheck's `ObjectSid` validation failure throws an exception (stream 2), which IS
+captured by the `catch` block — the audit table output that uses `Write-Host` was silently dropped.
+
+Option [1] (inline PowerShell) ran in a real `powershell.exe` process which has a full PSHost,
+so `Write-Host` worked. Option [2] did not. Same symptom as the `2>&1` → `*>&1` fix in
+[2026-06-06q] which fixed option [1] — this fixes option [2].
+
+**Fix:** Inject a `function global:Write-Host` override at the top of all pipe scripts generated
+by `New-PayloadScript`. The override redirects `Write-Host` calls to `Write-Output` (stream 1),
+bypassing the Information stream / PSHost machinery entirely:
+
+```powershell
+function global:Write-Host {
+    param([Parameter(ValueFromPipeline,ValueFromRemainingArguments)][Object]$Object,
+          [switch]$NoNewline, [ConsoleColor]$ForegroundColor, [ConsoleColor]$BackgroundColor,
+          [string]$Separator)
+    if ($null -ne $Object) {
+        if ($Object -is [array]) { Write-Output ($Object -join ' ') }
+        else { Write-Output $Object }
+    }
+}
+```
+
+`$whOverride` is added to `New-PayloadScript` in both `Amnesiac.ps1` and
+`Amnesiac_ShellReady.ps1`, injected into `$rawScript` before `$pipeSetup`. All generated pipe
+scripts (full config for option [1], lite config for option [2]) include the override. No
+behavioral change for option [1] — `Write-Output` on stream 1 is captured identically to the
+`*>&1` merge that was already in place.
+
 ## [2026-06-07e] feat(evasion): Bootstrap CMD delivery — DLL AMSI patch + in-process Runspace replaces scriptblock cradle
 
 **Problem:** Option [2] iwr+scriptblock cradle (`powershell -nop -ep bypass -w hidden -c "&([scriptblock]::Create(...))"`)
