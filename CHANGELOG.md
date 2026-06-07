@@ -24,27 +24,30 @@ Option [1] (inline PowerShell) ran in a real `powershell.exe` process which has 
 so `Write-Host` worked. Option [2] did not. Same symptom as the `2>&1` → `*>&1` fix in
 [2026-06-06q] which fixed option [1] — this fixes option [2].
 
-**Fix:** Inject a `function global:Write-Host` override at the top of all pipe scripts generated
-by `New-PayloadScript`. The override redirects `Write-Host` calls to `Write-Output` (stream 1),
-bypassing the Information stream / PSHost machinery entirely:
+**Fix:** Store a Write-Host override as a variable (`$vWHO`) in the generated pipe script, then
+prepend it to EVERY command scriptblock at execution time:
 
 ```powershell
-function global:Write-Host {
-    param([Parameter(ValueFromPipeline,ValueFromRemainingArguments)][Object]$Object,
-          [switch]$NoNewline, [ConsoleColor]$ForegroundColor, [ConsoleColor]$BackgroundColor,
-          [string]$Separator)
-    if ($null -ne $Object) {
-        if ($Object -is [array]) { Write-Output ($Object -join ' ') }
-        else { Write-Output $Object }
-    }
-}
+# At script level — $vWHO holds the override function definition as a string
+$<random> = 'function Write-Host{param(...)[Object]$whO,...);if($null -ne $whO){Write-Output $whO}}'
+
+# Per command in the loop — override is in the SAME scriptblock as the command
+$vRes = . ([scriptblock]::Create($<random> + ';' + $vCmd)) *>&1 | Out-String
 ```
 
-`$whOverride` is added to `New-PayloadScript` in both `Amnesiac.ps1` and
-`Amnesiac_ShellReady.ps1`, injected into `$rawScript` before `$pipeSetup`. All generated pipe
-scripts (full config for option [1], lite config for option [2]) include the override. No
-behavioral change for option [1] — `Write-Output` on stream 1 is captured identically to the
-`*>&1` merge that was already in place.
+This guarantees Write-Host is defined in the exact same scriptblock scope as the executing command
+— no scope chain ambiguity. When a tool like `Invoke-PrivescCheck` calls `Write-Host`, function
+lookup finds the local override first, emits to stream 1, and `*>&1|Out-String` captures it.
+
+A `function global:Write-Host` preamble approach was attempted first but failed in the CLR Runspace
+context — the `global:` scope is not reliably in the scope chain when functions call `Write-Host`
+inside a bare Runspace. The inline scriptblock injection is the reliable fix.
+
+`$whOverride` is generated in `New-PayloadScript` in both `Amnesiac.ps1` and
+`Amnesiac_ShellReady.ps1`, injected into `$rawScript` before `$pipeSetup`. Both client and server
+loop command execution lines use `[scriptblock]::Create($vWHO+';'+$vCmd)` instead of
+`[scriptblock]::Create($vCmd)`. No behavioral change for option [1] when running in a real
+`powershell.exe` process — `Write-Output` on stream 1 is captured identically to before.
 
 ## [2026-06-07e] feat(evasion): Bootstrap CMD delivery — DLL AMSI patch + in-process Runspace replaces scriptblock cradle
 
