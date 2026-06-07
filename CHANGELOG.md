@@ -5,6 +5,27 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-07h] fix(output): add Out-String -Stream to restore PS object formatting
+
+**Problem:** `Get-Domain` returned `north.sevenkingdoms.local` (bare string) instead of the
+full property table; `Get-DomainUser` returned `@{logoncount=21; ...}` (PSCustomObject.ToString())
+instead of formatted property lists. Commands that output plain strings worked; commands that
+return PS objects were broken.
+
+**Root cause:** The streaming list fix in [2026-06-07g] replaced `Out-String` with
+`% { $vCl.Add("$_") }`. The `"$_"` converts each pipeline object to a string via `.ToString()`.
+For plain strings that is a no-op. For PSCustomObjects/hashtables, `.ToString()` produces the
+`@{key=value}` representation — it bypasses the PowerShell formatting engine entirely.
+
+**Fix:** Insert `Out-String -Stream` between `*>&1` and the list-fill loop:
+```
+*>&1 | Out-String -Stream | % { $vCl.Add("$_") }
+```
+`Out-String -Stream` runs each object through PS's formatting engine (same as `Out-String` did)
+but emits one string per formatted line instead of accumulating everything into one blob.
+Each formatted string lands in `$vCl` immediately — the streaming/pre-crash-survival property
+from [2026-06-07g] is preserved. Write-Host strings (already strings) pass through unchanged.
+
 ## [2026-06-07g] fix(output): correct Write-Host param names + streaming list to survive mid-run crashes
 
 **Problem (continued from [2026-06-07f]):** PrivescCheck (and any tool using `-ForegroundColor` /

