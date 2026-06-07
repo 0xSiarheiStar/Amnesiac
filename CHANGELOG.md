@@ -5,105 +5,158 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
-## [2026-06-07h] fix(output): add Out-String -Stream to restore PS object formatting
+## [2026-06-07f-h] fix(pipe-loop): Write-Host capture + pre-crash output survival in CLR Runspace
 
-**Problem:** `Get-Domain` returned `north.sevenkingdoms.local` (bare string) instead of the
-full property table; `Get-DomainUser` returned `@{logoncount=21; ...}` (PSCustomObject.ToString())
-instead of formatted property lists. Commands that output plain strings worked; commands that
-return PS objects were broken.
+**Symptoms:**
+- `PrivescCheck` / `Invoke-PrivescCheck` returned only the ObjectSid validation error — no audit
+  table output, no findings, nothing before the crash line
+- PowerView commands that return PS objects (`Get-Domain`, `Get-DomainUser`) returned
+  `@{logoncount=21; samaccountname=Administrator; ...}` instead of formatted property tables
+- Commands that return plain strings (`whoami`, `hostname`, etc.) worked fine throughout
+- Everything worked normally in local shell (option [5]); only pipe sessions were affected
 
-**Root cause:** The streaming list fix in [2026-06-07g] replaced `Out-String` with
-`% { $vCl.Add("$_") }`. The `"$_"` converts each pipeline object to a string via `.ToString()`.
-For plain strings that is a no-op. For PSCustomObjects/hashtables, `.ToString()` produces the
-`@{key=value}` representation — it bypasses the PowerShell formatting engine entirely.
+**Environment:** Option [2] (Bootstrap CMD) delivers the pipe script via `InjectUnmanagedPS`
+(AmnesiacLoader), which creates a bare CLR Runspace using `RunspaceFactory.CreateRunspace()` with
+no PSHost attached. Option [1] (PowerShell) runs in a real `powershell.exe` process which has a
+full PSHost — that's why option [1] was unaffected.
 
-**Fix:** Insert `Out-String -Stream` between `*>&1` and the list-fill loop:
-```
-*>&1 | Out-String -Stream | % { $vCl.Add("$_") }
-```
-`Out-String -Stream` runs each object through PS's formatting engine (same as `Out-String` did)
-but emits one string per formatted line instead of accumulating everything into one blob.
-Each formatted string lands in `$vCl` immediately — the streaming/pre-crash-survival property
-from [2026-06-07g] is preserved. Write-Host strings (already strings) pass through unchanged.
+---
 
-## [2026-06-07g] fix(output): correct Write-Host param names + streaming list to survive mid-run crashes
+### Root cause 1 — Write-Host discarded in bare CLR Runspace
 
-**Problem (continued from [2026-06-07f]):** PrivescCheck (and any tool using `-ForegroundColor` /
-`-BackgroundColor`) still produced no output via the pipe session.
+In PS 5.1, `Write-Host` internally creates an `InformationRecord` and routes it to both stream 6
+(Information) and `PSHost.UI.WriteInformation()`. In a bare CLR Runspace with no PSHost attached,
+the `PSHost.UI` call fails silently — the `InformationRecord` is never dispatched to any stream.
+`*>&1` captures nothing because nothing was ever emitted. This is why PrivescCheck's audit tables
+(which use `Write-Host` extensively) were invisible while the ObjectSid exception (thrown from the
+`catch` block, so it IS routed over the pipe) was the only output.
 
-**Root causes (two bugs):**
-
-1. **Wrong Write-Host override parameter names.** The override defined `$whO`, `$whFC`, etc.
-   These don't match Write-Host's real parameter names (`Object`, `ForegroundColor`, etc.).
-   When PrivescCheck calls `Write-Host "text" -ForegroundColor Cyan`, PowerShell tries to bind
-   `-ForegroundColor` to a parameter named `ForegroundColor` — but the override's parameter is
-   named `whFC`. Even with `ValueFromRemainingArguments=$true`, named args that don't bind can
-   cause silent mis-binding: `-ForegroundColor Cyan` ends up in the catch-all `$whO` alongside
-   the actual message text, producing garbled output or silently failing.
-
-2. **`Out-String` loses pre-crash output on terminating exceptions.** PrivescCheck calls some
-   service/SID check with a null ObjectSid — `[ValidateNotNullOrEmpty()]` throws a
-   `ParameterBindingValidationException`. This is terminating and propagates through the pipeline.
-   When `$vRes = . (...) *>&1 | Out-String` is aborted mid-run, `Out-String`'s `EndProcessing()`
-   is never called — its internal string builder is discarded and `$vRes` ends up null. Any
-   Write-Host output already produced before the crash is permanently lost.
-
-**Fix:**
-
-1. Corrected `$whFuncDef` to use proper parameter names matching the real Write-Host cmdlet:
-   `$Object` (Position=0, ValueFromRemainingArguments), `$NoNewline`, `$ForegroundColor`,
-   `$BackgroundColor`, `$Separator`. `-ForegroundColor Cyan` now binds to `$ForegroundColor`
-   (ignored), message text binds to `$Object`, and `Write-Output $Object` captures it on stream 1.
-
-2. Replaced `$vRes = . (...) *>&1 | Out-String` in both client and server loops with a streaming
-   `[System.Collections.Generic.List[string]]` collector. Each output object is committed to the
-   list individually via `% { $vCl.Add("$_") }` as it arrives. When the ObjectSid exception
-   terminates the pipeline, `$vCl` retains every line produced before the crash. The catch block
-   appends the exception message to the same list. Both partial output and the error are returned.
-
-## [2026-06-07f] fix(output): capture Write-Host output in CLR Runspace (InjectUnmanagedPS path)
-
-**Problem:** When a pipe session is delivered via the Bootstrap CMD payload (option [2]), tools that
-use `Write-Host` for output — most notably `Invoke-PrivescCheck` (PrivescCheck) — produce only
-their error/exception messages and none of their normal audit table output. Only the `ObjectSid`
-null-collection error (stream 2) was visible; no privilege escalation findings appeared.
-
-**Root cause:** The Bootstrap CMD option runs the pipe loop script via `InjectUnmanagedPS`, which
-creates a CLR Runspace with `RunspaceFactory.CreateRunspace()` — no PSHost attached. In PS 5.1,
-`Write-Host` internally routes to the Information stream (stream 6) and then to `PSHost.UI`. With
-no PSHost in a bare CLR Runspace, `Write-Host` silently discards all output. `*>&1|Out-String`
-in the command loop cannot merge what was never emitted to a stream. The error line appeared
-because PrivescCheck's `ObjectSid` validation failure throws an exception (stream 2), which IS
-captured by the `catch` block — the audit table output that uses `Write-Host` was silently dropped.
-
-Option [1] (inline PowerShell) ran in a real `powershell.exe` process which has a full PSHost,
-so `Write-Host` worked. Option [2] did not. Same symptom as the `2>&1` → `*>&1` fix in
-[2026-06-06q] which fixed option [1] — this fixes option [2].
-
-**Fix:** Store a Write-Host override as a variable (`$vWHO`) in the generated pipe script, then
-prepend it to EVERY command scriptblock at execution time:
+**Fix:** A `Write-Host` override function is stored as a string in the generated pipe script
+(`$vWHO` variable, `$whOverride` assignment) and prepended to EVERY command scriptblock at
+execution time. The override redirects all `Write-Host` calls to `Write-Output` (stream 1), which
+works in any Runspace regardless of PSHost availability:
 
 ```powershell
-# At script level — $vWHO holds the override function definition as a string
-$<random> = 'function Write-Host{param(...)[Object]$whO,...);if($null -ne $whO){Write-Output $whO}}'
+# Embedded in $rawScript at script level:
+$<rand> = 'function Write-Host { ... Write-Output $Object ... }'
 
-# Per command in the loop — override is in the SAME scriptblock as the command
-$vRes = . ([scriptblock]::Create($<random> + ';' + $vCmd)) *>&1 | Out-String
+# In the command loop — override always in the same scriptblock scope as the command:
+. ([scriptblock]::Create($<rand> + ';' + $vCmd))
 ```
 
-This guarantees Write-Host is defined in the exact same scriptblock scope as the executing command
-— no scope chain ambiguity. When a tool like `Invoke-PrivescCheck` calls `Write-Host`, function
-lookup finds the local override first, emits to stream 1, and `*>&1|Out-String` captures it.
+A `function global:Write-Host` preamble was attempted first and failed — `global:` scope is not
+reliably in the dynamic scope chain for nested function calls inside a bare CLR Runspace.
+Prepending per-command (same scriptblock) is the reliable fix.
 
-A `function global:Write-Host` preamble approach was attempted first but failed in the CLR Runspace
-context — the `global:` scope is not reliably in the scope chain when functions call `Write-Host`
-inside a bare Runspace. The inline scriptblock injection is the reliable fix.
+---
 
-`$whOverride` is generated in `New-PayloadScript` in both `Amnesiac.ps1` and
-`Amnesiac_ShellReady.ps1`, injected into `$rawScript` before `$pipeSetup`. Both client and server
-loop command execution lines use `[scriptblock]::Create($vWHO+';'+$vCmd)` instead of
-`[scriptblock]::Create($vCmd)`. No behavioral change for option [1] when running in a real
-`powershell.exe` process — `Write-Output` on stream 1 is captured identically to before.
+### Root cause 2 — Write-Host override had wrong parameter names
+
+The initial override used `$whO`, `$whFC`, `$whBC` etc. as parameter names. These do NOT match
+Write-Host's real parameter names (`Object`, `ForegroundColor`, `BackgroundColor`). When any tool
+calls `Write-Host "text" -ForegroundColor Cyan`, PowerShell tries to bind `-ForegroundColor` to a
+parameter named `ForegroundColor` — it cannot find `whFC` and the binding either fails silently or
+absorbs the colour value into `$whO` alongside the message text via `ValueFromRemainingArguments`,
+producing garbled output.
+
+**Fix:** `$whFuncDef` now uses parameter names that exactly match the real Write-Host cmdlet:
+
+```powershell
+'function Write-Host{
+    param(
+        [Parameter(Position=0,ValueFromRemainingArguments=$true)]$Object,
+        [switch]$NoNewline,
+        $ForegroundColor,
+        $BackgroundColor,
+        [string]$Separator
+    )
+    if($null -ne $Object){ Write-Output $Object }
+}'
+```
+
+`-ForegroundColor Cyan` binds correctly to `$ForegroundColor` (ignored). The message text binds
+to `$Object` via position 0. `Write-Output $Object` puts it on stream 1 for capture.
+
+---
+
+### Root cause 3 — `Out-String` discards output buffered before a terminating exception
+
+PrivescCheck runs many service and security descriptor checks. When it calls a sub-function with a
+null ObjectSid, `[ValidateNotNullOrEmpty()]` throws a `ParameterBindingValidationException`. This
+is a terminating exception — it propagates through the pipeline regardless of `$ErrorActionPreference`.
+
+The old loop:
+```powershell
+$vRes = . ([scriptblock]::Create($vWHO+';'+$vCmd)) *>&1 | Out-String
+```
+When the exception propagates, the pipeline is aborted. `Out-String.EndProcessing()` is NEVER
+called — its internal `StringBuilder` is discarded without emitting. `$vRes` ends up null/empty.
+Any Write-Host output produced BEFORE the crash is permanently lost.
+
+**Fix:** Replace the `Out-String` assignment with a streaming `List[string]` collector:
+
+```powershell
+$vCl = [System.Collections.Generic.List[string]]::new()
+try {
+    . ([scriptblock]::Create($vWHO+';'+$vCmd)) *>&1 | Out-String -Stream | % { $vCl.Add("$_") }
+} catch {
+    $vCl.Add("$($_.Exception.Message)")
+}
+$vCl | % { $vWr.WriteLine($_.TrimEnd()) }
+```
+
+Each formatted string is committed to `$vCl` immediately as it arrives. When the exception
+terminates the pipeline, `$vCl` retains every line produced before the crash. The `catch` block
+appends the exception message to the same list — so both partial output AND the error are returned
+to the operator.
+
+---
+
+### Root cause 4 — Streaming list without `Out-String -Stream` degrades PS objects to `.ToString()`
+
+When `Out-String` was first removed in favour of the streaming list, the pipeline was:
+```powershell
+*>&1 | % { $vCl.Add("$_") }
+```
+`"$_"` calls `.ToString()` on each pipeline object. For plain strings that is a no-op. For
+PSCustomObjects (PowerView domain objects, etc.), `.ToString()` produces `@{property=value; ...}`
+— the PS formatting engine is never invoked.
+
+**Fix:** `Out-String -Stream` is inserted before the list-fill loop. It formats each object via
+PS's formatter (same visual output as plain `Out-String`) but emits one string per formatted item
+rather than accumulating everything into one blob. Each formatted string reaches `$vCl`
+immediately, preserving the streaming/crash-survival property.
+
+---
+
+### Final pipe loop pattern (both client and server loops in `New-PayloadScript`)
+
+```powershell
+$vCl = [System.Collections.Generic.List[string]]::new()
+try {
+    . ([scriptblock]::Create($vWHO + ';' + $vCmd)) *>&1 | Out-String -Stream | % { $vCl.Add("$_") }
+} catch {
+    $vCl.Add("$($_.Exception.Message)")
+}
+$vCl | % { $vWr.WriteLine($_.TrimEnd()) }
+$vWr.WriteLine($endMarker); $vWr.Flush()
+```
+
+Why each element is required:
+| Element | Purpose |
+|---------|---------|
+| `$vWHO+';'+$vCmd` in scriptblock | Write-Host override always in same scope as executing command |
+| Correct param names in `$whFuncDef` | `-ForegroundColor` etc. bind cleanly; message goes to `$Object` |
+| `Out-String -Stream` | PS formatting engine applied; PSCustomObjects render as proper tables |
+| `List[string]` + streaming `%` | Pre-crash output committed before exception can abort the pipeline |
+| `catch { $vCl.Add(...) }` | Error appended to same list; both partial output AND error returned |
+
+### Debugging if this regresses
+
+1. `Write-Host "test123"` in a pipe session → should return `test123`. If empty: Write-Host capture broken, check `$vWHO` embedding in `$rawScript` and param names in `$whFuncDef`.
+2. `Get-DomainUser | Select -First 1` → should return formatted `property : value` list. If `@{...}`: `Out-String -Stream` missing from loop pipeline.
+3. Run a tool that crashes mid-run → partial output before the error should appear. If only the error: streaming list broken or catch block not appending to `$vCl`.
+4. In `New-PayloadScript` (`Amnesiac.ps1`), the loop line should read exactly: `*>&1|Out-String -Stream|%{\`$$vCl.Add(\`"$_\`")}` — not `*>&1|Out-String` and not `*>&1|%{...}` alone.
 
 ## [2026-06-07e] feat(evasion): Bootstrap CMD delivery — DLL AMSI patch + in-process Runspace replaces scriptblock cradle
 
