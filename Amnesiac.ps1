@@ -778,9 +778,9 @@ function Amnesiac {
     $_autoSrvScript = $FileServerScript + "`nFile-Server -Port 4443 -Path '$_autoRoot'"
     $_autoBytes     = [System.Text.Encoding]::Unicode.GetBytes($_autoSrvScript)
     $_autoEnc       = [Convert]::ToBase64String($_autoBytes)
+    New-NetFirewallRule -Name "AmnesiacServe4443" -DisplayName "Amnesiac HTTP 4443" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 4443 -ErrorAction SilentlyContinue | Out-Null
     $global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
         -ArgumentList "-ep Bypass", "-NoProfile", "-enc $_autoEnc" -PassThru
-    New-NetFirewallRule -Name "AmnesiacServe4443" -DisplayName "Amnesiac HTTP 4443" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 4443 -ErrorAction SilentlyContinue | Out-Null
     $_autoPid = $global:FileServerProcess.Id
     $_autoParentPid = $PID
     if (Test-Path (Join-Path $_autoRoot "Tools")) { $global:ServerURL = "http://$_autoIP`:4443/Tools" }
@@ -1361,9 +1361,9 @@ function Amnesiac {
 			$scriptWithCommand = $FileServerScript + "`nFile-Server -Port $userdefPort -Path '$serveRoot'"
 			$bytes          = [System.Text.Encoding]::Unicode.GetBytes($scriptWithCommand)
 			$encodedCommand = [Convert]::ToBase64String($bytes)
+			New-NetFirewallRule -Name "AmnesiacServe$userdefPort" -DisplayName "Amnesiac HTTP $userdefPort" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort $userdefPort -ErrorAction SilentlyContinue | Out-Null
 			$global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
 				-ArgumentList "-ep Bypass", "-NoProfile", "-enc $encodedCommand" -PassThru
-			New-NetFirewallRule -Name "AmnesiacServe$userdefPort" -DisplayName "Amnesiac HTTP $userdefPort" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort $userdefPort -ErrorAction SilentlyContinue | Out-Null
 			$processId = $global:FileServerProcess.Id
 
 			$loaderURL       = "http://$($DefineHostname):$userdefPort/Amnesiac_ShellReady.ps1"
@@ -2486,9 +2486,9 @@ function Start-LocalShell {
                 $_srvScript = $FileServerScript + "`nFile-Server -Port 4443 -Path '$_serveRoot'"
                 $_srvBytes  = [System.Text.Encoding]::Unicode.GetBytes($_srvScript)
                 $_srvEnc    = [Convert]::ToBase64String($_srvBytes)
+                New-NetFirewallRule -Name "AmnesiacServe4443" -DisplayName "Amnesiac HTTP 4443" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 4443 -ErrorAction SilentlyContinue | Out-Null
                 $global:FileServerProcess = Start-Process powershell.exe -WindowStyle Hidden `
                     -ArgumentList "-ep Bypass", "-NoProfile", "-enc $_srvEnc" -PassThru
-                New-NetFirewallRule -Name "AmnesiacServe4443" -DisplayName "Amnesiac HTTP 4443" -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort 4443 -ErrorAction SilentlyContinue | Out-Null
                 Write-Host " [+] serve started (PID $($global:FileServerProcess.Id))" -ForegroundColor Green
                 Write-Host " [*] Root:   http://$_srvIP`:4443/" -ForegroundColor Cyan
                 if (Test-Path $_toolsPath) { Write-Host " [*] Tools:  $global:ServerURL" -ForegroundColor Cyan }
