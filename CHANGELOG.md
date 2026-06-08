@@ -5,6 +5,35 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-08] fix(amsi): remove AMSI/ETW/Nt string literals from AmnesiacLoader PE metadata
+
+**Motivation:** Bootstrap 3-liner (`Assembly.Load(byte[])`) was blocked by Windows Defender on
+Windows 10 21H1+ VMs with the error `BadImageFormatException — Anonymously Hosted DynamicMethods
+Assembly`. Root cause: AMSI's CLR integration (added in .NET CLR shipped with Win10 21H1+) scans
+raw bytes passed to `Assembly.Load(byte[])` and flags the DLL before it loads. The string
+`"AmsiScanBuffer"` in `Bypass.cs` (used by `PatchAmsiPageGuard`/`PatchAmsiHardwareBreakpoint`
+methods), `"EtwEventWrite"` in `PatchEtwEventWrite`, and `"amsi.dll"` were present as IL string
+literals in the PE metadata heap — visible to AMSI even though those methods are never called by
+the bootstrap. Additionally, all 10 NT syscall delegate type names (`NtOpenProcessDelegate` etc.)
+appeared verbatim in the PE type metadata and were not being randomized by `Build.ps1`.
+
+**Changes:**
+- `AmnesiacLoader/Bypass.cs` — converted `"amsi.dll"` (×2), `"AmsiScanBuffer"` (×2),
+  `"ntdll.dll"` (in ETW method), `"EtwEventWrite"` to `new string(new char[]{...})` construction;
+  strings no longer appear in the PE `#Strings` heap
+- `AmnesiacLoader/Loader.cs` — converted all 10 NT function name string literals in `GetStub`
+  call sites to `new string(new char[]{...})` construction (injection method call sites only;
+  EAT walker comparison strings are runtime-extracted from ntdll — unaffected)
+- `AmnesiacLoader/Build.ps1` — added 10 new random-name variables and substitution entries for
+  all `Nt*Delegate` type names so the PE type metadata no longer exposes `NtOpenProcess`,
+  `NtAllocateVirtualMemory`, etc.
+- Rebuilt DLL: `CdERqDHEPc.dll` (29184 bytes); SHA256 C016D1EE49...
+- All string verification: `AmsiScanBuffer`, `EtwEventWrite`, `amsi.dll`, and all 10 Nt function
+  names confirmed absent from compiled binary
+- `CLAUDE.md` updated with new DLL name and bootstrap 3-liner
+- **Upload required:** `CdERqDHEPc.dll` must be uploaded to GitHub Releases `v1.0-al` and old
+  `GNToN66tfw.dll` deleted before the GitHub bootstrap path works on the target
+
 ## [2026-06-07i] feat(tools): domain action tool suite — PowerDACL, CheckWebDAV, CheckSMBSigning, Collect-ADObjects
 
 **Motivation:** Amnesiac had no native AD abuse or enumeration tooling beyond credential spraying
