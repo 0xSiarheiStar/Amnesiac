@@ -2013,12 +2013,17 @@ function Start-LocalShell {
                                        " [*]   RBCD -Target <computer$> -Grantee <user>           Set RBCD"
                                        " [*]   SetOwner -Target <obj> -Owner <user>               Change owner"
                                        " [*]   SetSPN | RemoveSPN | EnableAccount | DisableAccount | AddComputer | RemoveFromGroup") }
-        'CheckWebDAV'      = @{ tools=@('CheckWebDAVStatus');     invoke=$null
-                                hint=@(" [*] CheckWebDAVStatus -Domain <domain>           Scan all domain hosts"
-                                       " [*]   -Targets <ip,ip or 10.x.x.0/24>           Specific targets"
-                                       " [*]   -Sessions                                  Hunt active user sessions"
-                                       " [*]   -Enable / -Disable                        Deploy or remove WebDAV"
-                                       " [*] Example: CheckWebDAVStatus -Domain NORTH.SEVENKINGDOMS.LOCAL") }
+        'CheckWebDAV'      = @{ tools=@('CheckWebDAVStatus');     invoke='function global:CheckWebDAV { CheckWebDAVStatus @args }'
+                                hint=@(" [*] Scans for WebDAV-enabled hosts and EFS status (checks \\host\pipe\DAV RPC SERVICE)"
+                                       " [*]   CheckWebDAVStatus -Domain <domain>              Enumerate via LDAP + scan all hosts"
+                                       " [*]   CheckWebDAVStatus -Targets <ip,host,...>         Specific targets (comma-separated)"
+                                       " [*]   CheckWebDAVStatus -TargetsFile <path>            Read targets from file"
+                                       " [*]   -Sessions                                         Hunt active user sessions on WebDAV hosts"
+                                       " [*]   -NoPortScan                                       Skip TCP 445 reachability check"
+                                       " [*]   -OutputFile <path>                                Save results to file"
+                                       " [*]   -Enable -WritableShares <file>                    Drop .searchconnector-ms coercion file in writable shares"
+                                       " [*]   -Disable -WritableShares <file>                   Remove coercion file from shares"
+                                       " [*] Alias: CheckWebDAV is a shorthand for CheckWebDAVStatus (both work after loading)") }
         'CheckSMBSigning'  = @{ tools=@('CheckSMBSigning');       invoke=$null
                                 hint=@(" [*] CheckSMBSigning -Domain <domain>             Scan all domain hosts"
                                        " [*]   -Targets <ip,ip or 10.x.x.0/24>           Specific targets"
@@ -3878,9 +3883,13 @@ function InteractWithPipeSession{
 				Write-Output " [+] CheckWebDAVStatus loaded"
 				Write-Output ""
 				Write-Output "     CheckWebDAVStatus -Domain <domain>"
-				Write-Output "     CheckWebDAVStatus -Targets <ip,ip or 10.x.x.0/24>"
-				Write-Output "     CheckWebDAVStatus -Domain <domain> -Sessions    (hunt active sessions)"
-				Write-Output "     CheckWebDAVStatus -Domain <domain> -Enable      (deploy WebDAV)"
+				Write-Output "     CheckWebDAVStatus -Targets <ip,host,...>                  (comma-separated)"
+				Write-Output "     CheckWebDAVStatus -TargetsFile <path>"
+				Write-Output "     CheckWebDAVStatus -Domain <domain> -Sessions              (hunt active sessions on WebDAV hosts)"
+				Write-Output "     CheckWebDAVStatus -Domain <domain> -NoPortScan            (skip TCP 445 check)"
+				Write-Output "     CheckWebDAVStatus -Domain <domain> -OutputFile <path>"
+				Write-Output "     CheckWebDAVStatus -Enable -WritableShares <file>          (drop .searchconnector-ms coercion file)"
+				Write-Output "     CheckWebDAVStatus -Disable -WritableShares <file>         (remove coercion file)"
 				Write-Output ""
 			} else {
 				Write-Output " [-] CheckWebDAVStatus not in cache. Add CheckWebDAVStatus.ps1 to Tools\ and run: modules reload"
