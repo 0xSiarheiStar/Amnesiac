@@ -5,6 +5,75 @@ Format: `[LAYER] Change description — *why this matters operationally*`
 
 ---
 
+## [2026-06-07i] feat(tools): domain action tool suite — PowerDACL, CheckWebDAV, CheckSMBSigning, Collect-ADObjects
+
+**Motivation:** Amnesiac had no native AD abuse or enumeration tooling beyond credential spraying
+and session hunting. Post-exploitation domain actions (DACL abuse, SMB relay prep, LDAP recon)
+required loading ad-hoc scripts that lacked integrated delivery, hints, or pipe session support.
+
+### New tools added to `Tools\` (all Leo4j — delivered via `Send-Module`, no target network calls)
+
+**`PowerDACL`** — AD DACL abuse (`PowerDACL` keyword, pipe session `PowerDACL` command)
+- Keyword auto-invokes `PowerDACL` on load, displaying built-in help (all actions with examples)
+- Actions: `DCSync [-Remove]`, `GenericAll`, `SetOwner`, `ForceChangePass`, `RBCD [-Clear]`,
+  `SetSPN/RemoveSPN`, `AddToGroup/RemoveFromGroup`, `EnableAccount/DisableAccount`,
+  `AddComputer/DeleteComputer`, `Set-DomainObject -Set/-Clear`
+- Param note: most actions use `-TargetDomain/-TargetServer`; account/object management functions
+  (`EnableAccount`, `AddComputer`, `Set-DomainObject` etc.) use `-Domain/-Server`
+
+**`CheckWebDAVStatus`** (`CheckWebDAV` keyword, pipe session `CheckWebDAV` command)
+- Detects WebDAV client active via `\\host\pipe\DAV RPC SERVICE` named pipe probe
+- Also checks `\\host\pipe\efsrpc` (EFS — PetitPotam coercion prerequisite)
+- `-Sessions`: runs session hunting against WebDAV-enabled hosts to find logged-in users
+- `-Enable/-Disable -WritableShares <file>`: drop/remove `All_Staff_Salaries.searchconnector-ms`
+  in share list — coerces NetNTLM when a user browses the share (relay/capture setup)
+- Keyword creates `global:CheckWebDAV` alias on load so `CheckWebDAV -Domain ...` and
+  `CheckWebDAVStatus -Domain ...` both work after typing `CheckWebDAV` to load
+
+**`CheckSMBSigning`** (`CheckSMBSigning` keyword, pipe session `CheckSMBSigning` command)
+- Scans domain hosts for SMB signing status — identifies relay targets (signing not required)
+- `-Domain` enumerates via LDAP; `-Targets <ip,ip or subnet/mask>` for specific scope
+- `-OutputFile <path>` to save results
+
+**`Collect-ADObjects`** (`CollectAD` keyword, pipe session `CollectAD` command)
+- Pure LDAP enumeration via `System.DirectoryServices` — no RSAT or AD module required
+- Collects any combination of: Users, Computers, Groups, GPOs, DomainControllers, OUs,
+  Printers, DomainPolicy, OtherPolicies, rIDManagers, Else
+- `-Identity <samAccountName>`: single object lookup; `-LDAP <filter>`: arbitrary LDAP filter
+- `-Property <prop,...>`: return only specified attributes (faster for large domains)
+- `-Enabled/-Disabled`: filter by account state (Users/Computers only)
+- `-Convert`: decode raw SID bytes → string, LDAP timestamps → datetime, GUID bytes → string
+- Returns PSObjects — fully pipeable: `| Where-Object`, `| Select-Object`, `| Export-Csv`
+- **Disk note:** uses `Add-Type -TypeDefinition` (C# inline) at load time — writes a temp DLL
+  to `%TEMP%` on the target regardless of `diskmode` setting. Acceptable for most engagements;
+  avoid if any disk write is a hard constraint.
+
+### Quality-of-life improvements
+
+**`-h` flag for all `_kw` tools** — typing `<keyword> -h` (e.g. `PowerDACL -h`, `CollectAD -h`,
+`SessionHunter -h`) now prints the hint array without loading the tool. Implemented as a regex
+branch before the `_kw` dispatch in both `Start-LocalShell` and `Amnesiac_ShellReady.ps1`.
+
+**`CredValidate` pipe session refactor** — was using `iex(New-Object Net.WebClient).DownloadString`
+(old pattern requiring `serve` to be running and causing a target-side network request). Updated to
+use `Send-Module` — tool is streamed from the operator's cache over the named pipe like all other
+modern tool commands. No network activity from target.
+
+**`CheckWebDAV` alias** — on load, `invoke` creates `function global:CheckWebDAV { CheckWebDAVStatus @args }`.
+This means `CheckWebDAV -Domain ...` works directly after load without needing to remember
+the function is named `CheckWebDAVStatus`.
+
+### CLAUDE.md
+
+- Added **Domain Action Commands** reference table with all 5 new tools, tool files, and effect descriptions
+- Added PowerDACL all-actions quick-reference block (every command with correct param names)
+- Added Collect-ADObjects common patterns (kerberoastable filter, adminCount, OS enumeration, etc.)
+- Added CheckWebDAV operational notes (pipe detection mechanism, coercion file attack details)
+- Updated File Structure to list all new tool files with one-line descriptions
+- Updated privilege markers note — all new tools work as standard domain users (no `[A]` marker)
+
+---
+
 ## [2026-06-07f-h] fix(pipe-loop): Write-Host capture + pre-crash output survival in CLR Runspace
 
 **Symptoms:**
