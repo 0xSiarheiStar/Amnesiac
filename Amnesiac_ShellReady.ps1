@@ -2046,6 +2046,22 @@ function Start-LocalShell {
                                        " [*]   -Targets <ip,ip or 10.x.x.0/24>           Specific targets"
                                        " [*]   -OutputFile <path>                         Save results to file"
                                        " [*] Example: CheckSMBSigning -Domain NORTH.SEVENKINGDOMS.LOCAL") }
+        'CollectAD'        = @{ tools=@('Collect-ADObjects');     invoke=$null
+                                hint=@(" [*] LDAP enumeration — collects AD objects, returns PSObjects for piping/filtering"
+                                       " [*]   Collect-ADObjects                                         All types, current domain"
+                                       " [*]   Collect-ADObjects -Domain <dom> [-Server <DC>]"
+                                       " [*]   -Collect Users,Computers,Groups,GPOs,DomainControllers,OUs"
+                                       " [*]            Printers,DomainPolicy,OtherPolicies,rIDManagers,Else"
+                                       " [*]   -Identity <samAccountName>                               Single object by sAMAccountName"
+                                       " [*]   -LDAP <filter>                                           Custom LDAP filter"
+                                       " [*]   -Property <prop1,prop2,...>                              Return specific attributes only"
+                                       " [*]   -Enabled / -Disabled                                     Filter by account state (Users/Computers)"
+                                       " [*]   -Convert                                                  Decode SIDs, timestamps, GUIDs to readable values"
+                                       " [*]   -numOfThreads <n>                                        Threads (default 4)"
+                                       " [*] Example: Collect-ADObjects -Collect Users -Enabled -Convert | Select samaccountname,lastlogon"
+                                       " [*] Example: Collect-ADObjects -Identity hodor -Convert | fl"
+                                       " [*] Example: Collect-ADObjects -LDAP 'servicePrincipalName=*' -Convert   (kerberoastable)"
+                                       " [*] Note: uses Add-Type (C# compile) — writes temp DLL to %TEMP% on target") }
         'DCSync'           = @{ tools=@('Sync');                                                 invoke=$null }
         'Impersonation'    = @{ tools=@('Token-Impersonation');                                  invoke=$null }
         'LocalAdminAccess' = @{ tools=@('Find-LocalAdminAccess');                                invoke=$null
@@ -2161,6 +2177,7 @@ function Start-LocalShell {
             Write-Output "   PowerDACL          Abuse AD DACLs (DCSync, GenericAll, RBCD, ForceChangePass...) -- PowerDACL -h for usage"
             Write-Output "   CheckWebDAV        Check WebDAV/EFS status and hunt sessions across domain -- CheckWebDAV -h for usage"
             Write-Output "   CheckSMBSigning    Scan for hosts without SMB signing -- CheckSMBSigning -h for usage"
+            Write-Output "   CollectAD          LDAP enumeration (Users, Computers, Groups, GPOs, OUs, DCs...) -- CollectAD -h for usage"
             Write-Output ""
             Write-Output " [+] LPE:"
             Write-Output "   PowerUp            Run Invoke-AllChecks (PowerUp privilege escalation checks)"
@@ -3615,7 +3632,7 @@ function InteractWithPipeSession{
 			"ClearLogs", "ClearHistory"
 		)
 
-  		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*" -OR $command -like "KrbRelayUp*" -OR $command -like "PrivescCheck" -OR $command -like "PowerUp" -OR $command -like "GodPotato" -OR $command -like "Invoke-PrivescCheck*" -OR $command -like "Invoke-AllChecks*" -OR $command -like "CheckWebDAVStatus*" -OR $command -like "CheckSMBSigning*" -OR $command -like "PowerDACL*"){
+  		if($command -like "Kerb" -OR $command -like "Invoke-PassSpray*" -OR $command -like "DCSync" -OR $command -like "Access_Check*" -OR $command -like "Find-LocalAdminAccess*" -OR $command -like "Invoke-SessionHunter*" -OR $command -like "AutoMimi*" -OR $command -like "Mimi*" -OR $command -like "KrbRelayUp*" -OR $command -like "PrivescCheck" -OR $command -like "PowerUp" -OR $command -like "GodPotato" -OR $command -like "Invoke-PrivescCheck*" -OR $command -like "Invoke-AllChecks*" -OR $command -like "CheckWebDAVStatus*" -OR $command -like "CheckSMBSigning*" -OR $command -like "PowerDACL*" -OR $command -like "Collect-ADObjects*"){
 			$global:RestoreTimeout = $True
 			$timeoutSeconds = 300
 		}
@@ -3926,6 +3943,28 @@ function InteractWithPipeSession{
 				Write-Output ""
 			} else {
 				Write-Output " [-] CheckSMBSigning not in cache. Add CheckSMBSigning.ps1 to Tools\ and run: modules reload"
+				continue
+			}
+		}
+
+		elseif ($command -eq 'CollectAD') {
+			Write-Output ""
+			Write-Output " [+] Sending Collect-ADObjects to target..."
+			if (Send-Module -ToolName 'Collect-ADObjects' -Writer $sw -Reader $sr) {
+				Write-Output " [+] Collect-ADObjects loaded"
+				Write-Output ""
+				Write-Output "     Collect-ADObjects -Domain <domain> [-Server <DC>]"
+				Write-Output "     Collect-ADObjects -Collect Users,Computers,Groups,GPOs,DomainControllers,OUs"
+				Write-Output "     Collect-ADObjects -Identity <samAccountName>           single object lookup"
+				Write-Output "     Collect-ADObjects -LDAP <filter>                       custom LDAP filter"
+				Write-Output "     Collect-ADObjects -Property <prop1,prop2>              specific attributes only"
+				Write-Output "     Collect-ADObjects -Enabled / -Disabled                 filter account state"
+				Write-Output "     Collect-ADObjects -Convert                             decode SIDs/timestamps/GUIDs"
+				Write-Output "     Collect-ADObjects -LDAP 'servicePrincipalName=*' -Convert   (kerberoastable accounts)"
+				Write-Output "     Note: uses Add-Type (C# compile) -- writes temp DLL to %TEMP% on target"
+				Write-Output ""
+			} else {
+				Write-Output " [-] Collect-ADObjects not in cache. Add Collect-ADObjects.ps1 to Tools\ and run: modules reload"
 				continue
 			}
 		}
@@ -7658,6 +7697,7 @@ function Get-AvailableCommands  {
 	Write-Output " PowerDACL          Abuse AD DACLs (DCSync, GenericAll, RBCD, ForceChangePass...)"
 	Write-Output " CheckWebDAV        Check WebDAV/EFS status and hunt sessions"
 	Write-Output " CheckSMBSigning    Scan for hosts without SMB signing"
+	Write-Output " CollectAD          LDAP enumeration (Users, Computers, Groups, GPOs, OUs, DCs...)"
 	Write-Output ""
 	Write-Output ""
 	Write-Output " [+] LPE:"
