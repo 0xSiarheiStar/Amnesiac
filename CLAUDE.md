@@ -124,6 +124,8 @@ Four improvement layers, all changes in `Amnesiac.ps1`:
 | `winrmscan username=<dom\user> password=<pass> [range=10.x.x.1-30]` | Scan a host range for WinRM-accessible targets for the given credential. TCP-probes port 5985 first, then WSMan auth test. |
 | `dcom computername=<IP> [method=ShellWindows\|ShellBrowserWindow\|MMC20]` | Deliver bind shell via DCOM. ShellWindows/ShellBrowserWindow require no local admin — piggyback on existing `explorer.exe` (DCOM Access permission, allowed for domain users). Needs active interactive session on target + `serve` running. MMC20 requires local admin. **Note:** returns `0x80070005` when called from a non-domain-joined machine (runas /netonly) — DCOM activation is rejected at the class factory level regardless of credentials. Only reliable from a domain-joined operator machine or an existing pipe session. |
 | `servelog` | Print the serve request log (timestamped 200/404 lines, coloured by status) |
+
+> **`serve` auto-start:** `serve` starts automatically at Amnesiac init (port 4443, hidden PS process, monitored for parent-exit). A Windows Firewall inbound rule (`AmnesiacServe4443`) is added silently before the process starts — on an admin operator machine the rule is created once and the popup never appears. On low-priv targets `New-NetFirewallRule` fails silently without disrupting flow. `servelog` always reflects live request state regardless of how serve was started.
 | `bootstrap` | Scenario 2: print all AMSI bypass options + complete GitHub 3-liner and local-server 3-liner with current build's randomized names |
 
 ### Domain Action Commands (local shell + active sessions)

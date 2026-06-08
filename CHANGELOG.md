@@ -31,8 +31,25 @@ appeared verbatim in the PE type metadata and were not being randomized by `Buil
 - All string verification: `AmsiScanBuffer`, `EtwEventWrite`, `amsi.dll`, and all 10 Nt function
   names confirmed absent from compiled binary
 - `CLAUDE.md` updated with new DLL name and bootstrap 3-liner
-- **Upload required:** `CdERqDHEPc.dll` must be uploaded to GitHub Releases `v1.0-al` and old
-  `GNToN66tfw.dll` deleted before the GitHub bootstrap path works on the target
+- `bootstrap` command now outputs the live GitHub 3-liner with current build names
+- Uploaded `CdERqDHEPc.dll` to GitHub Releases `v1.0-al`; deleted `GNToN66tfw.dll`
+- Tested on Windows Defender-enabled VM — `Assembly.Load(byte[])` no longer blocked
+
+## [2026-06-08b] fix(ux): suppress Windows Firewall popup on serve auto-start
+
+**Motivation:** At Amnesiac startup, `serve` auto-starts a hidden PowerShell process that opens
+port 4443. The `New-NetFirewallRule` call to pre-authorize the port was placed on the line
+*after* `Start-Process` — the spawned process opened the port before the rule existed, so
+Windows Firewall intercepted and showed a "Do you want to allow public and private networks
+to access this app?" dialog for Windows PowerShell. Clicking Allow worked but was noisy.
+
+**Changes:**
+- `Amnesiac.ps1` / `Amnesiac_ShellReady.ps1` — swapped order in all 5 serve-start sites
+  (auto-start at init, explicit `serve` command, pipe session `serve` command): firewall rule
+  added first, server process started second
+- On admin machines (Scenario 1), rule is silently pre-created and the dialog never appears
+- On low-priv targets (Scenario 2), `New-NetFirewallRule` fails silently
+  (`-ErrorAction SilentlyContinue`) without disrupting flow
 
 ## [2026-06-07i] feat(tools): domain action tool suite — PowerDACL, CheckWebDAV, CheckSMBSigning, Collect-ADObjects
 
