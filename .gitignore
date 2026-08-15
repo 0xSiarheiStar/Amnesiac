@@ -1,9 +1,3 @@
-# ════════════════════════════════════════════════════════════════════════════════════
-# IMPORTANT: Do NOT push these files to public repository
-# These files are development/session artifacts and should remain local only
-# When pushing updates to GitHub, verify none of these are committed
-# ════════════════════════════════════════════════════════════════════════════════════
-
 # Runtime payload files generated per session
 pipe_*.ps1
 diagtest_pipe.ps1
@@ -32,7 +26,3 @@ commands_list.txt
 issue.md
 .github/FUNDING.yml
 
-# Prevent accidental commits of development/session files
-**/CLAUDE.md
-CHANGELOG.md
-docs/
