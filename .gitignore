@@ -20,11 +20,13 @@ PME/
 # Serve log
 _serve.log
 
-# Development / AI session files — not published to GitHub
-docs/
-CLAUDE.md
-CHANGELOG.md
+# Development files
 Tests/
 commands_list.txt
 issue.md
 .github/FUNDING.yml
+
+# Prevent accidental commits of development/session files
+**/CLAUDE.md
+CHANGELOG.md
+docs/
